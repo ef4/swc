@@ -1,9 +1,11 @@
+use std::ptr::null;
 use copyless::BoxHelper;
 use serde_json::value::Value;
 use swc_ecma_ast::{
     Class, ClassMember, ClassMethod, ClassProp, Constructor, Decorator, MethodKind, PrivateMethod,
     PrivateProp, StaticBlock, ContentTagMember
 };
+use swc_ecma_utils::undefined;
 use swc_estree_ast::{
     ClassBody, ClassBodyEl, ClassExpression, ClassMethod as BabelClassMethod, ClassMethodKind,
     ClassPrivateMethod, ClassPrivateProperty, ClassProperty, Decorator as BabelDecorator,
@@ -232,7 +234,7 @@ impl Babelify for StaticBlock {
 impl Babelify for ContentTagMember {
     type Output = ContentTagMember;
 
-    fn babelify(self, ctx: &Context) -> Self::Output {
-        self
+    fn babelify(self, _ctx: &Context) -> Self::Output {
+        return self.clone();
     }
 }

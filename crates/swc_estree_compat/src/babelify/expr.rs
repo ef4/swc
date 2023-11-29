@@ -744,8 +744,8 @@ impl Babelify for PatOrExpr {
 impl Babelify for ContentTagExpression {
     type Output = ContentTagExpression;
 
-    fn babelify(self, ctx: &Context) -> Self::Output {
-        self
+    fn babelify(self, _ctx: &Context) -> Self::Output {
+        return self.clone();
     }
 }
 
