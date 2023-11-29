@@ -2,7 +2,7 @@ use copyless::BoxHelper;
 use serde_json::value::Value;
 use swc_ecma_ast::{
     Class, ClassMember, ClassMethod, ClassProp, Constructor, Decorator, MethodKind, PrivateMethod,
-    PrivateProp, StaticBlock,
+    PrivateProp, StaticBlock, ContentTagMember
 };
 use swc_estree_ast::{
     ClassBody, ClassBodyEl, ClassExpression, ClassMethod as BabelClassMethod, ClassMethodKind,
@@ -225,5 +225,14 @@ impl Babelify for StaticBlock {
             base: ctx.base(self.span),
             body: self.body.stmts.babelify(ctx),
         }
+    }
+}
+
+
+impl Babelify for ContentTagMember {
+    type Output = ContentTagMember;
+
+    fn babelify(self, ctx: &Context) -> Self::Output {
+        self
     }
 }
