@@ -139,6 +139,7 @@ impl Babelify for Expr {
             Expr::TsAs(a) => ExprOutput::Expr(Box::alloc().init(Expression::TSAs(a.babelify(ctx)))),
             Expr::TsInstantiation(..) => unimplemented!("Babel doesn't support this right now."),
             Expr::PrivateName(p) => ExprOutput::Private(p.babelify(ctx)),
+            Expr::ContentTagExpression(p) => p.babelify(ctx)),
 
             // TODO(dwoznicki): how does babel handle these?
             Expr::JSXMember(_) => panic!(
@@ -166,10 +167,6 @@ impl Babelify for Expr {
                 &self
             ),
             Expr::Invalid(_) => panic!(
-                "illegal conversion: Cannot convert {:?} to ExprOutput - babel has no equivalent",
-                &self
-            ),
-            Expr::ContentTagExpression(_) => panic!(
                 "illegal conversion: Cannot convert {:?} to ExprOutput - babel has no equivalent",
                 &self
             ),
