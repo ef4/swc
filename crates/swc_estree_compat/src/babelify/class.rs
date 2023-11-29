@@ -56,14 +56,13 @@ impl Babelify for ClassMember {
             ClassMember::PrivateMethod(m) => ClassBodyEl::PrivateMethod(m.babelify(ctx)),
             ClassMember::ClassProp(p) => ClassBodyEl::Prop(p.babelify(ctx)),
             ClassMember::PrivateProp(p) => ClassBodyEl::PrivateProp(p.babelify(ctx)),
-            ClassMember::TsIndexSignature(s) => ClassBodyEl::TSIndex(s.babelify(ctx)),
-            ClassMember::Empty(_) => panic!(
+            ClassMember::TsIndexSignature(s) => ClassBodyEl::TSIndex(s.babelify(ctx))
                 "illegal conversion: Cannot convert {:?} to ClassBodyEl",
                 &self
             ),
             ClassMember::StaticBlock(s) => ClassBodyEl::StaticBlock(s.babelify(ctx)),
             ClassMember::AutoAccessor(..) => todo!("auto accessor"),
-            ClassMember::ContentTagMember(..) => todo!("content tag member"),
+            ClassMember::ContentTagMember(ct) => ct.babelify(ctx),
         }
     }
 }
