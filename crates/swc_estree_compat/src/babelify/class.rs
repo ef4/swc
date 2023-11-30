@@ -56,7 +56,8 @@ impl Babelify for ClassMember {
             ClassMember::PrivateMethod(m) => ClassBodyEl::PrivateMethod(m.babelify(ctx)),
             ClassMember::ClassProp(p) => ClassBodyEl::Prop(p.babelify(ctx)),
             ClassMember::PrivateProp(p) => ClassBodyEl::PrivateProp(p.babelify(ctx)),
-            ClassMember::TsIndexSignature(s) => ClassBodyEl::TSIndex(s.babelify(ctx))
+            ClassMember::TsIndexSignature(s) => ClassBodyEl::TSIndex(s.babelify(ctx)),
+            ClassMember::Empty(_) => panic!(
                 "illegal conversion: Cannot convert {:?} to ClassBodyEl",
                 &self
             ),
