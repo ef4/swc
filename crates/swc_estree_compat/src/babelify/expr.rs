@@ -7,7 +7,7 @@ use swc_ecma_ast::{
     Callee, ClassExpr, CondExpr, Expr, ExprOrSpread, FnExpr, Ident, Import, Lit, MemberExpr,
     MemberProp, MetaPropExpr, MetaPropKind, NewExpr, ObjectLit, ParenExpr, PatOrExpr, PropOrSpread,
     SeqExpr, SpreadElement, Super, SuperProp, SuperPropExpr, TaggedTpl, ThisExpr, Tpl, TplElement,
-    UnaryExpr, UpdateExpr, YieldExpr,
+    UnaryExpr, UpdateExpr, YieldExpr, ContentTagExpression,
 };
 use swc_estree_ast::{
     flavor::Flavor, ArrayExprEl, ArrayExpression, ArrowFuncExprBody, ArrowFunctionExpression,
@@ -139,6 +139,7 @@ impl Babelify for Expr {
             Expr::TsAs(a) => ExprOutput::Expr(Box::alloc().init(Expression::TSAs(a.babelify(ctx)))),
             Expr::TsInstantiation(..) => unimplemented!("Babel doesn't support this right now."),
             Expr::PrivateName(p) => ExprOutput::Private(p.babelify(ctx)),
+            Expr::ContentTagExpression(p) => p.babelify(ctx),
 
             // TODO(dwoznicki): how does babel handle these?
             Expr::JSXMember(_) => panic!(
@@ -166,10 +167,6 @@ impl Babelify for Expr {
                 &self
             ),
             Expr::Invalid(_) => panic!(
-                "illegal conversion: Cannot convert {:?} to ExprOutput - babel has no equivalent",
-                &self
-            ),
-            Expr::ContentTagExpression(_) => panic!(
                 "illegal conversion: Cannot convert {:?} to ExprOutput - babel has no equivalent",
                 &self
             ),
@@ -738,6 +735,14 @@ impl Babelify for PatOrExpr {
             },
             PatOrExpr::Pat(p) => p.babelify(ctx).into(),
         }
+    }
+}
+
+impl Babelify for ContentTagExpression {
+    type Output = ContentTagExpression;
+
+    fn babelify(self, _ctx: &Context) -> Self::Output {
+        return self.clone();
     }
 }
 
