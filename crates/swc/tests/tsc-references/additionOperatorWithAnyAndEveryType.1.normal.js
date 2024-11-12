@@ -9,13 +9,12 @@ var C = /*#__PURE__*/ function() {
     C.foo = function foo() {};
     return C;
 }();
-var E;
-(function(E) {
+var E = /*#__PURE__*/ function(E) {
     E[E["a"] = 0] = "a";
     E[E["b"] = 1] = "b";
     E[E["c"] = 2] = "c";
-})(E || (E = {}));
-var M;
+    return E;
+}(E || {});
 (function(M) {})(M || (M = {}));
 var a;
 var b;
@@ -41,11 +40,12 @@ var r13 = a + new C();
 var r14 = a + E;
 var r15 = a + 0;
 var r16 = a + M;
-var r17 = a + "";
+var r17 = a + '';
 var r18 = a + 123;
 var r19 = a + {
-    a: ""
+    a: ''
 };
 var r20 = a + function(a) {
     return a;
 };
+var M;

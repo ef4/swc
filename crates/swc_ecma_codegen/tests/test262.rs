@@ -1,14 +1,11 @@
 use std::{
-    env,
     fs::read_to_string,
-    io::{self, Write},
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
 };
 
 use swc_common::comments::SingleThreadedComments;
 use swc_ecma_ast::EsVersion;
-use swc_ecma_codegen::{self, text_writer::WriteJs, Emitter};
+use swc_ecma_codegen::{text_writer::WriteJs, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, Syntax};
 use testing::NormalizedOutput;
 
@@ -64,6 +61,11 @@ const IGNORED_PASS_TESTS: &[&str] = &[
     "59ae0289778b80cd.js",
     "a4d62a651f69d815.js",
     "c06df922631aeabc.js",
+    // Unicode 14 vs 15
+    "046a0bb70d03d0cc.js",
+    "08a39e4289b0c3f3.js",
+    "300a638d978d0f2c.js",
+    "44f31660bd715f05.js",
 ];
 
 #[testing::fixture("../swc_ecma_parser/tests/test262-parser/pass/*.js")]
@@ -100,7 +102,7 @@ fn do_test(entry: &Path, minify: bool) {
         "\n\n========== Running codegen test {}\nSource:\n{}\n",
         file_name, input
     );
-    let mut wr = Buf(Arc::new(RwLock::new(vec![])));
+    let mut wr = Vec::new();
 
     ::testing::run_test(false, |cm, handler| {
         let src = cm.load_file(entry).expect("failed to load file");
@@ -163,23 +165,11 @@ fn do_test(entry: &Path, minify: bool) {
         }
         let ref_file = format!("{}", ref_dir.join(&file_name).display());
 
-        let code_output = wr.0.read().unwrap();
+        let code_output = wr;
         let with_srcmap =
             NormalizedOutput::from(String::from_utf8_lossy(&code_output).into_owned());
         with_srcmap.compare_to_file(ref_file).unwrap();
         Ok(())
     })
     .expect("failed to run test");
-}
-
-#[derive(Debug, Clone)]
-struct Buf(Arc<RwLock<Vec<u8>>>);
-impl Write for Buf {
-    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.0.write().unwrap().write(data)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.0.write().unwrap().flush()
-    }
 }

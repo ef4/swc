@@ -23,21 +23,26 @@ _export(exports, {
         return y;
     }
 });
-const _dispose = require("@swc/helpers/_/_dispose");
-const _using = require("@swc/helpers/_/_using");
+const _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource");
+const _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources");
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
+try {
+    const z = _ts_add_disposable_resource._(env, {
+        [Symbol.dispose] () {}
+    }, false);
+    ;
+    const y = 2;
+    console.log(w, x, y, z);
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
+} finally{
+    _ts_dispose_resources._(env);
+}
 const x = 1;
 const w = 3;
-try {
-    var _stack = [];
-    var z = _using._(_stack, {
-        [Symbol.dispose] () {}
-    });
-    var y = 2;
-    var _default = 4;
-    console.log(w, x, y, z);
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
-} finally{
-    _dispose._(_stack, _error, _hasError);
-}
+const _default = 4;

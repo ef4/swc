@@ -136,8 +136,8 @@ impl Diagnostic {
             message: vec![Message(message.to_owned(), Style::NoStyle)],
             code,
             span: MultiSpan::new(),
-            children: vec![],
-            suggestions: vec![],
+            children: Vec::new(),
+            suggestions: Vec::new(),
         }
     }
 
@@ -455,7 +455,7 @@ impl Diagnostic {
     /// message".
     pub fn copy_details_not_message(&mut self, from: &Diagnostic) {
         self.span = from.span.clone();
-        self.code = from.code.clone();
+        self.code.clone_from(&from.code);
         self.children.extend(from.children.iter().cloned())
     }
 

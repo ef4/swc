@@ -82,10 +82,10 @@ fn invoke(input: PathBuf) {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // run single plugin
         testing::run_test(false, |cm, _handler| {
-            let fm = cm.new_source_file(FileName::Anon, "console.log(foo)".into());
+            let fm = cm.new_source_file(FileName::Anon.into(), "console.log(foo)".into());
 
             let parsed: Stylesheet =
-                swc_css_parser::parse_file(&fm, None, Default::default(), &mut vec![]).unwrap();
+                swc_css_parser::parse_file(&fm, None, Default::default(), &mut Vec::new()).unwrap();
 
             let program = PluginSerializedBytes::try_serialize(
                 &swc_common::plugin::serialized::VersionedSerializable::new(parsed.clone()),
@@ -133,10 +133,10 @@ fn invoke(input: PathBuf) {
 
         // Run multiple plugins.
         testing::run_test(false, |cm, _handler| {
-            let fm = cm.new_source_file(FileName::Anon, "console.log(foo)".into());
+            let fm = cm.new_source_file(FileName::Anon.into(), "console.log(foo)".into());
 
             let parsed: Stylesheet =
-                swc_css_parser::parse_file(&fm, None, Default::default(), &mut vec![]).unwrap();
+                swc_css_parser::parse_file(&fm, None, Default::default(), &mut Vec::new()).unwrap();
 
             let mut serialized_program = PluginSerializedBytes::try_serialize(
                 &swc_common::plugin::serialized::VersionedSerializable::new(parsed.clone()),

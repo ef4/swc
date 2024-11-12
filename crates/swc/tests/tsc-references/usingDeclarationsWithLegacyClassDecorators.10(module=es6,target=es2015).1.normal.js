@@ -1,19 +1,23 @@
 //// [usingDeclarationsWithLegacyClassDecorators.10.ts]
 import { _ as _ts_decorate } from "@swc/helpers/_/_ts_decorate";
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
-export { _class as default };
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var _class = class _class {
-    };
     _class = _ts_decorate([
         dec
     ], _class);
-    var after = _using(_stack, null);
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+    const after = _ts_add_disposable_resource(env, null, false);
+    ;
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    _dispose(_stack, _error, _hasError);
+    _ts_dispose_resources(env);
+}
+export default class _class {
 }

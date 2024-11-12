@@ -1,118 +1,38 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                1,
-            ),
-            hi: BytePos(
-                1,
-            ),
-            ctxt: #0,
-        },
+        span: 1..1,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    1,
-                ),
-                hi: BytePos(
-                    1,
-                ),
-                ctxt: #0,
-            },
+            span: 1..1,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        9,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..9,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            9,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..9,
                     value: "overview",
                 },
                 tag: File(
                     FileTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                9,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..9,
                         text: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    23,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..23,
                             value: "This is a file doclet.",
                         },
                     },
                 ),
             },
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        10,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..10,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            10,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..10,
                     value: "copyright",
                 },
                 tag: Copyright(
                     CopyrightTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                10,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..10,
                         text: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    21,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..21,
                             value: "Michael Mathews 2011",
                         },
                     },

@@ -103,12 +103,13 @@ describe("parse", () => {
               "body": [
                 {
                   "body": [],
+                  "ctxt": 0,
                   "declare": false,
                   "decorators": [],
                   "identifier": {
+                    "ctxt": 2,
                     "optional": false,
                     "span": {
-                      "ctxt": 2,
                       "end": 289,
                       "start": 286,
                     },
@@ -118,7 +119,6 @@ describe("parse", () => {
                   "implements": [],
                   "isAbstract": false,
                   "span": {
-                    "ctxt": 0,
                     "end": 292,
                     "start": 280,
                   },
@@ -130,7 +130,6 @@ describe("parse", () => {
               ],
               "interpreter": null,
               "span": {
-                "ctxt": 0,
                 "end": 292,
                 "start": 280,
               },
@@ -150,12 +149,13 @@ describe("parse", () => {
               "body": [
                 {
                   "body": [],
+                  "ctxt": 0,
                   "declare": false,
                   "decorators": [],
                   "identifier": {
+                    "ctxt": 2,
                     "optional": false,
                     "span": {
-                      "ctxt": 2,
                       "end": 302,
                       "start": 299,
                     },
@@ -165,7 +165,6 @@ describe("parse", () => {
                   "implements": [],
                   "isAbstract": false,
                   "span": {
-                    "ctxt": 0,
                     "end": 305,
                     "start": 293,
                   },
@@ -177,7 +176,6 @@ describe("parse", () => {
               ],
               "interpreter": null,
               "span": {
-                "ctxt": 0,
                 "end": 305,
                 "start": 293,
               },
@@ -190,7 +188,8 @@ describe("parse", () => {
 describe("minify", () => {
     it("should work", () => {
         const output = swc.minifySync(
-            "const somename = 1; console.log(somename);"
+            "const somename = 1; console.log(somename);",
+            { module: false }
         );
 
         expect(output).toMatchInlineSnapshot(`
@@ -202,7 +201,8 @@ describe("minify", () => {
 
     it("should work with async facade", async () => {
         const output = await swc.minify(
-            "const somename = 1; console.log(somename);"
+            "const somename = 1; console.log(somename);",
+            { module: false }
         );
 
         expect(output).toMatchInlineSnapshot(`

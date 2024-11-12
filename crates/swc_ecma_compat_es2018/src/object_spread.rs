@@ -24,7 +24,7 @@ impl Parallel for ObjectSpread {
 
 #[swc_trace]
 impl VisitMut for ObjectSpread {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
         expr.visit_mut_children_with(self);
@@ -43,10 +43,10 @@ impl VisitMut for ObjectSpread {
 
             // { foo, ...x } => ({ foo }, x)
             let args = {
-                let mut buf = vec![];
+                let mut buf = Vec::new();
                 let mut obj = ObjectLit {
                     span: DUMMY_SP,
-                    props: vec![],
+                    props: Vec::new(),
                 };
                 let mut first = true;
                 for prop in props.take() {
@@ -58,7 +58,7 @@ impl VisitMut for ObjectSpread {
                                     span: DUMMY_SP,
                                     callee: callee.clone(),
                                     args: buf.take(),
-                                    type_args: Default::default(),
+                                    ..Default::default()
                                 })
                                 .as_arg()];
                             }
@@ -73,7 +73,7 @@ impl VisitMut for ObjectSpread {
                                         span: DUMMY_SP,
                                         callee: helper!(object_spread_props),
                                         args: buf.take(),
-                                        type_args: Default::default(),
+                                        ..Default::default()
                                     })
                                     .as_arg()];
                                 }
@@ -95,12 +95,13 @@ impl VisitMut for ObjectSpread {
                 buf
             };
 
-            *expr = Expr::Call(CallExpr {
+            *expr = CallExpr {
                 span: *span,
                 callee,
                 args,
-                type_args: Default::default(),
-            });
+                ..Default::default()
+            }
+            .into();
         }
     }
 }

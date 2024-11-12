@@ -1,10 +1,9 @@
 (function(global, factory) {
-    if (typeof module === "object" && typeof module.exports === "object") module.exports = factory(require("foo"));
-    else if (typeof define === "function" && define.amd) define([
-        "foo"
-    ], factory);
-    else if (global = typeof globalThis !== "undefined" ? globalThis : global || self) module.exports = factory(global.foo);
-})(this, function(_foo) {
+    if (typeof module === "object" && typeof module.exports === "object") factory();
+    else if (typeof define === "function" && define.amd) define([], factory);
+    else if (global = typeof globalThis !== "undefined" ? globalThis : global || self) factory();
+})(this, function() {
     "use strict";
-    return _foo;
+    const foo = require("foo");
+    module.exports = foo;
 });

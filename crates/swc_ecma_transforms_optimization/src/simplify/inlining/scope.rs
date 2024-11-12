@@ -290,7 +290,7 @@ impl<'a> Scope<'a> {
 
     /// True if the returned scope is self
     fn scope_for(&self, id: &Id) -> (&Scope, bool) {
-        if self.constants.get(id).is_some() {
+        if self.constants.contains_key(id) {
             return (self, true);
         }
         if self.find_binding_from_current(id).is_some() {
@@ -508,7 +508,7 @@ impl<'a> Scope<'a> {
     }
 
     fn has_constant(&self, id: &Id) -> bool {
-        if self.constants.get(id).is_some() {
+        if self.constants.contains_key(id) {
             return true;
         }
 
@@ -586,7 +586,7 @@ impl<'a> Scope<'a> {
 
         for (_, v) in self.bindings.iter() {
             if let Some(Expr::Ident(i)) = v.value.borrow().as_ref() {
-                if i.sym == id.0 && i.span.ctxt() == id.1 {
+                if i.sym == id.0 && i.ctxt == id.1 {
                     v.inline_prevented.set(true);
                 }
             }

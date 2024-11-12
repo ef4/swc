@@ -7,16 +7,20 @@ Object.defineProperty(exports, "__esModule", {
         return _class;
     }
 });
-var _class_call_check = require("@swc/helpers/_/_class_call_check"), _ts_decorate = require("@swc/helpers/_/_ts_decorate"), _dispose = require("@swc/helpers/_/_dispose"), _using = require("@swc/helpers/_/_using");
+var _class_call_check = require("@swc/helpers/_/_class_call_check"), _ts_decorate = require("@swc/helpers/_/_ts_decorate"), _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource"), _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources"), env = {
+    stack: [],
+    error: void 0,
+    hasError: !1
+};
 try {
-    var _stack = [], _class = function _class() {
-        _class_call_check._(this, _class);
-    };
     _class = _ts_decorate._([
         dec
-    ], _class), _using._(_stack, null);
-} catch (_) {
-    var _error = _, _hasError = !0;
+    ], _class), _ts_add_disposable_resource._(env, null, !1);
+} catch (e) {
+    env.error = e, env.hasError = !0;
 } finally{
-    _dispose._(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
 }
+var _class = function _class() {
+    _class_call_check._(this, _class);
+};

@@ -1,9 +1,8 @@
 {
   "type": "Script",
   "span": {
-    "start": 235,
-    "end": 481,
-    "ctxt": 0
+    "start": 239,
+    "end": 485
   },
   "body": [
     {
@@ -11,37 +10,34 @@
       "identifier": {
         "type": "Identifier",
         "span": {
-          "start": 241,
-          "end": 242,
-          "ctxt": 0
+          "start": 245,
+          "end": 246
         },
+        "ctxt": 0,
         "value": "C",
         "optional": false
       },
       "declare": false,
       "span": {
-        "start": 235,
-        "end": 481,
-        "ctxt": 0
+        "start": 239,
+        "end": 485
       },
+      "ctxt": 0,
       "decorators": [],
       "body": [
         {
           "type": "ClassProperty",
           "span": {
-            "start": 294,
-            "end": 321,
-            "ctxt": 0
+            "start": 298,
+            "end": 325
           },
           "key": {
             "type": "Identifier",
             "span": {
-              "start": 301,
-              "end": 320,
-              "ctxt": 0
+              "start": 305,
+              "end": 324
             },
-            "value": "readwriteStaticType",
-            "optional": false
+            "value": "readwriteStaticType"
           },
           "value": null,
           "typeAnnotation": null,
@@ -58,19 +54,16 @@
         {
           "type": "ClassProperty",
           "span": {
-            "start": 388,
-            "end": 408,
-            "ctxt": 0
+            "start": 392,
+            "end": 412
           },
           "key": {
             "type": "Identifier",
             "span": {
-              "start": 395,
-              "end": 407,
-              "ctxt": 0
+              "start": 399,
+              "end": 411
             },
-            "value": "readonlyType",
-            "optional": false
+            "value": "readonlyType"
           },
           "value": null,
           "typeAnnotation": null,
@@ -87,19 +80,16 @@
         {
           "type": "ClassProperty",
           "span": {
-            "start": 458,
-            "end": 479,
-            "ctxt": 0
+            "start": 462,
+            "end": 483
           },
           "key": {
             "type": "Identifier",
             "span": {
-              "start": 465,
-              "end": 478,
-              "ctxt": 0
+              "start": 469,
+              "end": 482
             },
-            "value": "readwriteType",
-            "optional": false
+            "value": "readwriteType"
           },
           "value": null,
           "typeAnnotation": null,

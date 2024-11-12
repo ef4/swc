@@ -2,7 +2,6 @@
 // members N and M of types S and T have the same name, same accessibility, same optionality, and N is assignable M
 // no errors expected
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
-var SimpleTypes;
 (function(SimpleTypes) {
     var S = function S() {
         "use strict";
@@ -19,10 +18,10 @@ var SimpleTypes;
     var a;
     var b;
     var a2 = {
-        foo: ""
+        foo: ''
     };
     var b2 = {
-        foo: ""
+        foo: ''
     };
     s = t;
     t = s;
@@ -44,7 +43,6 @@ var SimpleTypes;
     a2 = t2;
     a2 = t;
 })(SimpleTypes || (SimpleTypes = {}));
-var ObjectTypes;
 (function(ObjectTypes) {
     var S = function S() {
         "use strict";
@@ -86,3 +84,4 @@ var ObjectTypes;
     a2 = t2;
     a2 = t;
 })(ObjectTypes || (ObjectTypes = {}));
+var SimpleTypes, ObjectTypes;

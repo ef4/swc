@@ -1,82 +1,26 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                1,
-            ),
-            hi: BytePos(
-                116,
-            ),
-            ctxt: #0,
-        },
+        span: 1..116,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    1,
-                ),
-                hi: BytePos(
-                    1,
-                ),
-                ctxt: #0,
-            },
+            span: 1..1,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        7,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..7,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            7,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..7,
                     value: "module",
                 },
                 tag: Module(
                     ModuleTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                7,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..7,
                         name: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    9,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..9,
                             value: "@example",
                         },
                         ty: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    8,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..8,
                             value: "terrain",
                         },
                     },
@@ -85,61 +29,21 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                161,
-            ),
-            hi: BytePos(
-                161,
-            ),
-            ctxt: #0,
-        },
+        span: 161..161,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    161,
-                ),
-                hi: BytePos(
-                    161,
-                ),
-                ctxt: #0,
-            },
+            span: 161..161,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        161,
-                    ),
-                    hi: BytePos(
-                        166,
-                    ),
-                    ctxt: #0,
-                },
+                span: 161..166,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            161,
-                        ),
-                        hi: BytePos(
-                            166,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 161..166,
                     value: "class",
                 },
                 tag: Class(
                     ClassTag {
-                        span: Span {
-                            lo: BytePos(
-                                161,
-                            ),
-                            hi: BytePos(
-                                166,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 161..166,
                         ty: None,
                         name: None,
                     },
@@ -148,72 +52,24 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                235,
-            ),
-            hi: BytePos(
-                235,
-            ),
-            ctxt: #0,
-        },
+        span: 235..235,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    235,
-                ),
-                hi: BytePos(
-                    235,
-                ),
-                ctxt: #0,
-            },
+            span: 235..235,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        235,
-                    ),
-                    hi: BytePos(
-                        240,
-                    ),
-                    ctxt: #0,
-                },
+                span: 235..240,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            235,
-                        ),
-                        hi: BytePos(
-                            240,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 235..240,
                     value: "class",
                 },
                 tag: Class(
                     ClassTag {
-                        span: Span {
-                            lo: BytePos(
-                                235,
-                            ),
-                            hi: BytePos(
-                                240,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 235..240,
                         ty: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        235,
-                                    ),
-                                    hi: BytePos(
-                                        259,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 235..259,
                                 value: "@memberof module:terrain",
                             },
                         ),
@@ -224,25 +80,9 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                323,
-            ),
-            hi: BytePos(
-                323,
-            ),
-            ctxt: #0,
-        },
+        span: 323..323,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    323,
-                ),
-                hi: BytePos(
-                    329,
-                ),
-                ctxt: #0,
-            },
+            span: 323..329,
             value: "A leaf",
         },
         tags: [],

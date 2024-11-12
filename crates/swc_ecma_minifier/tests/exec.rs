@@ -11,7 +11,7 @@ use swc_common::{
     sync::Lrc,
     FileName, Mark, SourceMap,
 };
-use swc_ecma_ast::Module;
+use swc_ecma_ast::Program;
 use swc_ecma_codegen::{
     text_writer::{omit_trailing_semi, JsWriter, WriteJs},
     Emitter,
@@ -23,10 +23,10 @@ use swc_ecma_minifier::{
         MinifyOptions,
     },
 };
-use swc_ecma_parser::{parse_file_as_module, EsConfig, Syntax};
+use swc_ecma_parser::{parse_file_as_module, EsSyntax, Syntax};
 use swc_ecma_testing::{exec_node_js, JsExecOptions};
 use swc_ecma_transforms_base::{fixer::fixer, hygiene::hygiene, resolver};
-use swc_ecma_visit::{FoldWith, VisitMutWith};
+use swc_ecma_visit::VisitMutWith;
 use testing::DebugUsingDisplay;
 use tracing::{info, span, Level};
 
@@ -68,7 +68,7 @@ fn print<N: swc_ecma_codegen::Node>(
     minify: bool,
     skip_semi: bool,
 ) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
 
     {
         let mut wr: Box<dyn WriteJs> = Box::new(JsWriter::new(cm.clone(), "\n", &mut buf, None));
@@ -97,14 +97,14 @@ fn run(
     input: &str,
     config: Option<&str>,
     mangle: Option<MangleOptions>,
-) -> Option<Module> {
+) -> Option<Program> {
     let _ = rayon::ThreadPoolBuilder::new()
         .thread_name(|i| format!("rayon-{}", i + 1))
         .build_global();
 
     let compress_config = config.map(|config| parse_compressor_config(cm.clone(), config).1);
 
-    let fm = cm.new_source_file(FileName::Anon, input.into());
+    let fm = cm.new_source_file(FileName::Anon.into(), input.into());
     let comments = SingleThreadedComments::default();
 
     eprintln!("---- {} -----\n{}", Color::Green.paint("Input"), fm.src);
@@ -114,18 +114,19 @@ fn run(
 
     let program = parse_file_as_module(
         &fm,
-        Syntax::Es(EsConfig {
+        Syntax::Es(EsSyntax {
             jsx: true,
             ..Default::default()
         }),
         Default::default(),
         Some(&comments),
-        &mut vec![],
+        &mut Vec::new(),
     )
     .map_err(|err| {
         err.into_diagnostic(handler).emit();
     })
-    .map(|module| module.fold_with(&mut resolver(unresolved_mark, top_level_mark, false)));
+    .map(Program::Module)
+    .map(|module| module.apply(&mut resolver(unresolved_mark, top_level_mark, false)));
 
     // Ignore parser errors.
     //
@@ -138,7 +139,7 @@ fn run(
     let run_hygiene = mangle.is_none();
 
     let mut output = optimize(
-        program.into(),
+        program,
         cm,
         Some(&comments),
         None,
@@ -150,15 +151,15 @@ fn run(
         &ExtraOptions {
             unresolved_mark,
             top_level_mark,
+            mangle_name_cache: None,
         },
-    )
-    .expect_module();
+    );
 
     if run_hygiene {
         output.visit_mut_with(&mut hygiene());
     }
 
-    let output = output.fold_with(&mut fixer(None));
+    let output = output.apply(&mut fixer(None));
 
     Some(output)
 }
@@ -11192,4 +11193,185 @@ fn issue_8246_1() {
         "#,
         false,
     );
+}
+
+#[test]
+fn issue_8864_1() {
+    run_default_exec_test(
+        "
+        class Renderer {
+            renderStaticFrame(string1, string2) {
+            const line1Text = `${string1} and ${string2}`.toUpperCase();
+            const line2Text = 'line 2 text'.toUpperCase();
+        
+            const text = `${line1Text}\n${line2Text}`;
+            return text;
+            }
+        }
+      
+        console.log(new Renderer().renderStaticFrame('a', 'b'));
+      ",
+    )
+}
+
+#[test]
+fn issue_8886() {
+    run_default_exec_test(
+        "const bar = ((v) => v)(1);
+const foo = ((v) => v)(2);
+
+console.log(eval(bar));
+console.log(eval(foo));",
+    );
+}
+
+#[test]
+fn issue_8942() {
+    run_default_exec_test(
+        "
+        'use strict';
+        const k = (() => {
+            let x = 1;
+            x **= undefined / x;
+            return x;
+        })();
+        console.log(k);
+        ",
+    );
+}
+
+#[test]
+fn issue_8937() {
+    run_default_exec_test(
+        "
+        class Container {
+            constructor(v) {
+                this.a= v;
+            }
+            add(x) {
+                this.a += x;
+            }
+            toString() {
+                return this.a.toString();
+            }
+        };
+        let x = Math.random();
+        let a = new Container(x);
+        let b = new Container(x+1);
+        let comp = a < b;
+        while (a < b) {
+            a.add(1);
+        }
+        console.log(comp ? 'smaller' : 'not smaller');
+        ",
+    );
+}
+
+#[test]
+fn issue_8943() {
+    run_default_exec_test(
+        "
+        'use strict';
+        const k = (() => {
+            return '👨‍👩‍👦'.charCodeAt(0);
+        });
+        console.log(k());
+        ",
+    );
+}
+
+#[test]
+fn issue_8964() {
+    run_default_exec_test(
+        "
+        function foo(bit) {
+            a = !(bit & 1)
+            b = !(bit & 2)
+            return a + b
+        };
+        
+        console.log(foo(1));
+        ",
+    );
+}
+
+#[test]
+fn issue_9008() {
+    run_default_exec_test("console.log('💖'[0]);")
+}
+
+#[test]
+fn issue_8982_1() {
+    run_default_exec_test(
+        "
+        console.log(Math.max(0, -0));
+        ",
+    );
+}
+
+#[test]
+fn issue_8982_2() {
+    run_default_exec_test(
+        "
+        console.log(Math.min(0, -0));
+        ",
+    );
+}
+
+#[test]
+fn issue_9010() {
+    run_default_exec_test(
+        r#"
+        console.log(-0 + [])
+        "#,
+    );
+}
+
+#[test]
+fn issue_9184() {
+    run_default_exec_test(
+        r#"
+        let pi= Math.random() >1.1 ? "foo": "bar";
+        console.log(`(${`${pi}`} - ${`\\*${pi}`})`)
+"#,
+    );
+}
+
+#[test]
+fn issue_9184_2() {
+    run_default_exec_test(
+        r#"
+        let pi= Math.random() < -1 ? "foo": "bar";
+        console.log(`(${`${pi}`} - ${`\\*${pi}`})`)
+"#,
+    );
+}
+
+#[test]
+fn issue_9499() {
+    run_default_exec_test(
+        "
+        const o = {'a': 1, 'b': 2};
+        function fn() {
+            return 'a' in o;
+        }
+        console.log(fn());
+",
+    )
+}
+
+#[test]
+fn issue_9356() {
+    run_default_exec_test("console.log((function ({ } = 42) { }).length)");
+}
+
+#[test]
+fn isssue_9498() {
+    run_default_exec_test(
+        "
+        const x = {a: 1};
+        const y = {...x, a: 2};
+        console.log(y.a);
+",
+    )
 }

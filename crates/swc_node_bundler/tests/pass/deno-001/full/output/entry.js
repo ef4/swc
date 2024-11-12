@@ -29,9 +29,7 @@ class BufferFullError extends Error {
     partial;
     name;
     constructor(partial){
-        super("Buffer full");
-        this.partial = partial;
-        this.name = "BufferFullError";
+        super("Buffer full"), this.partial = partial, this.name = "BufferFullError";
     }
 }
 class PartialReadError extends Deno.errors.UnexpectedEof {
@@ -243,8 +241,7 @@ class BufWriter extends AbstractBufBase {
         return writer instanceof BufWriter ? writer : new BufWriter(writer, size);
     }
     constructor(writer, size = DEFAULT_BUF_SIZE){
-        super();
-        this.writer = writer;
+        super(), this.writer = writer;
         if (size <= 0) size = DEFAULT_BUF_SIZE;
         this.buf = new Uint8Array(size);
     }
@@ -366,8 +363,9 @@ class TextProtoReader {
         return n;
     }
 }
-var Status;
-(function(Status) {})(Status || (Status = {}));
+/*#__PURE__*/ (function(Status) {
+    return Status;
+})({});
 const STATUS_TEXT = new Map([]);
 function deferred() {
     let methods;

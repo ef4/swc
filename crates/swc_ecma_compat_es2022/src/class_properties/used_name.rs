@@ -15,8 +15,8 @@ macro_rules! noop {
 }
 
 #[swc_trace]
-impl<'a> Visit for UsedNameCollector<'a> {
-    noop_visit_type!();
+impl Visit for UsedNameCollector<'_> {
+    noop_visit_type!(fail);
 
     noop!(visit_arrow_expr, ArrowExpr);
 

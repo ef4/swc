@@ -23,7 +23,7 @@ use testing::{assert_eq, NormalizedOutput};
 use tracing::warn;
 
 fn print(cm: Lrc<SourceMap>, p: &Program, minify: bool) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
 
     {
         let mut wr = Box::new(JsWriter::new(cm.clone(), "\n", &mut buf, None)) as Box<dyn WriteJs>;
@@ -56,7 +56,7 @@ fn parse_fm(handler: &Handler, fm: Lrc<SourceFile>) -> Result<Program, ()> {
         Default::default(),
         EsVersion::latest(),
         None,
-        &mut vec![],
+        &mut Vec::new(),
     )
     .map_err(|err| {
         err.into_diagnostic(handler).emit();
@@ -104,6 +104,7 @@ fn snapshot_compress_fixture(input: PathBuf) {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
         );
 
@@ -166,6 +167,7 @@ fn fixture(input: PathBuf) {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
         );
 
@@ -180,9 +182,10 @@ fn fixture(input: PathBuf) {
     .unwrap();
 }
 
+#[track_caller]
 fn assert_mangled(src: &str, expected: &str, opts: MangleOptions) {
     testing::run_test2(false, |cm, handler| {
-        let fm = cm.new_source_file(FileName::Anon, src.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), src.into());
 
         let p = parse_fm(&handler, fm)?;
 
@@ -202,6 +205,7 @@ fn assert_mangled(src: &str, expected: &str, opts: MangleOptions) {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
         );
 
@@ -311,11 +315,11 @@ class Class2 {
     #hello2 = 2;
 }";
 
-    let expected = "class s {
-    #s = 1;
+    let expected = "class l {
+    #l = 1;
 }
-class a {
-    #a = 2;
+class s {
+    #s = 2;
 }";
 
     assert_mangled(
@@ -338,10 +342,10 @@ class Class2 {
     #hello2 = 2;
 }";
 
-    let expected = "class s {
+    let expected = "class l {
     #hello1 = 1;
 }
-class a {
+class s {
     #hello2 = 2;
 }";
 

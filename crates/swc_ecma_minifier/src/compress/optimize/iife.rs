@@ -3,9 +3,7 @@ use std::{collections::HashMap, mem::swap};
 use rustc_hash::FxHashMap;
 use swc_common::{pass::Either, util::take::Take, Spanned, DUMMY_SP};
 use swc_ecma_ast::*;
-use swc_ecma_utils::{
-    contains_arguments, contains_this_expr, find_pat_ids, undefined, ExprFactory,
-};
+use swc_ecma_utils::{contains_arguments, contains_this_expr, find_pat_ids, ExprFactory};
 use swc_ecma_visit::VisitMutWith;
 
 use super::{util::NormalMultiReplacer, Optimizer};
@@ -37,11 +35,12 @@ impl Optimizer<'_> {
 
         if let Expr::Fn(..) = callee {
             report_change!("negate_iife: Negating iife");
-            *e = Expr::Unary(UnaryExpr {
+            *e = UnaryExpr {
                 span: DUMMY_SP,
                 op: op!("!"),
                 arg: Box::new(e.take()),
-            });
+            }
+            .into();
         }
     }
 
@@ -68,11 +67,12 @@ impl Optimizer<'_> {
         match callee {
             Expr::Fn(..) => {
                 report_change!("negate_iife: Swapping cons and alt");
-                cond.test = Box::new(Expr::Unary(UnaryExpr {
+                cond.test = UnaryExpr {
                     span: DUMMY_SP,
                     op: op!("!"),
                     arg: cond.test.take(),
-                }));
+                }
+                .into();
                 swap(&mut cond.cons, &mut cond.alt);
                 true
             }
@@ -97,12 +97,13 @@ impl Optimizer<'_> {
             }) = &mut **arg
             {
                 if let Expr::Fn(..) = &**callee {
-                    cond.test = Box::new(Expr::Call(CallExpr {
+                    cond.test = CallExpr {
                         span: *call_span,
                         callee: callee.take().as_callee(),
                         args: args.take(),
-                        type_args: Default::default(),
-                    }));
+                        ..Default::default()
+                    }
+                    .into();
                     swap(&mut cond.cons, &mut cond.alt);
                 }
             }
@@ -159,8 +160,14 @@ impl Optimizer<'_> {
 
         fn clean_params(callee: &mut Expr) {
             match callee {
-                Expr::Arrow(callee) => callee.params.retain(|p| !p.is_invalid()),
-                Expr::Fn(callee) => callee.function.params.retain(|p| !p.pat.is_invalid()),
+                Expr::Arrow(callee) => {
+                    // Drop invalid nodes
+                    callee.params.retain(|p| !p.is_invalid())
+                }
+                Expr::Fn(callee) => {
+                    // Drop invalid nodes
+                    callee.function.params.retain(|p| !p.pat.is_invalid())
+                }
                 _ => {}
             }
         }
@@ -212,24 +219,24 @@ impl Optimizer<'_> {
                                 trace_op!(
                                     "iife: Trying to inline argument ({}{:?})",
                                     param.id.sym,
-                                    param.id.span.ctxt
+                                    param.id.ctxt
                                 );
                                 vars.insert(param.to_id(), arg.clone());
                             } else {
                                 trace_op!(
                                     "iife: Trying to inline argument ({}{:?}) (not inlinable)",
                                     param.id.sym,
-                                    param.id.span.ctxt
+                                    param.id.ctxt
                                 );
                             }
                         } else {
                             trace_op!(
                                 "iife: Trying to inline argument ({}{:?}) (undefined)",
                                 param.id.sym,
-                                param.id.span.ctxt
+                                param.id.ctxt
                             );
 
-                            vars.insert(param.to_id(), undefined(param.span()));
+                            vars.insert(param.to_id(), Expr::undefined(param.span()));
                         }
                     }
 
@@ -259,7 +266,7 @@ impl Optimizer<'_> {
 
                                 vars.insert(
                                     param_id.to_id(),
-                                    Box::new(Expr::Array(ArrayLit {
+                                    ArrayLit {
                                         span: param_id.span,
                                         elems: e
                                             .args
@@ -267,7 +274,8 @@ impl Optimizer<'_> {
                                             .skip(idx)
                                             .map(|arg| Some(arg.clone()))
                                             .collect(),
-                                    })),
+                                    }
+                                    .into(),
                                 );
                                 param.take();
                             }
@@ -285,7 +293,7 @@ impl Optimizer<'_> {
             let ctx = Ctx {
                 in_fn_like: true,
                 top_level: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             let mut optimizer = self.with_ctx(ctx);
             match find_body(callee) {
@@ -301,9 +309,9 @@ impl Optimizer<'_> {
                     unreachable!("find_body and find_params should match")
                 }
             }
-        }
 
-        clean_params(callee);
+            clean_params(callee);
+        }
     }
 
     /// If a parameter is not used, we can ignore return value of the
@@ -349,7 +357,7 @@ impl Optimizer<'_> {
             }
         }
 
-        let mut removed = vec![];
+        let mut removed = Vec::new();
         let params = find_params(callee);
         if let Some(mut params) = params {
             // We check for parameter and argument
@@ -451,7 +459,7 @@ impl Optimizer<'_> {
 
         trace_op!("iife: Checking noinline");
 
-        if self.has_noinline(call.span) {
+        if self.has_noinline(call.ctxt) {
             log_abort!("iife: Has no inline mark");
             return;
         }
@@ -477,6 +485,11 @@ impl Optimizer<'_> {
 
                 if f.is_generator {
                     log_abort!("iife: Cannot inline generator");
+                    return;
+                }
+
+                if self.ctx.in_param && !f.params.is_empty() {
+                    log_abort!("iife: We don't invoke IIFE with params in function params");
                     return;
                 }
 
@@ -514,6 +527,10 @@ impl Optimizer<'_> {
                         }
                     }
                     BlockStmtOrExpr::Expr(body) => {
+                        if !self.can_extract_param(&param_ids) {
+                            return;
+                        }
+
                         if let Expr::Lit(Lit::Num(..)) = &**body {
                             if self.ctx.in_obj_of_non_computed_member {
                                 return;
@@ -523,15 +540,9 @@ impl Optimizer<'_> {
                         self.changed = true;
                         report_change!("inline: Inlining a function call (arrow)");
 
-                        let vars = param_ids
-                            .iter()
-                            .map(|name| VarDeclarator {
-                                span: DUMMY_SP,
-                                name: name.clone().into(),
-                                init: Default::default(),
-                                definite: Default::default(),
-                            })
-                            .collect::<Vec<_>>();
+                        let mut exprs = vec![Box::new(make_number(DUMMY_SP, 0.0))];
+
+                        let vars = self.inline_fn_param(&param_ids, &mut call.args, &mut exprs);
 
                         if !vars.is_empty() {
                             self.prepend_stmts.push(
@@ -540,21 +551,10 @@ impl Optimizer<'_> {
                                     kind: VarDeclKind::Let,
                                     declare: Default::default(),
                                     decls: vars,
+                                    ..Default::default()
                                 }
                                 .into(),
                             )
-                        }
-
-                        let mut exprs = vec![Box::new(make_number(DUMMY_SP, 0.0))];
-                        for (idx, param) in param_ids.iter().enumerate() {
-                            if let Some(arg) = call.args.get_mut(idx) {
-                                exprs.push(Box::new(Expr::Assign(AssignExpr {
-                                    span: DUMMY_SP,
-                                    op: op!("="),
-                                    left: param.clone().into(),
-                                    right: arg.expr.take(),
-                                })));
-                            }
                         }
 
                         if call.args.len() > f.params.len() {
@@ -592,6 +592,11 @@ impl Optimizer<'_> {
 
                 if f.function.is_generator {
                     log_abort!("iife: [x] Cannot inline generator");
+                    return;
+                }
+
+                if self.ctx.in_param && !f.function.params.is_empty() {
+                    log_abort!("iife: We don't invoke IIFE with params in function params");
                     return;
                 }
 
@@ -634,7 +639,7 @@ impl Optimizer<'_> {
                 if body.stmts.is_empty() && call.args.is_empty() {
                     self.changed = true;
                     report_change!("iife: Inlining an empty function call as `undefined`");
-                    *e = *undefined(f.function.span);
+                    *e = *Expr::undefined(f.function.span);
                     return;
                 }
 
@@ -653,7 +658,7 @@ impl Optimizer<'_> {
                 let new = self.inline_fn_like(&param_ids, body, &mut call.args);
                 if let Some(new) = new {
                     self.changed = true;
-                    report_change!("inline: Inlining a function call");
+                    report_change!("inline: Inlining a function call (params = {param_ids:?})");
 
                     dump_change_detail!("{}", dump(&new, false));
 
@@ -687,6 +692,32 @@ impl Optimizer<'_> {
         }
     }
 
+    fn can_extract_param(&self, param_ids: &[Ident]) -> bool {
+        // Don't create top-level variables.
+        if !param_ids.is_empty() && !self.may_add_ident() {
+            for pid in param_ids {
+                if let Some(usage) = self.data.vars.get(&pid.to_id()) {
+                    if usage.ref_count > 1 || usage.assign_count > 0 || usage.inline_prevented {
+                        log_abort!("iife: [x] Cannot inline because of usage of `{}`", pid);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        for pid in param_ids {
+            if self.ident_reserved(&pid.sym) {
+                log_abort!(
+                    "iife: [x] Cannot inline because of reservation of `{}`",
+                    pid
+                );
+                return false;
+            }
+        }
+
+        true
+    }
+
     fn can_inline_fn_like(&self, param_ids: &[Ident], body: &BlockStmt) -> bool {
         trace_op!("can_inline_fn_like");
 
@@ -702,16 +733,8 @@ impl Optimizer<'_> {
             }
         }
 
-        // Don't create top-level variables.
-        if !param_ids.is_empty() && !self.may_add_ident() {
-            for pid in param_ids {
-                if let Some(usage) = self.data.vars.get(&pid.to_id()) {
-                    if usage.ref_count > 1 || usage.assign_count > 0 || usage.inline_prevented {
-                        log_abort!("iife: [x] Cannot inline because of usage of `{}`", pid);
-                        return false;
-                    }
-                }
-            }
+        if !self.can_extract_param(param_ids) {
+            return false;
         }
 
         // Abort on eval.
@@ -741,83 +764,92 @@ impl Optimizer<'_> {
             }
         }
 
-        if !body.stmts.iter().all(|stmt| match stmt {
-            Stmt::Decl(Decl::Var(var))
-                if matches!(
-                    &**var,
-                    VarDecl {
-                        kind: VarDeclKind::Var | VarDeclKind::Let,
-                        ..
+        if !body.stmts.iter().all(|stmt| {
+            if let Stmt::Decl(Decl::Var(var)) = stmt {
+                for decl in &var.decls {
+                    for id in find_pat_ids::<_, Id>(&decl.name) {
+                        if self.ident_reserved(&id.0) {
+                            log_abort!("iife: [x] Cannot inline because reservation of `{}`", id.0);
+                            return false;
+                        }
                     }
-                ) =>
-            {
-                if var.decls.iter().any(|decl| match &decl.name {
-                    Pat::Ident(BindingIdent {
-                        id: Ident { sym, .. },
-                        ..
-                    }) if &**sym == "arguments" => true,
-                    Pat::Ident(id) => {
-                        if self.vars.has_pending_inline_for(&id.to_id()) {
-                            log_abort!(
-                                "iife: [x] Cannot inline because pending inline of `{}`",
-                                id.id
-                            );
+                }
+            }
+
+            match stmt {
+                Stmt::Decl(Decl::Var(var))
+                    if matches!(
+                        &**var,
+                        VarDecl {
+                            kind: VarDeclKind::Var | VarDeclKind::Let,
+                            ..
+                        }
+                    ) =>
+                {
+                    for decl in &var.decls {
+                        match &decl.name {
+                            Pat::Ident(id) if id.sym == "arguments" => return false,
+                            Pat::Ident(id) => {
+                                if self.vars.has_pending_inline_for(&id.to_id()) {
+                                    log_abort!(
+                                        "iife: [x] Cannot inline because pending inline of `{}`",
+                                        id.id
+                                    );
+                                    return false;
+                                }
+                            }
+
+                            _ => return false,
+                        }
+                    }
+
+                    if self.ctx.executed_multiple_time {
+                        return false;
+                    }
+
+                    if !self.may_add_ident() {
+                        return false;
+                    }
+
+                    true
+                }
+
+                Stmt::Expr(e) => match &*e.expr {
+                    Expr::Await(..) => false,
+
+                    // TODO: Check if parameter is used and inline if call is not related to
+                    // parameters.
+                    Expr::Call(e) => {
+                        if e.callee.as_expr().and_then(|e| e.as_ident()).is_some() {
                             return true;
                         }
 
-                        false
+                        let used = idents_used_by(&e.callee);
+
+                        if used.iter().all(|id| {
+                            self.data
+                                .vars
+                                .get(id)
+                                .map(|usage| usage.ref_count == 1 && usage.callee_count > 0)
+                                .unwrap_or(false)
+                        }) {
+                            return true;
+                        }
+
+                        param_ids.iter().all(|param| !used.contains(&param.to_id()))
                     }
 
                     _ => true,
-                }) {
-                    return false;
-                }
+                },
 
-                if self.ctx.executed_multiple_time {
-                    return false;
-                }
+                Stmt::Return(ReturnStmt { arg, .. }) => match arg.as_deref() {
+                    Some(Expr::Await(..)) => false,
 
-                if !self.may_add_ident() {
-                    return false;
-                }
-
-                true
+                    Some(Expr::Lit(Lit::Num(..))) => !self.ctx.in_obj_of_non_computed_member,
+                    _ => true,
+                },
+                _ => false,
             }
-
-            Stmt::Expr(e) => match &*e.expr {
-                Expr::Await(..) => false,
-
-                // TODO: Check if parameter is used and inline if call is not related to parameters.
-                Expr::Call(e) => {
-                    if e.callee.as_expr().and_then(|e| e.as_ident()).is_some() {
-                        return true;
-                    }
-
-                    let used = idents_used_by(&e.callee);
-
-                    if used.iter().all(|id| {
-                        self.data
-                            .vars
-                            .get(id)
-                            .map(|usage| usage.ref_count == 1 && usage.callee_count > 0)
-                            .unwrap_or(false)
-                    }) {
-                        return true;
-                    }
-
-                    param_ids.iter().all(|param| !used.contains(&param.to_id()))
-                }
-
-                _ => true,
-            },
-
-            Stmt::Return(ReturnStmt { arg, .. }) => match arg.as_deref() {
-                Some(Expr::Await(..)) => false,
-
-                Some(Expr::Lit(Lit::Num(..))) => !self.ctx.in_obj_of_non_computed_member,
-                _ => true,
-            },
-            _ => false,
         }) {
             return false;
         }
@@ -825,23 +857,13 @@ impl Optimizer<'_> {
         true
     }
 
-    fn inline_fn_like(
+    fn inline_fn_param(
         &mut self,
         params: &[Ident],
-        body: &mut BlockStmt,
         args: &mut [ExprOrSpread],
-    ) -> Option<Expr> {
-        if !self.can_inline_fn_like(params, &*body) {
-            return None;
-        }
-
-        if self.vars.inline_with_multi_replacer(body) {
-            self.changed = true;
-        }
-
-        let mut vars = Vec::new();
-        let mut exprs = Vec::new();
-        let param_len = params.len();
+        exprs: &mut Vec<Box<Expr>>,
+    ) -> Vec<VarDeclarator> {
+        let mut vars = Vec::with_capacity(params.len());
 
         for (idx, param) in params.iter().enumerate() {
             let arg = args.get_mut(idx).map(|arg| arg.expr.take());
@@ -849,7 +871,7 @@ impl Optimizer<'_> {
             let no_arg = arg.is_none();
 
             if let Some(arg) = arg {
-                if let Some(usage) = self.data.vars.get(&params[idx].to_id()) {
+                if let Some(usage) = self.data.vars.get_mut(&params[idx].to_id()) {
                     if usage.ref_count == 1
                         && !usage.reassigned
                         && usage.property_mutation_count == 0
@@ -864,6 +886,8 @@ impl Optimizer<'_> {
                         self.vars.vars_for_inlining.insert(param.to_id(), arg);
                         continue;
                     }
+
+                    usage.ref_count += 1;
                 }
 
                 exprs.push(
@@ -879,15 +903,40 @@ impl Optimizer<'_> {
 
             vars.push(VarDeclarator {
                 span: DUMMY_SP,
-                name: Pat::Ident(param.clone().into()),
+                name: param.clone().into(),
                 init: if self.ctx.executed_multiple_time && no_arg {
-                    Some(undefined(DUMMY_SP))
+                    Some(Expr::undefined(DUMMY_SP))
                 } else {
                     None
                 },
                 definite: Default::default(),
             });
         }
+
+        vars
+    }
+
+    fn inline_fn_like(
+        &mut self,
+        params: &[Ident],
+        body: &mut BlockStmt,
+        args: &mut [ExprOrSpread],
+    ) -> Option<Expr> {
+        if !self.can_inline_fn_like(params, &*body) {
+            return None;
+        }
+
+        if args.iter().any(|arg| arg.spread.is_some()) {
+            return None;
+        }
+
+        if self.vars.inline_with_multi_replacer(body) {
+            self.changed = true;
+        }
+
+        let param_len = params.len();
+        let mut exprs = Vec::new();
+        let vars = self.inline_fn_param(params, args, &mut exprs);
 
         if args.len() > param_len {
             for arg in &mut args[param_len..] {
@@ -904,6 +953,7 @@ impl Optimizer<'_> {
                     kind: VarDeclKind::Var,
                     declare: Default::default(),
                     decls: vars,
+                    ..Default::default()
                 }
                 .into(),
             );
@@ -924,12 +974,15 @@ impl Optimizer<'_> {
                                 }
                             }
 
-                            exprs.push(Box::new(Expr::Assign(AssignExpr {
-                                span: DUMMY_SP,
-                                op: op!("="),
-                                left: decl.name.clone().try_into().unwrap(),
-                                right: decl.init.take().unwrap(),
-                            })))
+                            exprs.push(
+                                AssignExpr {
+                                    span: DUMMY_SP,
+                                    op: op!("="),
+                                    left: decl.name.clone().try_into().unwrap(),
+                                    right: decl.init.take().unwrap(),
+                                }
+                                .into(),
+                            )
                         }
                     }
 
@@ -942,16 +995,16 @@ impl Optimizer<'_> {
 
                 Stmt::Return(stmt) => {
                     let span = stmt.span;
-                    let val = *stmt.arg.unwrap_or_else(|| undefined(span));
+                    let val = *stmt.arg.unwrap_or_else(|| Expr::undefined(span));
                     exprs.push(Box::new(val));
 
                     let mut e = SeqExpr {
-                        span: DUMMY_SP.apply_mark(self.marks.synthesized_seq),
+                        span: DUMMY_SP,
                         exprs,
                     };
                     self.merge_sequences_in_seq_expr(&mut e);
 
-                    let mut e = Expr::Seq(e);
+                    let mut e = e.into();
                     self.normalize_expr(&mut e);
                     return Some(e);
                 }
@@ -960,22 +1013,23 @@ impl Optimizer<'_> {
         }
 
         if let Some(last) = exprs.last_mut() {
-            *last = Box::new(Expr::Unary(UnaryExpr {
+            *last = UnaryExpr {
                 span: DUMMY_SP,
                 op: op!("void"),
                 arg: last.take(),
-            }));
+            }
+            .into();
         } else {
-            return Some(*undefined(body.span));
+            return Some(*Expr::undefined(body.span));
         }
 
         let mut e = SeqExpr {
-            span: DUMMY_SP.apply_mark(self.marks.synthesized_seq),
+            span: DUMMY_SP,
             exprs,
         };
         self.merge_sequences_in_seq_expr(&mut e);
 
-        let mut e = Expr::Seq(e);
+        let mut e = e.into();
         self.normalize_expr(&mut e);
         Some(e)
     }
@@ -1056,8 +1110,8 @@ impl Optimizer<'_> {
 
 fn find_scope<'a>(data: &'a ProgramData, callee: &Expr) -> Option<&'a ScopeData> {
     match callee {
-        Expr::Arrow(callee) => data.scopes.get(&callee.span.ctxt),
-        Expr::Fn(callee) => data.scopes.get(&callee.function.span.ctxt),
+        Expr::Arrow(callee) => data.scopes.get(&callee.ctxt),
+        Expr::Fn(callee) => data.scopes.get(&callee.function.ctxt),
         _ => None,
     }
 }

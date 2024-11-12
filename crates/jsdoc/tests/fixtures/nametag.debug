@@ -1,81 +1,25 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                1,
-            ),
-            hi: BytePos(
-                1,
-            ),
-            ctxt: #0,
-        },
+        span: 1..1,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    1,
-                ),
-                hi: BytePos(
-                    11,
-                ),
-                ctxt: #0,
-            },
+            span: 1..11,
             value: "A view.\n *",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        5,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..5,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            5,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..5,
                     value: "name",
                 },
                 tag: Name(
                     NameTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                5,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..5,
                         name_path: NamePath {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    2,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..2,
                             components: [
                                 Text {
-                                    span: Span {
-                                        lo: BytePos(
-                                            1,
-                                        ),
-                                        hi: BytePos(
-                                            5,
-                                        ),
-                                        ctxt: #0,
-                                    },
+                                    span: 1..5,
                                     value: "View",
                                 },
                             ],
@@ -86,82 +30,26 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                35,
-            ),
-            hi: BytePos(
-                35,
-            ),
-            ctxt: #0,
-        },
+        span: 35..35,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    35,
-                ),
-                hi: BytePos(
-                    51,
-                ),
-                ctxt: #0,
-            },
+            span: 35..51,
             value: "A controller.\n *",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        35,
-                    ),
-                    hi: BytePos(
-                        39,
-                    ),
-                    ctxt: #0,
-                },
+                span: 35..39,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            35,
-                        ),
-                        hi: BytePos(
-                            39,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 35..39,
                     value: "name",
                 },
                 tag: Name(
                     NameTag {
-                        span: Span {
-                            lo: BytePos(
-                                35,
-                            ),
-                            hi: BytePos(
-                                39,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 35..39,
                         name_path: NamePath {
-                            span: Span {
-                                lo: BytePos(
-                                    35,
-                                ),
-                                hi: BytePos(
-                                    46,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 35..46,
                             components: [
                                 Text {
-                                    span: Span {
-                                        lo: BytePos(
-                                            35,
-                                        ),
-                                        hi: BytePos(
-                                            45,
-                                        ),
-                                        ctxt: #0,
-                                    },
+                                    span: 35..45,
                                     value: "Controller",
                                 },
                             ],
@@ -170,38 +58,14 @@
                 ),
             },
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        35,
-                    ),
-                    hi: BytePos(
-                        40,
-                    ),
-                    ctxt: #0,
-                },
+                span: 35..40,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            35,
-                        ),
-                        hi: BytePos(
-                            40,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 35..40,
                     value: "class",
                 },
                 tag: Class(
                     ClassTag {
-                        span: Span {
-                            lo: BytePos(
-                                35,
-                            ),
-                            hi: BytePos(
-                                40,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 35..40,
                         ty: None,
                         name: None,
                     },

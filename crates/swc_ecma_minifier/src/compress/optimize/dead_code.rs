@@ -68,6 +68,10 @@ impl Optimizer<'_> {
         if let Expr::Assign(assign) = e {
             // x += 1 => x + 1
             if let Some(op) = assign.op.to_update() {
+                if op == op!("**") {
+                    return false;
+                }
+
                 if let Some(lhs) = assign.left.as_ident() {
                     //
                     if self
@@ -83,12 +87,13 @@ impl Optimizer<'_> {
                         );
 
                         self.changed = true;
-                        *e = Expr::Bin(BinExpr {
+                        *e = BinExpr {
                             span: assign.span,
                             op,
-                            left: Box::new(Expr::Ident(lhs.clone())),
+                            left: lhs.clone().into(),
                             right: assign.right.take(),
-                        });
+                        }
+                        .into();
                         return true;
                     }
                 }

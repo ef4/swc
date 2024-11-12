@@ -42,8 +42,9 @@ enum AdjustAttributes {
     Svg,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 enum InsertionMode {
+    #[default]
     Initial,
     BeforeHtml,
     BeforeHead,
@@ -67,12 +68,6 @@ enum InsertionMode {
     AfterFrameset,
     AfterAfterBody,
     AfterAfterFrameset,
-}
-
-impl Default for InsertionMode {
-    fn default() -> Self {
-        InsertionMode::Initial
-    }
 }
 
 enum InsertionPosition {
@@ -162,7 +157,7 @@ where
         };
 
         Ok(Document {
-            span: Span::new(start.lo(), last, Default::default()),
+            span: Span::new(start.lo(), last),
             mode,
             children,
         })
@@ -366,7 +361,7 @@ where
         let last = self.input.last_pos()?;
 
         Ok(DocumentFragment {
-            span: Span::new(start.lo(), last, Default::default()),
+            span: Span::new(start.lo(), last),
             children,
         })
     }
@@ -450,7 +445,7 @@ where
                                 end_children
                             };
 
-                            Span::new(start_span.lo(), end.hi(), Default::default())
+                            Span::new(start_span.lo(), end.hi())
                         };
 
                         Child::Element(Element {
@@ -475,12 +470,12 @@ where
                                 },
                             };
 
-                            Span::new(start_span.lo(), end_span.hi(), Default::default())
+                            Span::new(start_span.lo(), end_span.hi())
                         };
                         let (children, content) =
                             if namespace == Namespace::HTML && &tag_name == "template" {
                                 (
-                                    vec![],
+                                    Vec::new(),
                                     Some(DocumentFragment {
                                         span,
                                         children: new_children,
@@ -504,7 +499,7 @@ where
             }
             Data::Text { data, raw } => {
                 let span = if let Some(end_span) = node.end_span.take() {
-                    Span::new(start_span.lo(), end_span.hi(), Default::default())
+                    Span::new(start_span.lo(), end_span.hi())
                 } else {
                     start_span
                 };
@@ -550,7 +545,7 @@ where
                     let last_pos = self.input.last_pos()?;
 
                     TokenAndInfo {
-                        span: Span::new(start_pos, last_pos, Default::default()),
+                        span: Span::new(start_pos, last_pos),
                         acknowledged: false,
                         token: Token::Eof,
                     }
@@ -1125,7 +1120,7 @@ where
                             tag_name: $tag_name.to_owned(),
                             raw_tag_name: None,
                             is_self_closing: false,
-                            attributes: vec![],
+                            attributes: Vec::new(),
                         },
                     };
                     self.process_token(&mut end_token_and_info, None)?;
@@ -7490,7 +7485,7 @@ where
             };
             let new_element = self.create_element_for_token(
                 formatting_element.2.token.clone(),
-                Span::new(start_span, token_and_info.span.hi(), Default::default()),
+                Span::new(start_span, token_and_info.span.hi()),
                 Some(Namespace::HTML),
                 None,
             );
@@ -7669,7 +7664,7 @@ where
             Data::Element {
                 tag_name: "html".into(),
                 namespace: Namespace::HTML,
-                attributes: RefCell::new(vec![]),
+                attributes: RefCell::new(Vec::new()),
                 is_self_closing: false,
             },
             DUMMY_SP,
@@ -7687,7 +7682,7 @@ where
                 tag_name: tag_name.into(),
                 raw_tag_name: None,
                 is_self_closing: false,
-                attributes: vec![],
+                attributes: Vec::new(),
             },
         }
     }
@@ -8225,7 +8220,7 @@ where
             }
             // 2.4
             // Fragment case
-            else if last_table.is_none() && self.open_elements_stack.items.first().is_some() {
+            else if last_table.is_none() && !self.open_elements_stack.items.is_empty() {
                 let first = if let Some(first) = self.open_elements_stack.items.first() {
                     first.clone()
                 } else {

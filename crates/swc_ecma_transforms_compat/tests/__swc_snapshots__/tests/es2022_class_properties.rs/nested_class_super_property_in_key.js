@@ -16,10 +16,10 @@ var Hello = /*#__PURE__*/ function() {
 var Outer = /*#__PURE__*/ function(Hello) {
     "use strict";
     _inherits(Outer, Hello);
-    var _super = _create_super(Outer);
     function Outer() {
         _class_call_check(this, Outer);
-        var _this = _super.call(this);
+        var _this;
+        _this = _call_super(this, Outer);
         var _super_toString = _get((_assert_this_initialized(_this), _get_prototype_of(Outer.prototype)), "toString", _this).call(_this);
         var Inner = function Inner() {
             _class_call_check(this, Inner);

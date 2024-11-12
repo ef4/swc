@@ -1,5 +1,7 @@
 #!/bin/sh
 
+cd ./packages/core/
+
 # Naive substitution to napi artifacts for the cli binary.
 for filename in artifacts_cli/*
 do

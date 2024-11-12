@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use swc_common::{chain, comments::SingleThreadedComments, Mark};
+use swc_common::Mark;
+use swc_ecma_ast::Pass;
 use swc_ecma_parser::Syntax;
 use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_compat::{
@@ -10,17 +11,16 @@ use swc_ecma_transforms_compat::{
     es2017::async_to_generator,
 };
 use swc_ecma_transforms_testing::{test, test_exec, test_fixture};
-use swc_ecma_visit::Fold;
 
 fn syntax() -> Syntax {
     Default::default()
 }
 
-fn tr(c: Config) -> impl Fold {
+fn tr(c: Config) -> impl Pass {
     let unresolved_mark = Mark::new();
     let top_level_mark = Mark::new();
 
-    chain!(
+    (
         resolver(unresolved_mark, top_level_mark, false),
         parameters(c, unresolved_mark),
         destructuring(destructuring::Config { loose: false }),
@@ -138,10 +138,7 @@ foo(1, 2, 3);"#
 
 test!(
     syntax(),
-    |t| chain!(
-        classes(Some(t.comments.clone()), Default::default()),
-        tr(Default::default())
-    ),
+    |_| (classes(Default::default()), tr(Default::default())),
     default_iife_4253,
     r#"class Ref {
   constructor(id = ++Ref.nextID) {
@@ -170,10 +167,7 @@ expect(new Ref().id).toBe(2);"#
 
 test!(
     syntax(),
-    |t| chain!(
-        classes(Some(t.comments.clone()), Default::default()),
-        tr(Default::default())
-    ),
+    |_| (classes(Default::default()), tr(Default::default())),
     default_iife_self,
     r#"class Ref {
   constructor(ref = Ref) {
@@ -482,7 +476,7 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             arrow(unresolved_mark),
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
@@ -728,9 +722,9 @@ function d(thing, ...args) {
 
 test!(
     syntax(),
-    |t| chain!(
+    |_| (
         tr(Default::default()),
-        classes(Some(t.comments.clone()), Default::default()),
+        classes(Default::default()),
         spread(Default::default())
     ),
     rest_nested_iife,
@@ -789,190 +783,6 @@ function foo(...args){
 }"#
 );
 
-//// regression_6057_expanded
-//test!(
-//    syntax(),
-//    |_| tr(r#"{
-//  "presets": ["env"],
-//  "plugins": ["proposal-class-properties"]
-//}
-//"#),
-//    regression_6057_expanded,
-//    r#"
-//import args from 'utils/url/args';
-//
-//export default class App extends Component {
-//  exportType = ''
-//
-//  componentDidMount() {
-//    this.exportType = args.get('type', window.location.href);
-//  }
-//}
-//
-//"#
-//    r#"
-//"use strict";
-//
-//Object.defineProperty(exports, "__esModule" {
-//  value: true
-//});
-//exports["default"] = void 0;
-//
-//var _args = _interop_require_default(require("utils/url/args"));
-//
-//function _interop_require_default(obj) { return obj && obj.__esModule ? obj :
-// { "default": obj }; }
-//
-//function _typeof(obj) { if (typeof Symbol === "function" && typeof
-// Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return
-// typeof obj; }; } else { _typeof = function _typeof(obj) { return obj &&
-// typeof Symbol === "function" && obj.constructor === Symbol && obj !==
-// Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
-//
-//function _class_call_check(instance, Constructor) { if (!(instance instanceof
-// Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-//
-//function _defineProperties(target, props) { for (var i = 0; i < props.length;
-// i++) { var descriptor = props[i]; descriptor.enumerable =
-// descriptor.enumerable || false; descriptor.configurable = true; if ("value"
-// in descriptor) descriptor.writable = true; Object.defineProperty(target,
-// descriptor.key, descriptor); } }
-//
-//function _create_class(Constructor, protoProps, staticProps) { if
-// (protoProps) _defineProperties(Constructor.prototype, protoProps); if
-// (staticProps) _defineProperties(Constructor, staticProps); return
-// Constructor; }
-//
-//function _possible_constructor_return(self, call) { if (call &&
-// (_typeof(call) === "object" || typeof call === "function")) { return call; }
-// return _assert_this_initialized(self); }
-//
-//function _get_prototype_of(o) { _get_prototype_of = Object.setPrototypeOf ?
-// Object.getPrototypeOf : function _get_prototype_of(o) { return o.__proto__ ||
-// Object.getPrototypeOf(o); }; return _get_prototype_of(o); }
-//
-//function _assert_this_initialized(self) { if (self === void 0) { throw new
-// ReferenceError("this hasn't been initialised - super() hasn't been called");
-// } return self; }
-//
-//function _inherits(subClass, superClass) { if (typeof superClass !==
-// "function" && superClass !== null) { throw new TypeError("Super expression
-// must either be null or a function"); } subClass.prototype =
-// Object.create(superClass && superClass.prototype, { constructor: { value:
-// subClass, writable: true, configurable: true } }); if (superClass)
-// _set_prototype_of(subClass, superClass); }
-//
-//function _set_prototype_of(o, p) { _set_prototype_of = Object.setPrototypeOf
-// || function _set_prototype_of(o, p) { o.__proto__ = p; return o; }; return
-// _set_prototype_of(o, p); }
-//
-//function _define_property(obj, key, value) { if (key in obj) {
-// Object.defineProperty(obj, key, { value: value, enumerable: true,
-// configurable: true, writable: true }); } else { obj[key] = value; } return
-// obj; }
-//
-//var App =
-// /*#__PURE__*/
-//function (_Component) {
-//  _inherits(App, _Component);
-//
-//  function App() {
-//    var _get_prototype_of2;
-//
-//    var _this;
-//
-//    _class_call_check(this, App);
-//
-//    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key <
-// _len; _key++) {      args[_key] = arguments[_key];
-//    }
-//
-//    _this = _possible_constructor_return(this, (_get_prototype_of2 =
-// _get_prototype_of(App)).call.apply(_get_prototype_of2, [this].concat(args)));
-//
-//    _define_property(_assert_this_initialized(_this), "exportType" '');
-//
-//    return _this;
-//  }
-//
-//  _create_class(App, [{
-//    key: "componentDidMount"
-//    value: function componentDidMount() {
-//      this.exportType = _args["default"].get('type', window.location.href);
-//    }
-//  }]);
-//
-//  return App;
-//}(Component);
-//
-//exports["default"] = App;
-//
-//"#
-//);
-
-//// parameters_iife_this_9385
-//test!(
-//    syntax(),
-//    |_| tr(r#"{
-//  "plugins": ["transform-typescript"],
-//  "presets": ["env"]
-//}
-//"#),
-//    parameters_iife_this_9385,
-//    r#"
-//export class Test {
-//  invite(options: { privacy: string } = {}) {
-//    const privacy = options.privacy || "Private"
-//    console.log(this)
-//  }
-//}
-//"#
-//    r#"
-//"use strict";
-//
-//Object.defineProperty(exports, "__esModule" {
-//  value: true
-//});
-//exports.Test = void 0;
-//
-//function _class_call_check(instance, Constructor) { if (!(instance instanceof
-// Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-//
-//function _defineProperties(target, props) { for (var i = 0; i < props.length;
-// i++) { var descriptor = props[i]; descriptor.enumerable =
-// descriptor.enumerable || false; descriptor.configurable = true; if ("value"
-// in descriptor) descriptor.writable = true; Object.defineProperty(target,
-// descriptor.key, descriptor); } }
-//
-//function _create_class(Constructor, protoProps, staticProps) { if
-// (protoProps) _defineProperties(Constructor.prototype, protoProps); if
-// (staticProps) _defineProperties(Constructor, staticProps); return
-// Constructor; }
-//
-//var Test =
-// /*#__PURE__*/
-//function () {
-//  function Test() {
-//    _class_call_check(this, Test);
-//  }
-//
-//  _create_class(Test, [{
-//    key: "invite"
-//    value: function invite() {
-//      var options = arguments.length > 0 && arguments[0] !== undefined ?
-// arguments[0] : {};      var privacy = options.privacy || "Private";
-//      console.log(this);
-//    }
-//  }]);
-//
-//  return Test;
-//}();
-//
-//exports.Test = Test;
-//
-//"#
-//);
-
 // parameters_rest_async_arrow_functions
 test!(
     // See https://github.com/swc-project/swc/issues/490
@@ -981,9 +791,9 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            async_to_generator::<SingleThreadedComments>(Default::default(), None, unresolved_mark),
+            async_to_generator(Default::default(), unresolved_mark),
             arrow(unresolved_mark),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1005,9 +815,9 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            async_to_generator::<SingleThreadedComments>(Default::default(), None, unresolved_mark),
+            async_to_generator(Default::default(), unresolved_mark),
             arrow(unresolved_mark),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1028,7 +838,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1050,10 +860,10 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
-            block_scoping(unresolved_mark)
+            block_scoping(unresolved_mark),
         )
     },
     parameters_regression_4333,
@@ -1071,10 +881,10 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
-            destructuring(Default::default())
+            destructuring(Default::default()),
         )
     },
     issue_760,
@@ -1088,7 +898,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1106,7 +916,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1124,7 +934,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1142,7 +952,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1160,7 +970,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1208,7 +1018,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1228,7 +1038,7 @@ test!(
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             parameters(Default::default(), unresolved_mark),
         )
@@ -1476,9 +1286,9 @@ fn fixture(input: PathBuf) {
         Default::default(),
         &|_| {
             let unresolved_mark = Mark::new();
-            chain!(
+            (
                 resolver(unresolved_mark, Mark::new(), false),
-                parameters(Default::default(), unresolved_mark)
+                parameters(Default::default(), unresolved_mark),
             )
         },
         &input,

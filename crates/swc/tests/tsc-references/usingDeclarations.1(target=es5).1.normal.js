@@ -1,143 +1,62 @@
 //// [usingDeclarations.1.ts]
+import { _ as _assert_this_initialized } from "@swc/helpers/_/_assert_this_initialized";
 import { _ as _async_to_generator } from "@swc/helpers/_/_async_to_generator";
 import { _ as _await_async_generator } from "@swc/helpers/_/_await_async_generator";
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _create_class } from "@swc/helpers/_/_create_class";
 import { _ as _define_property } from "@swc/helpers/_/_define_property";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _possible_constructor_return } from "@swc/helpers/_/_possible_constructor_return";
 import { _ as _wrap_async_generator } from "@swc/helpers/_/_wrap_async_generator";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 import { _ as _ts_generator } from "@swc/helpers/_/_ts_generator";
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
-function f() {
-    try {
-        var _stack = [];
-        var d2 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-    } catch (_) {
-        var _error = _;
-        var _hasError = true;
-    } finally{
-        _dispose(_stack, _error, _hasError);
-    }
-}
-function af() {
-    return _af.apply(this, arguments);
-}
-function _af() {
-    _af = _async_to_generator(function() {
-        var _stack, d3, _, _error, _hasError;
-        return _ts_generator(this, function(_state) {
-            switch(_state.label){
-                case 0:
-                    _state.trys.push([
-                        0,
-                        2,
-                        3,
-                        4
-                    ]);
-                    _stack = [];
-                    d3 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                    return [
-                        4,
-                        null
-                    ];
-                case 1:
-                    _state.sent();
-                    return [
-                        3,
-                        4
-                    ];
-                case 2:
-                    _ = _state.sent();
-                    _error = _;
-                    _hasError = true;
-                    return [
-                        3,
-                        4
-                    ];
-                case 3:
-                    _dispose(_stack, _error, _hasError);
-                    return [
-                        7
-                    ];
-                case 4:
-                    return [
-                        2
-                    ];
-            }
-        });
-    });
-    return _af.apply(this, arguments);
-}
-function g() {
-    var _stack, d4, _, _error, _hasError;
-    return _ts_generator(this, function(_state) {
-        switch(_state.label){
-            case 0:
-                _state.trys.push([
-                    0,
-                    2,
-                    3,
-                    4
-                ]);
-                _stack = [];
-                d4 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                return [
-                    4
-                ];
-            case 1:
-                _state.sent();
-                return [
-                    3,
-                    4
-                ];
-            case 2:
-                _ = _state.sent();
-                _error = _;
-                _hasError = true;
-                return [
-                    3,
-                    4
-                ];
-            case 3:
-                _dispose(_stack, _error, _hasError);
-                return [
-                    7
-                ];
-            case 4:
-                return [
-                    2
-                ];
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
+var env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
+try {
+    var f = function f() {
+        var env = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
+        try {
+            var d2 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env.error = e;
+            env.hasError = true;
+        } finally{
+            _ts_dispose_resources(env);
         }
-    });
-}
-function ag() {
-    return _ag.apply(this, arguments);
-}
-function _ag() {
-    _ag = _wrap_async_generator(function() {
-        var _stack, d5, _, _error, _hasError;
+    };
+    var af = function af() {
+        return _af.apply(this, arguments);
+    };
+    var g = function g() {
+        var env, d4, e;
         return _ts_generator(this, function(_state) {
             switch(_state.label){
                 case 0:
+                    env = {
+                        stack: [],
+                        error: void 0,
+                        hasError: false
+                    };
+                    _state.label = 1;
+                case 1:
                     _state.trys.push([
-                        0,
+                        1,
                         3,
                         4,
                         5
                     ]);
-                    _stack = [];
-                    d5 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
+                    d4 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
                     return [
                         4
-                    ];
-                case 1:
-                    _state.sent();
-                    return [
-                        4,
-                        _await_async_generator(null)
                     ];
                 case 2:
                     _state.sent();
@@ -146,15 +65,15 @@ function _ag() {
                         5
                     ];
                 case 3:
-                    _ = _state.sent();
-                    _error = _;
-                    _hasError = true;
+                    e = _state.sent();
+                    env.error = e;
+                    env.hasError = true;
                     return [
                         3,
                         5
                     ];
                 case 4:
-                    _dispose(_stack, _error, _hasError);
+                    _ts_dispose_resources(env);
                     return [
                         7
                     ];
@@ -164,21 +83,135 @@ function _ag() {
                     ];
             }
         });
-    });
-    return _ag.apply(this, arguments);
-}
-try {
-    var _stack = [];
-    var d1 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
+    };
+    var ag = function ag() {
+        return _ag.apply(this, arguments);
+    };
+    var d1 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+    ;
+    function _af() {
+        _af = _async_to_generator(function() {
+            var env, d3, e;
+            return _ts_generator(this, function(_state) {
+                switch(_state.label){
+                    case 0:
+                        env = {
+                            stack: [],
+                            error: void 0,
+                            hasError: false
+                        };
+                        _state.label = 1;
+                    case 1:
+                        _state.trys.push([
+                            1,
+                            3,
+                            4,
+                            5
+                        ]);
+                        d3 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                        return [
+                            4,
+                            null
+                        ];
+                    case 2:
+                        _state.sent();
+                        return [
+                            3,
+                            5
+                        ];
+                    case 3:
+                        e = _state.sent();
+                        env.error = e;
+                        env.hasError = true;
+                        return [
+                            3,
+                            5
+                        ];
+                    case 4:
+                        _ts_dispose_resources(env);
+                        return [
+                            7
+                        ];
+                    case 5:
+                        return [
+                            2
+                        ];
+                }
+            });
+        });
+        return _af.apply(this, arguments);
+    }
+    function _ag() {
+        _ag = _wrap_async_generator(function() {
+            var env, d5, e;
+            return _ts_generator(this, function(_state) {
+                switch(_state.label){
+                    case 0:
+                        env = {
+                            stack: [],
+                            error: void 0,
+                            hasError: false
+                        };
+                        _state.label = 1;
+                    case 1:
+                        _state.trys.push([
+                            1,
+                            4,
+                            5,
+                            6
+                        ]);
+                        d5 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                        return [
+                            4
+                        ];
+                    case 2:
+                        _state.sent();
+                        return [
+                            4,
+                            _await_async_generator(null)
+                        ];
+                    case 3:
+                        _state.sent();
+                        return [
+                            3,
+                            6
+                        ];
+                    case 4:
+                        e = _state.sent();
+                        env.error = e;
+                        env.hasError = true;
+                        return [
+                            3,
+                            6
+                        ];
+                    case 5:
+                        _ts_dispose_resources(env);
+                        return [
+                            7
+                        ];
+                    case 6:
+                        return [
+                            2
+                        ];
+                }
+            });
+        });
+        return _ag.apply(this, arguments);
+    }
     var a = function() {
+        var env = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack = [];
-            var d6 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error = _;
-            var _hasError = true;
+            var d6 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env.error = e;
+            env.hasError = true;
         } finally{
-            _dispose(_stack, _error, _hasError);
+            _ts_dispose_resources(env);
         }
     };
     var C1 = /*#__PURE__*/ function() {
@@ -186,148 +219,77 @@ try {
         function C1() {
             _class_call_check(this, C1);
             this.a = function() {
+                var env = {
+                    stack: [],
+                    error: void 0,
+                    hasError: false
+                };
                 try {
-                    var _stack = [];
-                    var d7 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                } catch (_) {
-                    var _error = _;
-                    var _hasError = true;
+                    var d7 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                    ;
+                } catch (e) {
+                    env.error = e;
+                    env.hasError = true;
                 } finally{
-                    _dispose(_stack, _error, _hasError);
+                    _ts_dispose_resources(env);
                 }
             };
+            var env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var d8 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+                var d8 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack, _error, _hasError);
+                _ts_dispose_resources(env);
             }
         }
         var _proto = C1.prototype;
         _proto.m = function m() {
+            var env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var d10 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+                var d10 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack, _error, _hasError);
+                _ts_dispose_resources(env);
             }
         };
         _proto.am = function am() {
             return _async_to_generator(function() {
-                var _stack, d13, _, _error, _hasError;
+                var env, d13, e;
                 return _ts_generator(this, function(_state) {
                     switch(_state.label){
                         case 0:
+                            env = {
+                                stack: [],
+                                error: void 0,
+                                hasError: false
+                            };
+                            _state.label = 1;
+                        case 1:
                             _state.trys.push([
-                                0,
-                                2,
+                                1,
                                 3,
-                                4
+                                4,
+                                5
                             ]);
-                            _stack = [];
-                            d13 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
+                            d13 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
                             return [
                                 4,
                                 null
                             ];
-                        case 1:
-                            _state.sent();
-                            return [
-                                3,
-                                4
-                            ];
-                        case 2:
-                            _ = _state.sent();
-                            _error = _;
-                            _hasError = true;
-                            return [
-                                3,
-                                4
-                            ];
-                        case 3:
-                            _dispose(_stack, _error, _hasError);
-                            return [
-                                7
-                            ];
-                        case 4:
-                            return [
-                                2
-                            ];
-                    }
-                });
-            })();
-        };
-        _proto.g = function g() {
-            var _stack, d14, _, _error, _hasError;
-            return _ts_generator(this, function(_state) {
-                switch(_state.label){
-                    case 0:
-                        _state.trys.push([
-                            0,
-                            2,
-                            3,
-                            4
-                        ]);
-                        _stack = [];
-                        d14 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                        return [
-                            4
-                        ];
-                    case 1:
-                        _state.sent();
-                        return [
-                            3,
-                            4
-                        ];
-                    case 2:
-                        _ = _state.sent();
-                        _error = _;
-                        _hasError = true;
-                        return [
-                            3,
-                            4
-                        ];
-                    case 3:
-                        _dispose(_stack, _error, _hasError);
-                        return [
-                            7
-                        ];
-                    case 4:
-                        return [
-                            2
-                        ];
-                }
-            });
-        };
-        _proto.ag = function ag() {
-            return _wrap_async_generator(function() {
-                var _stack, d15, _, _error, _hasError;
-                return _ts_generator(this, function(_state) {
-                    switch(_state.label){
-                        case 0:
-                            _state.trys.push([
-                                0,
-                                3,
-                                4,
-                                5
-                            ]);
-                            _stack = [];
-                            d15 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                            return [
-                                4
-                            ];
-                        case 1:
-                            _state.sent();
-                            return [
-                                4,
-                                _await_async_generator(null)
-                            ];
                         case 2:
                             _state.sent();
                             return [
@@ -335,15 +297,15 @@ try {
                                 5
                             ];
                         case 3:
-                            _ = _state.sent();
-                            _error = _;
-                            _hasError = true;
+                            e = _state.sent();
+                            env.error = e;
+                            env.hasError = true;
                             return [
                                 3,
                                 5
                             ];
                         case 4:
-                            _dispose(_stack, _error, _hasError);
+                            _ts_dispose_resources(env);
                             return [
                                 7
                             ];
@@ -355,30 +317,144 @@ try {
                 });
             })();
         };
+        _proto.g = function g() {
+            var env, d14, e;
+            return _ts_generator(this, function(_state) {
+                switch(_state.label){
+                    case 0:
+                        env = {
+                            stack: [],
+                            error: void 0,
+                            hasError: false
+                        };
+                        _state.label = 1;
+                    case 1:
+                        _state.trys.push([
+                            1,
+                            3,
+                            4,
+                            5
+                        ]);
+                        d14 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                        return [
+                            4
+                        ];
+                    case 2:
+                        _state.sent();
+                        return [
+                            3,
+                            5
+                        ];
+                    case 3:
+                        e = _state.sent();
+                        env.error = e;
+                        env.hasError = true;
+                        return [
+                            3,
+                            5
+                        ];
+                    case 4:
+                        _ts_dispose_resources(env);
+                        return [
+                            7
+                        ];
+                    case 5:
+                        return [
+                            2
+                        ];
+                }
+            });
+        };
+        _proto.ag = function ag() {
+            return _wrap_async_generator(function() {
+                var env, d15, e;
+                return _ts_generator(this, function(_state) {
+                    switch(_state.label){
+                        case 0:
+                            env = {
+                                stack: [],
+                                error: void 0,
+                                hasError: false
+                            };
+                            _state.label = 1;
+                        case 1:
+                            _state.trys.push([
+                                1,
+                                4,
+                                5,
+                                6
+                            ]);
+                            d15 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                            return [
+                                4
+                            ];
+                        case 2:
+                            _state.sent();
+                            return [
+                                4,
+                                _await_async_generator(null)
+                            ];
+                        case 3:
+                            _state.sent();
+                            return [
+                                3,
+                                6
+                            ];
+                        case 4:
+                            e = _state.sent();
+                            env.error = e;
+                            env.hasError = true;
+                            return [
+                                3,
+                                6
+                            ];
+                        case 5:
+                            _ts_dispose_resources(env);
+                            return [
+                                7
+                            ];
+                        case 6:
+                            return [
+                                2
+                            ];
+                    }
+                });
+            })();
+        };
         _create_class(C1, [
             {
                 key: "x",
                 get: function get() {
+                    var env = {
+                        stack: [],
+                        error: void 0,
+                        hasError: false
+                    };
                     try {
-                        var _stack = [];
-                        var d11 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
+                        var d11 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                        ;
                         return 0;
-                    } catch (_) {
-                        var _error = _;
-                        var _hasError = true;
+                    } catch (e) {
+                        env.error = e;
+                        env.hasError = true;
                     } finally{
-                        _dispose(_stack, _error, _hasError);
+                        _ts_dispose_resources(env);
                     }
                 },
                 set: function set(v) {
+                    var env = {
+                        stack: [],
+                        error: void 0,
+                        hasError: false
+                    };
                     try {
-                        var _stack = [];
-                        var d12 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                    } catch (_) {
-                        var _error = _;
-                        var _hasError = true;
+                        var d12 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                        ;
+                    } catch (e) {
+                        env.error = e;
+                        env.hasError = true;
                     } finally{
-                        _dispose(_stack, _error, _hasError);
+                        _ts_dispose_resources(env);
                     }
                 }
             }
@@ -386,234 +462,321 @@ try {
         return C1;
     }();
     (function() {
+        var env = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack = [];
-            var d9 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error = _;
-            var _hasError = true;
+            var d9 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env.error = e;
+            env.hasError = true;
         } finally{
-            _dispose(_stack, _error, _hasError);
+            _ts_dispose_resources(env);
         }
     })();
     var C2 = /*#__PURE__*/ function(C1) {
         "use strict";
         _inherits(C2, C1);
-        var _super = _create_super(C2);
         function C2() {
             _class_call_check(this, C2);
             var _this;
+            var env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var d16 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                _this = _super.call(this);
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+                var d16 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
+                _this = _call_super(this, C2);
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack, _error, _hasError);
+                _ts_dispose_resources(env);
             }
-            return _possible_constructor_return(_this);
+            return _assert_this_initialized(_this);
         }
         return C2;
     }(C1);
     var C3 = /*#__PURE__*/ function(C1) {
         "use strict";
         _inherits(C3, C1);
-        var _super = _create_super(C3);
         function C3() {
             _class_call_check(this, C3);
             var _this;
+            var env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var d17 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-                _this = _super.call(this);
-                _this.y = 1;
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+                var d17 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
+                _this = _call_super(this, C3), _this.y = 1;
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack, _error, _hasError);
+                _ts_dispose_resources(env);
             }
-            return _possible_constructor_return(_this);
+            return _assert_this_initialized(_this);
         }
         return C3;
     }(C1);
-    var N;
     (function(N) {
+        var env = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack = [];
-            var d18 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error = _;
-            var _hasError = true;
+            var d18 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env.error = e;
+            env.hasError = true;
         } finally{
-            _dispose(_stack, _error, _hasError);
+            _ts_dispose_resources(env);
         }
     })(N || (N = {}));
     {
+        var env1 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack1 = [];
-            var d19 = _using(_stack1, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error = _;
-            var _hasError = true;
+            var d19 = _ts_add_disposable_resource(env1, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env1.error = e;
+            env1.hasError = true;
         } finally{
-            _dispose(_stack1, _error, _hasError);
+            _ts_dispose_resources(env1);
         }
     }
     switch(Math.random()){
         case 0:
+            var env2 = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack2 = [];
-                var d20 = _using(_stack2, _define_property({}, Symbol.dispose, function() {}));
+                var d20 = _ts_add_disposable_resource(env2, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
                 break;
-            } catch (_) {
-                var _error1 = _;
-                var _hasError1 = true;
+            } catch (e) {
+                env2.error = e;
+                env2.hasError = true;
             } finally{
-                _dispose(_stack2, _error1, _hasError1);
+                _ts_dispose_resources(env2);
             }
         case 1:
+            var env3 = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack3 = [];
-                var d21 = _using(_stack3, _define_property({}, Symbol.dispose, function() {}));
+                var d21 = _ts_add_disposable_resource(env3, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
                 break;
-            } catch (_) {
-                var _error2 = _;
-                var _hasError2 = true;
+            } catch (e) {
+                env3.error = e;
+                env3.hasError = true;
             } finally{
-                _dispose(_stack3, _error2, _hasError2);
+                _ts_dispose_resources(env3);
             }
     }
     if (true) switch(0){
         case 0:
+            var env4 = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack4 = [];
-                var d22 = _using(_stack4, _define_property({}, Symbol.dispose, function() {}));
+                var d22 = _ts_add_disposable_resource(env4, _define_property({}, Symbol.dispose, function() {}), false);
+                ;
                 break;
-            } catch (_) {
-                var _error3 = _;
-                var _hasError3 = true;
+            } catch (e) {
+                env4.error = e;
+                env4.hasError = true;
             } finally{
-                _dispose(_stack4, _error3, _hasError3);
+                _ts_dispose_resources(env4);
             }
     }
     try {
+        var env5 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack5 = [];
-            var d23 = _using(_stack5, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error4 = _;
-            var _hasError4 = true;
+            var d23 = _ts_add_disposable_resource(env5, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env5.error = e;
+            env5.hasError = true;
         } finally{
-            _dispose(_stack5, _error4, _hasError4);
+            _ts_dispose_resources(env5);
         }
     } catch (e) {
+        var env6 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack6 = [];
-            var d24 = _using(_stack6, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error5 = _;
-            var _hasError5 = true;
+            var d24 = _ts_add_disposable_resource(env6, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env6.error = e;
+            env6.hasError = true;
         } finally{
-            _dispose(_stack6, _error5, _hasError5);
+            _ts_dispose_resources(env6);
         }
     } finally{
+        var env7 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack7 = [];
-            var d25 = _using(_stack7, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error6 = _;
-            var _hasError6 = true;
+            var d25 = _ts_add_disposable_resource(env7, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env7.error = e;
+            env7.hasError = true;
         } finally{
-            _dispose(_stack7, _error6, _hasError6);
+            _ts_dispose_resources(env7);
         }
     }
     if (true) {
+        var env8 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack8 = [];
-            var d26 = _using(_stack8, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error7 = _;
-            var _hasError7 = true;
+            var d26 = _ts_add_disposable_resource(env8, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env8.error = e;
+            env8.hasError = true;
         } finally{
-            _dispose(_stack8, _error7, _hasError7);
+            _ts_dispose_resources(env8);
         }
     } else {
+        var env9 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack9 = [];
-            var d27 = _using(_stack9, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error8 = _;
-            var _hasError8 = true;
+            var d27 = _ts_add_disposable_resource(env9, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env9.error = e;
+            env9.hasError = true;
         } finally{
-            _dispose(_stack9, _error8, _hasError8);
+            _ts_dispose_resources(env9);
         }
     }
     while(true){
+        var env10 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack10 = [];
-            var d28 = _using(_stack10, _define_property({}, Symbol.dispose, function() {}));
+            var d28 = _ts_add_disposable_resource(env10, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
             break;
-        } catch (_) {
-            var _error9 = _;
-            var _hasError9 = true;
+        } catch (e) {
+            env10.error = e;
+            env10.hasError = true;
         } finally{
-            _dispose(_stack10, _error9, _hasError9);
+            _ts_dispose_resources(env10);
         }
     }
     do {
+        var env11 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack11 = [];
-            var d29 = _using(_stack11, _define_property({}, Symbol.dispose, function() {}));
+            var d29 = _ts_add_disposable_resource(env11, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
             break;
-        } catch (_) {
-            var _error10 = _;
-            var _hasError10 = true;
+        } catch (e) {
+            env11.error = e;
+            env11.hasError = true;
         } finally{
-            _dispose(_stack11, _error10, _hasError10);
+            _ts_dispose_resources(env11);
         }
     }while (true);
     for(;;){
+        var env12 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack12 = [];
-            var d30 = _using(_stack12, _define_property({}, Symbol.dispose, function() {}));
+            var d30 = _ts_add_disposable_resource(env12, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
             break;
-        } catch (_) {
-            var _error11 = _;
-            var _hasError11 = true;
+        } catch (e) {
+            env12.error = e;
+            env12.hasError = true;
         } finally{
-            _dispose(_stack12, _error11, _hasError11);
+            _ts_dispose_resources(env12);
         }
     }
     for(var x in {}){
+        var env13 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack13 = [];
-            var d31 = _using(_stack13, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error12 = _;
-            var _hasError12 = true;
+            var d31 = _ts_add_disposable_resource(env13, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env13.error = e;
+            env13.hasError = true;
         } finally{
-            _dispose(_stack13, _error12, _hasError12);
+            _ts_dispose_resources(env13);
         }
     }
     for(var _i = 0, _iter = []; _i < _iter.length; _i++){
         var x1 = _iter[_i];
+        var env14 = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack14 = [];
-            var d32 = _using(_stack14, _define_property({}, Symbol.dispose, function() {}));
-        } catch (_) {
-            var _error13 = _;
-            var _hasError13 = true;
+            var d32 = _ts_add_disposable_resource(env14, _define_property({}, Symbol.dispose, function() {}), false);
+            ;
+        } catch (e) {
+            env14.error = e;
+            env14.hasError = true;
         } finally{
-            _dispose(_stack14, _error13, _hasError13);
+            _ts_dispose_resources(env14);
         }
     }
-} catch (_) {
-    var _error14 = _;
-    var _hasError14 = true;
+    var N;
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    _dispose(_stack, _error14, _hasError14);
+    _ts_dispose_resources(env);
 }
 export { };

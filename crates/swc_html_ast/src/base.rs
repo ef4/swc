@@ -1,6 +1,6 @@
 use is_macro::Is;
 use string_enum::StringEnum;
-use swc_atoms::{Atom, JsWord};
+use swc_atoms::Atom;
 use swc_common::{ast_node, EqIgnoreSpan, Span};
 
 #[ast_node("Document")]
@@ -23,13 +23,10 @@ pub struct DocumentFragment {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
 pub enum DocumentMode {
     /// `no-quirks`
@@ -58,11 +55,11 @@ pub enum Child {
 pub struct DocumentType {
     pub span: Span,
 
-    pub name: Option<JsWord>,
+    pub name: Option<Atom>,
 
-    pub public_id: Option<JsWord>,
+    pub public_id: Option<Atom>,
 
-    pub system_id: Option<JsWord>,
+    pub system_id: Option<Atom>,
     pub raw: Option<Atom>,
 }
 
@@ -79,13 +76,10 @@ impl EqIgnoreSpan for DocumentType {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
 pub enum Namespace {
     /// `http://www.w3.org/1999/xhtml`
@@ -107,7 +101,7 @@ pub enum Namespace {
 pub struct Element {
     pub span: Span,
 
-    pub tag_name: JsWord,
+    pub tag_name: Atom,
     pub namespace: Namespace,
     pub attributes: Vec<Attribute>,
     pub children: Vec<Child>,
@@ -122,12 +116,12 @@ pub struct Attribute {
     pub span: Span,
     pub namespace: Option<Namespace>,
 
-    pub prefix: Option<JsWord>,
+    pub prefix: Option<Atom>,
 
-    pub name: JsWord,
+    pub name: Atom,
     pub raw_name: Option<Atom>,
 
-    pub value: Option<JsWord>,
+    pub value: Option<Atom>,
     pub raw_value: Option<Atom>,
 }
 
@@ -145,7 +139,7 @@ impl EqIgnoreSpan for Attribute {
 pub struct Text {
     pub span: Span,
 
-    pub data: JsWord,
+    pub data: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -160,7 +154,7 @@ impl EqIgnoreSpan for Text {
 pub struct Comment {
     pub span: Span,
 
-    pub data: JsWord,
+    pub data: Atom,
     pub raw: Option<Atom>,
 }
 

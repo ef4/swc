@@ -1,8 +1,7 @@
 //// [moduleWithStatementsOfEveryKind.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
-var A;
 (function(A) {
     var A1 = function A() {
         "use strict";
@@ -15,50 +14,47 @@ var A;
     var B = /*#__PURE__*/ function(AA) {
         "use strict";
         _inherits(B, AA);
-        var _super = _create_super(B);
         function B() {
             _class_call_check(this, B);
-            return _super.apply(this, arguments);
+            return _call_super(this, B, arguments);
         }
         return B;
     }(AA);
     var BB = /*#__PURE__*/ function(A) {
         "use strict";
         _inherits(BB, A);
-        var _super = _create_super(BB);
         function BB() {
             _class_call_check(this, BB);
-            return _super.apply(this, arguments);
+            return _call_super(this, BB, arguments);
         }
         return BB;
     }(A1);
-    var Module;
     (function(Module) {
         var A = function A() {
             "use strict";
             _class_call_check(this, A);
         };
     })(Module || (Module = {}));
-    var Color;
-    (function(Color) {
+    var Color = /*#__PURE__*/ function(Color) {
         Color[Color["Blue"] = 0] = "Blue";
         Color[Color["Red"] = 1] = "Red";
-    })(Color || (Color = {}));
+        return Color;
+    }({});
     var x = 12;
     function F(s) {
         return 2;
     }
     var array = null;
     var fn = function(s) {
-        return "hello " + s;
+        return 'hello ' + s;
     };
     var ol = {
-        s: "hello",
+        s: 'hello',
         id: 2,
         isvalid: true
     };
+    var Module;
 })(A || (A = {}));
-var Y;
 (function(Y) {
     var A = function A() {
         "use strict";
@@ -73,10 +69,9 @@ var Y;
     var B = /*#__PURE__*/ function(AA) {
         "use strict";
         _inherits(B, AA);
-        var _super = _create_super(B);
         function B() {
             _class_call_check(this, B);
-            return _super.apply(this, arguments);
+            return _call_super(this, B, arguments);
         }
         return B;
     }(AA);
@@ -84,26 +79,23 @@ var Y;
     var BB = /*#__PURE__*/ function(A) {
         "use strict";
         _inherits(BB, A);
-        var _super = _create_super(BB);
         function BB() {
             _class_call_check(this, BB);
-            return _super.apply(this, arguments);
+            return _call_super(this, BB, arguments);
         }
         return BB;
     }(A);
     Y.BB = BB;
-    var Module;
     (function(Module) {
         var A = function A() {
             "use strict";
             _class_call_check(this, A);
         };
-    })(Module = Y.Module || (Y.Module = {}));
-    var Color;
+    })(Y.Module || (Y.Module = {}));
     (function(Color) {
         Color[Color["Blue"] = 0] = "Blue";
         Color[Color["Red"] = 1] = "Red";
-    })(Color = Y.Color || (Y.Color = {}));
+    })(Y.Color || (Y.Color = {}));
     Y.x = 12;
     function F(s) {
         return 2;
@@ -111,11 +103,12 @@ var Y;
     Y.F = F;
     Y.array = null;
     Y.fn = function(s) {
-        return "hello " + s;
+        return 'hello ' + s;
     };
     Y.ol = {
-        s: "hello",
+        s: 'hello',
         id: 2,
         isvalid: true
     };
 })(Y || (Y = {}));
+var A, Y;

@@ -14,14 +14,16 @@ use regex::Regex;
 use serde::de::DeserializeOwned;
 use serde_json::from_str;
 use swc::{
-    config::{Config, JsMinifyOptions, JscConfig, ModuleConfig, Options, TransformConfig},
+    config::{
+        Config, JsMinifyOptions, JscConfig, JscExperimental, ModuleConfig, Options, TransformConfig,
+    },
     try_with_handler, Compiler,
 };
 use swc_common::{
     collections::AHashSet, errors::ColorConfig, FileName, SourceFile, SourceMap, GLOBALS,
 };
 use swc_ecma_ast::EsVersion;
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_ecma_parser::{Syntax, TsSyntax};
 use testing::NormalizedOutput;
 
 #[testing::fixture(
@@ -113,7 +115,7 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
 
     let mut sub_filename = filename;
 
-    let mut files = vec![];
+    let mut files = Vec::new();
 
     let mut buffer = String::default();
     for line in fm.src.lines() {
@@ -203,7 +205,10 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
             let mut source = String::default();
             mem::swap(&mut source, buffer);
 
-            Some(cm.new_source_file(swc_common::FileName::Custom(filename.to_string()), source))
+            Some(cm.new_source_file(
+                swc_common::FileName::Custom(filename.to_string()).into(),
+                source,
+            ))
         } else {
             None
         }
@@ -228,10 +233,8 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
                         EsVersion::Es2020,
                         EsVersion::Es2021,
                         EsVersion::Es2022,
+                        EsVersion::EsNext,
                     ]);
-                }
-                "esnext" => {
-                    versions.insert(EsVersion::latest());
                 }
                 "es6" | "es2015" => {
                     versions.insert(EsVersion::Es2015);
@@ -341,7 +344,7 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
     "#,
     );
 
-    let mut test_unit_data_list = vec![];
+    let mut test_unit_data_list = Vec::new();
 
     let is_jsx = input
         .extension()
@@ -354,7 +357,7 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
     for minify in [None, Some(default_minify)] {
         for target in targets.clone() {
             for module in modules.clone() {
-                let mut vary_name = vec![];
+                let mut vary_name = Vec::new();
 
                 if modules.len() > 1 {
                     vary_name.push(format!("module={}", &module));
@@ -383,7 +386,7 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
                 let opts = Options {
                     config: Config {
                         jsc: JscConfig {
-                            syntax: Some(Syntax::Typescript(TsConfig {
+                            syntax: Some(Syntax::Typescript(TsSyntax {
                                 tsx: is_jsx,
                                 decorators,
                                 dts: false,
@@ -400,6 +403,10 @@ fn matrix(input: &Path) -> Vec<TestUnitData> {
                                 ..Default::default()
                             })
                             .into(),
+                            experimental: JscExperimental {
+                                disable_all_lints: false.into(),
+                                ..Default::default()
+                            },
                             ..Default::default()
                         },
                         module: Some(module.into()),
@@ -431,7 +438,7 @@ fn compile(output: &Path, test_unit_data: TestUnitData) {
     let mut result = String::default();
 
     for file in test_unit_data.files {
-        let filename = match &file.name {
+        let filename = match &*file.name {
             FileName::Custom(filename) => filename,
             _ => unreachable!(),
         };

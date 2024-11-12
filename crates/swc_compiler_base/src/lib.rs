@@ -1,15 +1,15 @@
 use std::{
-    env, fmt,
+    env,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Error};
 use base64::prelude::{Engine, BASE64_STANDARD};
 use once_cell::sync::Lazy;
-use serde::{
-    de::{Unexpected, Visitor},
-    Deserialize, Deserializer, Serialize, Serializer,
-};
+use rustc_hash::FxHashMap;
+#[allow(unused)]
+use serde::{Deserialize, Serialize};
+use swc_allocator::maybe::vec::Vec;
 use swc_atoms::JsWord;
 use swc_common::{
     collections::AHashMap,
@@ -19,8 +19,9 @@ use swc_common::{
     sync::Lrc,
     BytePos, FileName, SourceFile, SourceMap,
 };
-use swc_config::{config_types::BoolOr, merge::Merge};
-use swc_ecma_ast::{EsVersion, Ident, Program};
+use swc_config::config_types::BoolOr;
+pub use swc_config::IsModule;
+use swc_ecma_ast::{EsVersion, Ident, IdentName, Program};
 use swc_ecma_codegen::{text_writer::WriteJs, Emitter, Node};
 use swc_ecma_minifier::js::JsMinifyCommentOption;
 use swc_ecma_parser::{parse_file_as_module, parse_file_as_program, parse_file_as_script, Syntax};
@@ -34,6 +35,9 @@ pub struct TransformOutput {
     pub code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
 }
 
 #[cfg(not(feature = "node"))]
@@ -42,6 +46,9 @@ pub struct TransformOutput {
     pub code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
 }
 
 /// This method parses a javascript / typescript file
@@ -59,7 +66,7 @@ pub fn parse_js(
     let mut res = (|| {
         let mut error = false;
 
-        let mut errors = vec![];
+        let mut errors = std::vec::Vec::new();
         let program_result = match is_module {
             IsModule::Bool(true) => {
                 parse_file_as_module(&fm, syntax, target, comments, &mut errors)
@@ -108,6 +115,7 @@ pub struct PrintArgs<'a> {
     pub emit_source_map_columns: bool,
     pub preamble: &'a str,
     pub codegen_config: swc_ecma_codegen::Config,
+    pub output: Option<FxHashMap<String, serde_json::Value>>,
 }
 
 impl Default for PrintArgs<'_> {
@@ -126,6 +134,7 @@ impl Default for PrintArgs<'_> {
             emit_source_map_columns: false,
             preamble: "",
             codegen_config: Default::default(),
+            output: None,
         }
     }
 }
@@ -155,6 +164,7 @@ pub fn print<T>(
         emit_source_map_columns,
         preamble,
         codegen_config,
+        output,
     }: PrintArgs,
 ) -> Result<TransformOutput, Error>
 where
@@ -162,10 +172,10 @@ where
 {
     let _timer = timer!("Compiler::print");
 
-    let mut src_map_buf = vec![];
+    let mut src_map_buf = Vec::new();
 
     let src = {
-        let mut buf = vec![];
+        let mut buf = std::vec::Vec::new();
         {
             let mut w = swc_ecma_codegen::text_writer::JsWriter::new(
                 cm.clone(),
@@ -232,7 +242,7 @@ where
     let (code, map) = match source_map {
         SourceMapsConfig::Bool(v) => {
             if v {
-                let mut buf = vec![];
+                let mut buf = std::vec::Vec::new();
 
                 map.unwrap()
                     .to_writer(&mut buf)
@@ -245,7 +255,7 @@ where
         }
         SourceMapsConfig::Str(_) => {
             let mut src = src;
-            let mut buf = vec![];
+            let mut buf = std::vec::Vec::new();
 
             map.unwrap()
                 .to_writer(&mut buf)
@@ -258,7 +268,13 @@ where
         }
     };
 
-    Ok(TransformOutput { code, map })
+    Ok(TransformOutput {
+        code,
+        map,
+        output: output
+            .map(|v| serde_json::to_string(&v).context("failed to serilaize output"))
+            .transpose()?,
+    })
 }
 
 struct SwcSourceMapConfig<'a> {
@@ -331,7 +347,7 @@ pub fn minify_file_comments(
         BoolOr::Bool(true) | BoolOr::Data(JsMinifyCommentOption::PreserveAllComments) => {}
 
         BoolOr::Data(JsMinifyCommentOption::PreserveSomeComments) => {
-            let preserve_excl = |_: &BytePos, vc: &mut Vec<Comment>| -> bool {
+            let preserve_excl = |_: &BytePos, vc: &mut std::vec::Vec<Comment>| -> bool {
                 // Preserve license comments.
                 //
                 // See https://github.com/terser/terser/blob/798135e04baddd94fea403cfaab4ba8b22b1b524/lib/output.js#L175-L181
@@ -340,6 +356,10 @@ pub fn minify_file_comments(
                         || c.text.contains("@preserve")
                         || c.text.contains("@copyright")
                         || c.text.contains("@cc_on")
+                        || c.text.contains("__PURE__")
+                        || c.text.contains("__INLINE__")
+                        || c.text.contains("__NOINLINE__")
+                        || c.text.contains("@vite-ignore")
                         || (c.kind == CommentKind::Block && c.text.starts_with('!'))
                 });
                 !vc.is_empty()
@@ -384,74 +404,6 @@ impl Default for SourceMapsConfig {
     }
 }
 
-#[derive(Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum IsModule {
-    Bool(bool),
-    Unknown,
-}
-
-impl Default for IsModule {
-    fn default() -> Self {
-        IsModule::Bool(true)
-    }
-}
-
-impl Merge for IsModule {
-    fn merge(&mut self, other: Self) {
-        if *self == Default::default() {
-            *self = other;
-        }
-    }
-}
-
-impl Serialize for IsModule {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match *self {
-            IsModule::Bool(ref b) => b.serialize(serializer),
-            IsModule::Unknown => "unknown".serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for IsModule {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct IsModuleVisitor;
-
-        impl<'de> Visitor<'de> for IsModuleVisitor {
-            type Value = IsModule;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a boolean or the string 'unknown'")
-            }
-
-            fn visit_bool<E>(self, b: bool) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(IsModule::Bool(b))
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                match s {
-                    "unknown" => Ok(IsModule::Unknown),
-                    _ => Err(serde::de::Error::invalid_value(Unexpected::Str(s), &self)),
-                }
-            }
-        }
-
-        deserializer.deserialize_any(IsModuleVisitor)
-    }
-}
-
 pub struct IdentCollector {
     pub names: AHashMap<BytePos, JsWord>,
 }
@@ -460,6 +412,10 @@ impl Visit for IdentCollector {
     noop_visit_type!();
 
     fn visit_ident(&mut self, ident: &Ident) {
+        self.names.insert(ident.span.lo, ident.sym.clone());
+    }
+
+    fn visit_ident_name(&mut self, ident: &IdentName) {
         self.names.insert(ident.span.lo, ident.sym.clone());
     }
 }

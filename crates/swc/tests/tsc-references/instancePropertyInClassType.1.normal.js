@@ -1,7 +1,6 @@
 //// [instancePropertyInClassType.ts]
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _create_class } from "@swc/helpers/_/_create_class";
-var NonGeneric;
 (function(NonGeneric) {
     var C = /*#__PURE__*/ function() {
         "use strict";
@@ -32,7 +31,6 @@ var NonGeneric;
     r.y = 4;
     var r6 = c.y(); // error
 })(NonGeneric || (NonGeneric = {}));
-var Generic;
 (function(Generic) {
     var C = /*#__PURE__*/ function() {
         "use strict";
@@ -56,10 +54,11 @@ var Generic;
         ]);
         return C;
     }();
-    var c = new C(1, "");
+    var c = new C(1, '');
     var r = c.fn();
     var r2 = r.x;
     var r3 = r.y;
-    r.y = "";
+    r.y = '';
     var r6 = c.y(); // error
 })(Generic || (Generic = {}));
+var NonGeneric, Generic;

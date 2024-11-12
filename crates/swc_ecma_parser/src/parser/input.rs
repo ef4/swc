@@ -46,7 +46,13 @@ pub trait Tokens: Clone + Iterator<Item = TokenAndSpan> {
     /// buffer on set_ctx if the parser mode become module mode.
     fn add_module_mode_error(&self, error: Error);
 
+    fn end_pos(&self) -> BytePos;
+
     fn take_errors(&mut self) -> Vec<Error>;
+
+    /// If the program was parsed as a script, this contains the module
+    /// errors should the program be identified as a module in the future.
+    fn take_script_module_errors(&mut self) -> Vec<Error>;
 }
 
 #[derive(Clone)]
@@ -142,6 +148,18 @@ impl Tokens for TokensInput {
     fn take_errors(&mut self) -> Vec<Error> {
         take(&mut self.errors.borrow_mut())
     }
+
+    fn take_script_module_errors(&mut self) -> Vec<Error> {
+        take(&mut self.module_errors.borrow_mut())
+    }
+
+    fn end_pos(&self) -> BytePos {
+        self.iter
+            .as_slice()
+            .last()
+            .map(|t| t.span.hi)
+            .unwrap_or(self.start_pos)
+    }
 }
 
 /// Note: Lexer need access to parser's context to lex correctly.
@@ -166,6 +184,10 @@ impl<I: Tokens> Capturing<I> {
             inner: input,
             captured: Default::default(),
         }
+    }
+
+    pub fn tokens(&self) -> Rc<RefCell<Vec<TokenAndSpan>>> {
+        self.captured.clone()
     }
 
     /// Take captured tokens
@@ -254,6 +276,14 @@ impl<I: Tokens> Tokens for Capturing<I> {
     fn take_errors(&mut self) -> Vec<Error> {
         self.inner.take_errors()
     }
+
+    fn take_script_module_errors(&mut self) -> Vec<Error> {
+        self.inner.take_script_module_errors()
+    }
+
+    fn end_pos(&self) -> BytePos {
+        self.inner.end_pos()
+    }
 }
 
 /// This struct is responsible for managing current token and peeked token.
@@ -283,7 +313,7 @@ impl<I: Tokens> Buffer<I> {
         Buffer {
             iter: lexer,
             cur: None,
-            prev_span: Span::new(start_pos, start_pos, Default::default()),
+            prev_span: Span::new(start_pos, start_pos),
             next: None,
         }
     }
@@ -396,6 +426,52 @@ impl<I: Tokens> Buffer<I> {
         });
     }
 
+    pub fn merge_lt_gt(&mut self) {
+        debug_assert!(
+            self.is(&tok!('<')) || self.is(&tok!('>')),
+            "parser should only call merge_lt_gt when encountering '<' or '>' token"
+        );
+
+        let span = self.cur_span();
+
+        if self.peek().is_none() {
+            return;
+        }
+
+        let next = self.next.as_ref().unwrap();
+
+        if span.hi != next.span.lo {
+            return;
+        }
+
+        let cur = self.cur.take().unwrap();
+        let next = self.next.take().unwrap();
+
+        let token = match (&cur.token, &next.token) {
+            (tok!('>'), tok!('>')) => tok!(">>"),
+            (tok!('>'), tok!('=')) => tok!(">="),
+            (tok!('>'), tok!(">>")) => tok!(">>>"),
+            (tok!('>'), tok!(">=")) => tok!(">>="),
+            (tok!('>'), tok!(">>=")) => tok!(">>>="),
+            (tok!('<'), tok!('<')) => tok!("<<"),
+            (tok!('<'), tok!('=')) => tok!("<="),
+            (tok!('<'), tok!("<=")) => tok!("<<="),
+
+            _ => {
+                self.cur = Some(cur);
+                self.next = Some(next);
+                return;
+            }
+        };
+        let span = span.with_hi(next.span.hi);
+
+        self.cur = Some(TokenAndSpan {
+            token,
+            span,
+            had_line_break: cur.had_line_break,
+        });
+    }
+
     #[inline]
     pub fn is(&mut self, expected: &Token) -> bool {
         match self.cur() {
@@ -434,7 +510,7 @@ impl<I: Tokens> Buffer<I> {
             .map(|item| item.span)
             .unwrap_or(self.prev_span);
 
-        Span::new(data.lo, data.hi, data.ctxt)
+        Span::new(data.lo, data.hi)
     }
 
     /// Returns last byte position of previous token.
@@ -492,5 +568,10 @@ impl<I: Tokens> Buffer<I> {
     #[inline]
     pub(crate) fn set_token_context(&mut self, c: lexer::TokenContexts) {
         self.iter.set_token_context(c)
+    }
+
+    #[inline]
+    pub(crate) fn end_pos(&self) -> BytePos {
+        self.iter.end_pos()
     }
 }

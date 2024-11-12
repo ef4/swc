@@ -3,7 +3,7 @@ use std::hash::Hash;
 use rustc_hash::FxHashSet;
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::*;
-use swc_ecma_utils::ident::IdentLike;
+use swc_ecma_utils::{ident::IdentLike, stack_size::maybe_grow_default};
 use swc_ecma_visit::{noop_visit_type, visit_obj_and_computed, Visit, VisitWith};
 
 pub(super) struct IdCollector {
@@ -21,8 +21,12 @@ impl Visit for IdCollector {
 
     fn visit_export_namespace_specifier(&mut self, _: &ExportNamespaceSpecifier) {}
 
+    fn visit_bin_expr(&mut self, n: &BinExpr) {
+        maybe_grow_default(|| n.visit_children_with(self));
+    }
+
     fn visit_ident(&mut self, id: &Ident) {
-        if id.span.ctxt != SyntaxContext::empty() {
+        if id.ctxt != SyntaxContext::empty() {
             self.ids.insert(id.to_id());
         }
     }
@@ -60,7 +64,7 @@ where
 {
     fn add(&mut self, i: &Ident) {
         if let Some(top_level_ctxt) = self.top_level_for_eval {
-            if i.span.ctxt == top_level_ctxt {
+            if i.ctxt == top_level_ctxt {
                 self.preserved.insert(I::from_ident(i));
                 return;
             }
@@ -92,7 +96,7 @@ where
         node.value.visit_with(self);
 
         if self.is_pat_decl {
-            self.add(&node.key);
+            self.add(&Ident::from(&node.key));
         }
     }
 
@@ -100,7 +104,7 @@ where
         n.visit_children_with(self);
 
         if self.is_pat_decl {
-            self.add(&n.id)
+            self.add(&Ident::from(n))
         }
     }
 
@@ -133,6 +137,10 @@ where
         self.is_pat_decl = false;
         node.visit_children_with(self);
         self.is_pat_decl = old;
+    }
+
+    fn visit_bin_expr(&mut self, node: &BinExpr) {
+        maybe_grow_default(|| node.visit_children_with(self));
     }
 
     fn visit_fn_decl(&mut self, node: &FnDecl) {

@@ -2,12 +2,12 @@
 
 extern crate swc_malloc;
 
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use rayon::prelude::*;
 use swc_common::{errors::HANDLER, FileName, Mark, GLOBALS};
+use swc_ecma_ast::Program;
 use swc_ecma_parser::{Parser, StringInput, Syntax};
 use swc_ecma_transforms_base::helpers;
-use swc_ecma_visit::FoldWith;
 
 static SOURCE: &str = include_str!("../../swc_ecma_minifier/benches/full/typescript.js");
 
@@ -15,14 +15,14 @@ static SOURCE: &str = include_str!("../../swc_ecma_minifier/benches/full/typescr
 macro_rules! tr {
     ($b:expr, $tr:expr) => {
         let _ = ::testing::run_test(false, |cm, handler| {
-            let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+            let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
 
             let mut parser = Parser::new(
                 Syntax::Typescript(Default::default()),
                 StringInput::from(&*fm),
                 None,
             );
-            let module = parser.parse_module().map_err(|_| ()).unwrap();
+            let module = Program::Module(parser.parse_module().map_err(|_| ()).unwrap());
 
             $b.iter(|| {
                 GLOBALS.with(|globals| {
@@ -30,10 +30,10 @@ macro_rules! tr {
                         GLOBALS.set(globals, || {
                             HANDLER.set(&handler, || {
                                 helpers::HELPERS.set(&Default::default(), || {
-                                    let mut tr = $tr();
+                                    let tr = $tr();
 
                                     let module = module.clone();
-                                    black_box(module.fold_with(&mut tr));
+                                    black_box(module.apply(tr));
                                 })
                             })
                         })

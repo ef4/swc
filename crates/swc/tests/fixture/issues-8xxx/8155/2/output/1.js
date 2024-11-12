@@ -1,4 +1,4 @@
-import { _ as _async_to_generator } from "@swc/helpers/_/_async_to_generator";
+var _async_to_generator = require("@swc/helpers/_/_async_to_generator");
 const someFn = (xx, x, y)=>[
         x,
         y
@@ -8,8 +8,8 @@ const getArray = ()=>[
         2,
         3
     ];
-const goodFunction = function() {
-    var _ref = _async_to_generator(function*() {
+const goodFunction = /*#__PURE__*/ function() {
+    var _ref = _async_to_generator._(function*() {
         const rb = yield getArray();
         const rc = yield getArray();
         console.log(someFn(1, rb, rc));
@@ -18,8 +18,8 @@ const goodFunction = function() {
         return _ref.apply(this, arguments);
     };
 }();
-const badFunction = function() {
-    var _ref = _async_to_generator(function*() {
+const badFunction = /*#__PURE__*/ function() {
+    var _ref = _async_to_generator._(function*() {
         console.log(someFn(1, (yield getArray()), (yield getArray())));
     });
     return function badFunction() {

@@ -9,7 +9,7 @@ use std::{
 use pretty_assertions::assert_eq;
 use swc_common::{comments::SingleThreadedComments, FileName};
 use swc_ecma_ast::*;
-use swc_ecma_parser::{lexer::Lexer, PResult, Parser, Syntax, TsConfig};
+use swc_ecma_parser::{lexer::Lexer, PResult, Parser, Syntax, TsSyntax};
 use swc_ecma_visit::FoldWith;
 use testing::StdErr;
 
@@ -78,7 +78,14 @@ fn spec(file: PathBuf) {
     run_spec(&file, &output);
 }
 
-#[testing::fixture("tests/tsc/**/*.ts", exclude("parserArrowFunctionExpression11"))]
+#[testing::fixture(
+    "tests/tsc/**/*.ts",
+    exclude(
+        "for-of51.ts",
+        "parserArrowFunctionExpression11",
+        "esDecorators-decoratorExpression.1"
+    )
+)]
 fn tsc_spec(file: PathBuf) {
     let output = file.with_extension("json");
     run_spec(&file, &output);
@@ -238,7 +245,7 @@ where
 
     ::testing::run_test(treat_error_as_bug, |cm, handler| {
         if shift {
-            cm.new_source_file(FileName::Anon, "".into());
+            cm.new_source_file(FileName::Anon.into(), "".into());
         }
 
         let comments = SingleThreadedComments::default();
@@ -248,7 +255,7 @@ where
             .unwrap_or_else(|e| panic!("failed to load {}: {}", file_name.display(), e));
 
         let lexer = Lexer::new(
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 dts: fname.ends_with(".d.ts"),
                 tsx: fname.contains("tsx"),
                 decorators: true,

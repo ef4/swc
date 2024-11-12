@@ -1,49 +1,45 @@
 {
   "type": "Script",
   "span": {
-    "start": 98,
-    "end": 168,
-    "ctxt": 0
+    "start": 94,
+    "end": 164
   },
   "body": [
     {
       "type": "ExpressionStatement",
       "span": {
-        "start": 98,
-        "end": 114,
-        "ctxt": 0
+        "start": 94,
+        "end": 110
       },
       "expression": {
         "type": "ConditionalExpression",
         "span": {
-          "start": 98,
-          "end": 114,
-          "ctxt": 0
+          "start": 94,
+          "end": 110
         },
         "test": {
           "type": "Identifier",
           "span": {
-            "start": 98,
-            "end": 99,
-            "ctxt": 0
+            "start": 94,
+            "end": 95
           },
+          "ctxt": 0,
           "value": "b",
           "optional": false
         },
         "consequent": {
           "type": "ParenthesisExpression",
           "span": {
-            "start": 102,
-            "end": 105,
-            "ctxt": 0
+            "start": 98,
+            "end": 101
           },
           "expression": {
             "type": "Identifier",
             "span": {
-              "start": 103,
-              "end": 104,
-              "ctxt": 0
+              "start": 99,
+              "end": 100
             },
+            "ctxt": 0,
             "value": "c",
             "optional": false
           }
@@ -51,18 +47,18 @@
         "alternate": {
           "type": "ArrowFunctionExpression",
           "span": {
-            "start": 108,
-            "end": 114,
-            "ctxt": 0
+            "start": 104,
+            "end": 110
           },
+          "ctxt": 0,
           "params": [
             {
               "type": "Identifier",
               "span": {
-                "start": 108,
-                "end": 109,
-                "ctxt": 0
+                "start": 104,
+                "end": 105
               },
+              "ctxt": 0,
               "value": "d",
               "optional": false,
               "typeAnnotation": null
@@ -71,10 +67,10 @@
           "body": {
             "type": "Identifier",
             "span": {
-              "start": 113,
-              "end": 114,
-              "ctxt": 0
+              "start": 109,
+              "end": 110
             },
+            "ctxt": 0,
             "value": "e",
             "optional": false
           },
@@ -88,41 +84,38 @@
     {
       "type": "ExpressionStatement",
       "span": {
-        "start": 152,
-        "end": 168,
-        "ctxt": 0
+        "start": 148,
+        "end": 164
       },
       "expression": {
         "type": "ConditionalExpression",
         "span": {
-          "start": 152,
-          "end": 168,
-          "ctxt": 0
+          "start": 148,
+          "end": 164
         },
         "test": {
           "type": "Identifier",
           "span": {
-            "start": 152,
-            "end": 153,
-            "ctxt": 0
+            "start": 148,
+            "end": 149
           },
+          "ctxt": 0,
           "value": "b",
           "optional": false
         },
         "consequent": {
           "type": "ParenthesisExpression",
           "span": {
-            "start": 156,
-            "end": 159,
-            "ctxt": 0
+            "start": 152,
+            "end": 155
           },
           "expression": {
             "type": "Identifier",
             "span": {
-              "start": 157,
-              "end": 158,
-              "ctxt": 0
+              "start": 153,
+              "end": 154
             },
+            "ctxt": 0,
             "value": "c",
             "optional": false
           }
@@ -130,18 +123,18 @@
         "alternate": {
           "type": "ArrowFunctionExpression",
           "span": {
-            "start": 162,
-            "end": 168,
-            "ctxt": 0
+            "start": 158,
+            "end": 164
           },
+          "ctxt": 0,
           "params": [
             {
               "type": "Identifier",
               "span": {
-                "start": 162,
-                "end": 163,
-                "ctxt": 0
+                "start": 158,
+                "end": 159
               },
+              "ctxt": 0,
               "value": "d",
               "optional": false,
               "typeAnnotation": null
@@ -150,10 +143,10 @@
           "body": {
             "type": "Identifier",
             "span": {
-              "start": 167,
-              "end": 168,
-              "ctxt": 0
+              "start": 163,
+              "end": 164
             },
+            "ctxt": 0,
             "value": "e",
             "optional": false
           },

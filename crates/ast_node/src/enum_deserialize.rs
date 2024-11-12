@@ -1,6 +1,5 @@
 use swc_macros_common::prelude::*;
 use syn::{
-    self,
     parse::{Parse, ParseStream},
     *,
 };
@@ -114,8 +113,8 @@ pub fn expand(
             .collect::<Vec<Arm>>();
 
         let tag_expr: Expr = {
-            let mut visit_str_arms = vec![];
-            let mut visit_bytes_arms = vec![];
+            let mut visit_str_arms = Vec::new();
+            let mut visit_bytes_arms = Vec::new();
 
             for variant in &data.variants {
                 let tags = variant

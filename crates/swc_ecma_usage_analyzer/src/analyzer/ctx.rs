@@ -3,6 +3,7 @@
 use std::ops::{Deref, DerefMut};
 
 use swc_ecma_ast::VarDeclKind;
+use swc_ecma_utils::{Type, Value};
 
 use super::{storage::Storage, UsageAnalyzer};
 
@@ -23,15 +24,12 @@ where
 #[derive(Debug, Default, Clone, Copy)]
 #[non_exhaustive]
 pub struct Ctx {
-    /// See [crate::marks::Marks]
-    pub skip_standalone: bool,
-
     pub var_decl_kind_of_pat: Option<VarDeclKind>,
 
     pub in_decl_with_no_side_effect_for_member_access: bool,
 
     pub in_pat_of_var_decl: bool,
-    pub in_pat_of_var_decl_with_init: bool,
+    pub in_pat_of_var_decl_with_init: Option<Value<Type>>,
     pub in_pat_of_param: bool,
     pub in_catch_param: bool,
 

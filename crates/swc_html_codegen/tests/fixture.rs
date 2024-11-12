@@ -24,18 +24,9 @@ fn print_document(
     codegen_config: Option<CodegenConfig>,
 ) {
     let dir = input.parent().unwrap();
-    let parser_config = match parser_config {
-        Some(parser_config) => parser_config,
-        _ => ParserConfig::default(),
-    };
-    let writer_config = match writer_config {
-        Some(writer_config) => writer_config,
-        _ => BasicHtmlWriterConfig::default(),
-    };
-    let codegen_config = match codegen_config {
-        Some(codegen_config) => codegen_config,
-        _ => CodegenConfig::default(),
-    };
+    let parser_config = parser_config.unwrap_or_default();
+    let writer_config = writer_config.unwrap_or_default();
+    let codegen_config = codegen_config.unwrap_or_default();
     let output = if codegen_config.minify {
         dir.join(format!(
             "output.min.{}",
@@ -50,7 +41,7 @@ fn print_document(
 
     run_test2(false, |cm, handler| {
         let fm = cm.load_file(input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut document: Document =
             parse_file_as_document(&fm, parser_config, &mut errors).unwrap();
 
@@ -70,7 +61,7 @@ fn print_document(
             .compare_to_file(output)
             .unwrap();
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut document_parsed_again =
             parse_file_as_document(&fm_output, parser_config, &mut errors).map_err(|err| {
                 err.to_diagnostics(&handler).emit();
@@ -98,18 +89,9 @@ fn print_document_fragment(
     codegen_config: Option<CodegenConfig>,
 ) {
     let dir = input.parent().unwrap();
-    let parser_config = match parser_config {
-        Some(parser_config) => parser_config,
-        _ => ParserConfig::default(),
-    };
-    let writer_config = match writer_config {
-        Some(writer_config) => writer_config,
-        _ => BasicHtmlWriterConfig::default(),
-    };
-    let codegen_config = match codegen_config {
-        Some(codegen_config) => codegen_config,
-        _ => CodegenConfig::default(),
-    };
+    let parser_config = parser_config.unwrap_or_default();
+    let writer_config = writer_config.unwrap_or_default();
+    let codegen_config = codegen_config.unwrap_or_default();
     let output = if codegen_config.minify {
         dir.join(format!(
             "output.min.{}",
@@ -124,7 +106,7 @@ fn print_document_fragment(
 
     run_test2(false, |cm, handler| {
         let fm = cm.load_file(input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut document_fragment = parse_file_as_document_fragment(
             &fm,
             &context_element,
@@ -151,7 +133,7 @@ fn print_document_fragment(
             .compare_to_file(output)
             .unwrap();
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut document_fragment_parsed_again = parse_file_as_document_fragment(
             &fm_output,
             &context_element,
@@ -185,22 +167,13 @@ fn verify_document(
     codegen_config: Option<CodegenConfig>,
     ignore_errors: bool,
 ) {
-    let parser_config = match parser_config {
-        Some(parser_config) => parser_config,
-        _ => ParserConfig::default(),
-    };
-    let writer_config = match writer_config {
-        Some(writer_config) => writer_config,
-        _ => BasicHtmlWriterConfig::default(),
-    };
-    let codegen_config = match codegen_config {
-        Some(codegen_config) => codegen_config,
-        _ => CodegenConfig::default(),
-    };
+    let parser_config = parser_config.unwrap_or_default();
+    let writer_config = writer_config.unwrap_or_default();
+    let codegen_config = codegen_config.unwrap_or_default();
 
     testing::run_test2(false, |cm, handler| {
         let fm = cm.load_file(input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
 
         let mut document =
             parse_file_as_document(&fm, parser_config, &mut errors).map_err(|err| {
@@ -219,8 +192,8 @@ fn verify_document(
 
         gen.emit(&document).unwrap();
 
-        let new_fm = cm.new_source_file(FileName::Anon, html_str);
-        let mut parsed_errors = vec![];
+        let new_fm = cm.new_source_file(FileName::Anon.into(), html_str);
+        let mut parsed_errors = Vec::new();
         let mut document_parsed_again =
             parse_file_as_document(&new_fm, parser_config, &mut parsed_errors).map_err(|err| {
                 err.to_diagnostics(&handler).emit();
@@ -250,24 +223,15 @@ fn verify_document_fragment(
     codegen_config: Option<CodegenConfig>,
     ignore_errors: bool,
 ) {
-    let parser_config = match parser_config {
-        Some(parser_config) => parser_config,
-        _ => ParserConfig::default(),
-    };
-    let writer_config = match writer_config {
-        Some(writer_config) => writer_config,
-        _ => BasicHtmlWriterConfig::default(),
-    };
-    let mut codegen_config = match codegen_config {
-        Some(codegen_config) => codegen_config,
-        _ => CodegenConfig::default(),
-    };
+    let parser_config = parser_config.unwrap_or_default();
+    let writer_config = writer_config.unwrap_or_default();
+    let mut codegen_config = codegen_config.unwrap_or_default();
 
     codegen_config.context_element = Some(&context_element);
 
     testing::run_test2(false, |cm, handler| {
         let fm = cm.load_file(input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
 
         let mut document_fragment = parse_file_as_document_fragment(
             &fm,
@@ -293,8 +257,8 @@ fn verify_document_fragment(
 
         gen.emit(&document_fragment).unwrap();
 
-        let new_fm = cm.new_source_file(FileName::Anon, html_str);
-        let mut parsed_errors = vec![];
+        let new_fm = cm.new_source_file(FileName::Anon.into(), html_str);
+        let mut parsed_errors = Vec::new();
         let mut document_fragment_parsed_again = parse_file_as_document_fragment(
             &new_fm,
             &context_element,
@@ -394,9 +358,9 @@ fn test_document_fragment(input: PathBuf) {
         span: Default::default(),
         tag_name: "template".into(),
         namespace: Namespace::HTML,
-        attributes: vec![],
+        attributes: Vec::new(),
         is_self_closing: false,
-        children: vec![],
+        children: Vec::new(),
         content: None,
     };
 
@@ -693,9 +657,9 @@ fn html5lib_tests_verify(input: PathBuf) {
             span: Default::default(),
             namespace: context_element_namespace,
             tag_name: context_element_tag_name.into(),
-            attributes: vec![],
+            attributes: Vec::new(),
             is_self_closing: false,
-            children: vec![],
+            children: Vec::new(),
             content: None,
         };
 

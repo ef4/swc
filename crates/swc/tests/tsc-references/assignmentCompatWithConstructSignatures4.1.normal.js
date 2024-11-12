@@ -1,9 +1,8 @@
 //// [assignmentCompatWithConstructSignatures4.ts]
 // checking assignment compatibility relations for function types.
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
-var Errors;
 (function(Errors) {
     var Base = function Base() {
         "use strict";
@@ -12,34 +11,30 @@ var Errors;
     var Derived = /*#__PURE__*/ function(Base) {
         "use strict";
         _inherits(Derived, Base);
-        var _super = _create_super(Derived);
         function Derived() {
             _class_call_check(this, Derived);
-            return _super.apply(this, arguments);
+            return _call_super(this, Derived, arguments);
         }
         return Derived;
     }(Base);
     var Derived2 = /*#__PURE__*/ function(Derived) {
         "use strict";
         _inherits(Derived2, Derived);
-        var _super = _create_super(Derived2);
         function Derived2() {
             _class_call_check(this, Derived2);
-            return _super.apply(this, arguments);
+            return _call_super(this, Derived2, arguments);
         }
         return Derived2;
     }(Derived);
     var OtherDerived = /*#__PURE__*/ function(Base) {
         "use strict";
         _inherits(OtherDerived, Base);
-        var _super = _create_super(OtherDerived);
         function OtherDerived() {
             _class_call_check(this, OtherDerived);
-            return _super.apply(this, arguments);
+            return _call_super(this, OtherDerived, arguments);
         }
         return OtherDerived;
     }(Base);
-    var WithNonGenericSignaturesInBaseType;
     (function(WithNonGenericSignaturesInBaseType) {
         // target type with non-generic call signatures
         var a2;
@@ -83,7 +78,6 @@ var Errors;
         a17 = b17; // error
         b17 = a17; // error
     })(WithNonGenericSignaturesInBaseType || (WithNonGenericSignaturesInBaseType = {}));
-    var WithGenericSignaturesInBaseType;
     (function(WithGenericSignaturesInBaseType) {
         // target type has generic call signature
         var a2;
@@ -96,4 +90,6 @@ var Errors;
         a3 = b3; // ok
         b3 = a3; // ok
     })(WithGenericSignaturesInBaseType || (WithGenericSignaturesInBaseType = {}));
+    var WithNonGenericSignaturesInBaseType, WithGenericSignaturesInBaseType;
 })(Errors || (Errors = {}));
+var Errors;

@@ -6,36 +6,36 @@ include     = ["Cargo.toml", "src/**/*.rs"]
 license     = "Apache-2.0"
 name        = "swc_ecma_lints"
 repository  = "https://github.com/swc-project/swc.git"
-version     = "0.92.13"
+version     = "5.0.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 bench = false
 
 [dependencies]
-auto_impl   = "1.1.0"
-dashmap     = "5.4.0"
-parking_lot = "0.12.1"
-rayon       = "1.7.0"
-regex       = "1"
-serde       = { version = "1.0.133", features = ["derive"] }
+auto_impl   = { workspace = true }
+dashmap     = { workspace = true }
+parking_lot = { workspace = true }
+rayon       = { workspace = true }
+regex       = { workspace = true }
+serde       = { workspace = true, features = ["derive"] }
 
-swc_atoms = { version = "0.6.5", path = "../swc_atoms" }
-swc_common = { version = "0.33.18", path = "../swc_common", features = [
+swc_atoms = { version = "2.0.0", path = "../swc_atoms" }
+swc_common = { version = "4.0.0", path = "../swc_common", features = [
   "concurrent",
 ] }
-swc_config = { version = "0.1.11", path = "../swc_config" }
-swc_ecma_ast = { version = "0.112.4", path = "../swc_ecma_ast", features = [
+swc_config = { version = "1.0.0", path = "../swc_config" }
+swc_ecma_ast = { version = "4.0.1", path = "../swc_ecma_ast", features = [
   "serde",
 ] }
-swc_ecma_utils = { version = "0.127.8", path = "../swc_ecma_utils" }
-swc_ecma_visit = { version = "0.98.5", path = "../swc_ecma_visit" }
+swc_ecma_utils = { version = "5.0.0", path = "../swc_ecma_utils" }
+swc_ecma_visit = { version = "4.0.0", path = "../swc_ecma_visit" }
 
 [dev-dependencies]
-swc_ecma_codegen         = { version = "0.148.8", path = "../swc_ecma_codegen" }
-swc_ecma_parser          = { version = "0.143.6", path = "../swc_ecma_parser" }
-swc_ecma_transforms_base = { version = "0.137.11", path = "../swc_ecma_transforms_base" }
-testing                  = { version = "0.35.19", path = "../testing" }
+swc_ecma_codegen         = { version = "4.0.2", path = "../swc_ecma_codegen" }
+swc_ecma_parser          = { version = "5.0.0", path = "../swc_ecma_parser" }
+swc_ecma_transforms_base = { version = "5.0.1", path = "../swc_ecma_transforms_base" }
+testing                  = { version = "4.0.0", path = "../testing" }
 
 [features]
 non_critical_lints = []

@@ -1,7 +1,10 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use swc_cached::regex::CachedRegex;
+#[cfg(feature = "default-css-minifier")]
 use swc_css_codegen::CodegenConfig as CssCodegenOptions;
+#[cfg(feature = "default-css-minifier")]
 use swc_css_minifier::options::MinifyOptions as CssMinifyOptions;
+#[cfg(feature = "default-css-minifier")]
 use swc_css_parser::parser::ParserConfig as CssParserOptions;
 use swc_ecma_ast::EsVersion;
 use swc_ecma_codegen::Config as JsCodegenOptions;
@@ -19,7 +22,7 @@ pub enum MinifierType {
     Html,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub enum CollapseWhitespaces {
@@ -41,16 +44,11 @@ pub enum CollapseWhitespaces {
     /// Remove all whitespace in the `head` element, trim whitespaces for the
     /// `body` element, remove spaces between `metadata` elements (i.e.
     /// `script`/`style`/etc, for elements that have `display: none`)
+    #[default]
     OnlyMetadata,
 }
 
-impl Default for CollapseWhitespaces {
-    fn default() -> Self {
-        CollapseWhitespaces::OnlyMetadata
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub enum RemoveRedundantAttributes {
@@ -61,13 +59,8 @@ pub enum RemoveRedundantAttributes {
     /// Remove deprecated and svg redundant (they used for styling) and `xmlns`
     /// attributes (for example the `type` attribute for the `style` tag and
     /// `xmlns` for svg)
+    #[default]
     Smart,
-}
-
-impl Default for RemoveRedundantAttributes {
-    fn default() -> Self {
-        RemoveRedundantAttributes::Smart
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -119,11 +112,12 @@ pub struct JsParserOptions {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
-pub enum MinifyCssOption {
+pub enum MinifyCssOption<CO> {
     Bool(bool),
-    Options(Box<CssOptions>),
+    Options(CO),
 }
 
+#[cfg(feature = "default-css-minifier")]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
@@ -139,7 +133,7 @@ pub struct CssOptions {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
-pub struct MinifyOptions {
+pub struct MinifyOptions<CO> {
     #[serde(default)]
     pub force_set_html5_doctype: bool,
     #[serde(default)]
@@ -180,7 +174,7 @@ pub struct MinifyOptions {
     #[serde(default = "minify_js_by_default")]
     pub minify_js: MinifyJsOption,
     #[serde(default = "minify_css_by_default")]
-    pub minify_css: MinifyCssOption,
+    pub minify_css: MinifyCssOption<CO>,
     // Allow to compress value of custom script elements,
     // i.e. `<script type="text/html"><div><!-- text --> <div data-foo="bar> Text </div></script>`
     //
@@ -204,7 +198,7 @@ pub struct MinifyOptions {
 }
 
 /// Implement default using serde.
-impl Default for MinifyOptions {
+impl<CO: DeserializeOwned> Default for MinifyOptions<CO> {
     fn default() -> Self {
         serde_json::from_value(serde_json::Value::Object(Default::default())).unwrap()
     }
@@ -222,7 +216,7 @@ const fn minify_js_by_default() -> MinifyJsOption {
     MinifyJsOption::Bool(true)
 }
 
-const fn minify_css_by_default() -> MinifyCssOption {
+const fn minify_css_by_default<CO>() -> MinifyCssOption<CO> {
     MinifyCssOption::Bool(true)
 }
 

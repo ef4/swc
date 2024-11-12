@@ -1,7 +1,4 @@
-use std::{
-    mem::replace,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{cell::RefCell, mem::replace};
 
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashMap;
@@ -9,7 +6,7 @@ use swc_atoms::JsWord;
 use swc_common::{FileName, FilePathMapping, Mark, SourceMap, SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_utils::{prepend_stmts, quote_ident, DropSpan, ExprFactory};
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
 #[macro_export]
 macro_rules! enable_helper {
@@ -24,18 +21,19 @@ macro_rules! enable_helper {
 fn parse(code: &str) -> Vec<Stmt> {
     let cm = SourceMap::new(FilePathMapping::empty());
 
-    let fm = cm.new_source_file(FileName::Custom(stringify!($name).into()), code.into());
+    let fm = cm.new_source_file(
+        FileName::Custom(stringify!($name).into()).into(),
+        code.into(),
+    );
     swc_ecma_parser::parse_file_as_script(
         &fm,
         Default::default(),
         Default::default(),
         None,
-        &mut vec![],
+        &mut Vec::new(),
     )
     .map(|mut script| {
-        script.body.visit_mut_with(&mut DropSpan {
-            preserve_ctxt: false,
-        });
+        script.body.visit_mut_with(&mut DropSpan);
         script.body
     })
     .map_err(|e| {
@@ -51,7 +49,7 @@ macro_rules! add_to {
             parse(&code)
         });
 
-        let enable = $b.load(Ordering::Relaxed);
+        let enable = $b;
         if enable {
             $buf.extend(STMTS.iter().cloned().map(|mut stmt| {
                 stmt.visit_mut_with(&mut Marker {
@@ -68,14 +66,12 @@ macro_rules! add_to {
 
 macro_rules! add_import_to {
     ($buf:expr, $name:ident, $b:expr, $mark:expr) => {{
-        let enable = $b.load(Ordering::Relaxed);
+        let enable = $b;
         if enable {
+            let ctxt = SyntaxContext::empty().apply_mark($mark);
             let s = ImportSpecifier::Named(ImportNamedSpecifier {
                 span: DUMMY_SP,
-                local: Ident::new(
-                    concat!("_", stringify!($name)).into(),
-                    DUMMY_SP.apply_mark($mark),
-                ),
+                local: Ident::new(concat!("_", stringify!($name)).into(), DUMMY_SP, ctxt),
                 imported: Some(quote_ident!("_").into()),
                 is_type_only: false,
             });
@@ -106,6 +102,13 @@ better_scoped_tls::scoped_tls!(
 pub struct Helpers {
     external: bool,
     mark: HelperMark,
+    inner: RefCell<Inner>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct HelperData {
+    external: bool,
+    mark: HelperMark,
     inner: Inner,
 }
 
@@ -125,6 +128,22 @@ impl Helpers {
     pub const fn external(&self) -> bool {
         self.external
     }
+
+    pub fn data(&self) -> HelperData {
+        HelperData {
+            inner: *self.inner.borrow(),
+            external: self.external,
+            mark: self.mark,
+        }
+    }
+
+    pub fn from_data(data: HelperData) -> Self {
+        Helpers {
+            external: data.external,
+            mark: data.mark,
+            inner: RefCell::new(data.inner),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -141,15 +160,15 @@ macro_rules! define_helpers {
             $( $name:ident : ( $( $dep:ident ),* ), )*
         }
     ) => {
-        #[derive(Debug,Default)]
+        #[derive(Debug,Default, Clone, Copy)]
         struct Inner {
-            $( $name: AtomicBool, )*
+            $( $name: bool, )*
         }
 
         impl Helpers {
             $(
                 pub fn $name(&self) {
-                    self.inner.$name.store(true, Ordering::Relaxed);
+                    self.inner.borrow_mut().$name = true;
 
                     if !self.external {
                         $(
@@ -160,11 +179,14 @@ macro_rules! define_helpers {
             )*
         }
 
+
         impl Helpers {
             pub fn extend_from(&self, other: &Self) {
+                let other = other.inner.borrow();
+                let mut me = self.inner.borrow_mut();
                 $(
-                    if other.inner.$name.load(Ordering::SeqCst) {
-                        self.inner.$name.store(true, Ordering::Relaxed);
+                    if other.$name {
+                        me.$name = true;
                     }
                 )*
             }
@@ -174,19 +196,21 @@ macro_rules! define_helpers {
             fn is_helper_used(&self) -> bool{
 
                 HELPERS.with(|helpers|{
+                    let inner = helpers.inner.borrow();
                     false $(
-                      || helpers.inner.$name.load(Ordering::Relaxed)
+                      || inner.$name
                     )*
                 })
             }
 
             fn build_helpers(&self) -> Vec<Stmt> {
-                let mut buf = vec![];
+                let mut buf = Vec::new();
 
                 HELPERS.with(|helpers|{
                     debug_assert!(!helpers.external);
+                    let inner = helpers.inner.borrow();
                     $(
-                            add_to!(buf, $name, helpers.inner.$name, helpers.mark.0);
+                            add_to!(buf, $name, inner.$name, helpers.mark.0);
                     )*
                 });
 
@@ -194,12 +218,13 @@ macro_rules! define_helpers {
             }
 
             fn build_imports(&self) -> Vec<ModuleItem> {
-                let mut buf = vec![];
+                let mut buf = Vec::new();
 
                 HELPERS.with(|helpers|{
+                    let inner = helpers.inner.borrow();
                     debug_assert!(helpers.external);
                     $(
-                            add_import_to!(buf, $name, helpers.inner.$name, helpers.mark.0);
+                            add_import_to!(buf, $name, inner.$name, helpers.mark.0);
                     )*
                 });
 
@@ -207,11 +232,12 @@ macro_rules! define_helpers {
             }
 
             fn build_requires(&self) -> Vec<Stmt>{
-                let mut buf = vec![];
+                let mut buf = Vec::new();
                 HELPERS.with(|helpers|{
                     debug_assert!(helpers.external);
+                    let inner = helpers.inner.borrow();
                     $(
-                        let enable = helpers.inner.$name.load(Ordering::Relaxed);
+                        let enable = inner.$name;
                         if enable {
                             buf.push(self.build_reqire(stringify!($name), helpers.mark.0))
                         }
@@ -236,6 +262,11 @@ define_helpers!(Helpers {
     async_to_generator: (),
     await_async_generator: (await_value),
     await_value: (),
+    call_super: (
+        get_prototype_of,
+        is_native_reflect_construct,
+        possible_constructor_return
+    ),
     check_private_redeclaration: (),
     class_apply_descriptor_destructure: (),
     class_apply_descriptor_get: (),
@@ -379,15 +410,18 @@ define_helpers!(Helpers {
     ts_metadata: (),
     ts_param: (),
     ts_values: (),
+    ts_add_disposable_resource: (),
+    ts_dispose_resources: (),
 
     apply_decs_2203_r: (),
     identity: (),
     dispose: (),
     using: (),
+    using_ctx: (),
 });
 
-pub fn inject_helpers(global_mark: Mark) -> impl Fold + VisitMut {
-    as_folder(InjectHelpers {
+pub fn inject_helpers(global_mark: Mark) -> impl Pass + VisitMut {
+    visit_mut_pass(InjectHelpers {
         global_mark,
         helper_ctxt: None,
     })
@@ -406,7 +440,7 @@ impl InjectHelpers {
                 self.helper_ctxt = Some(SyntaxContext::empty().apply_mark(helper_mark));
                 self.build_imports()
             } else {
-                vec![]
+                Vec::new()
             }
         } else {
             self.build_helpers()
@@ -434,10 +468,11 @@ impl InjectHelpers {
     fn build_reqire(&self, name: &str, mark: Mark) -> Stmt {
         let c = CallExpr {
             span: DUMMY_SP,
-            callee: Expr::Ident(Ident {
-                span: DUMMY_SP.apply_mark(self.global_mark),
+            callee: Expr::from(Ident {
+                span: DUMMY_SP,
+                ctxt: SyntaxContext::empty().apply_mark(self.global_mark),
                 sym: "require".into(),
-                optional: false,
+                ..Default::default()
             })
             .as_callee(),
             args: vec![Str {
@@ -446,37 +481,32 @@ impl InjectHelpers {
                 raw: None,
             }
             .as_arg()],
-            type_args: None,
+            ..Default::default()
         };
-        let decl = Decl::Var(
-            VarDecl {
+        let ctxt = SyntaxContext::empty().apply_mark(mark);
+        VarDecl {
+            kind: VarDeclKind::Var,
+            decls: vec![VarDeclarator {
                 span: DUMMY_SP,
-                kind: VarDeclKind::Var,
-                declare: false,
-                decls: vec![VarDeclarator {
-                    span: DUMMY_SP,
-                    name: Pat::Ident(
-                        Ident::new(format!("_{}", name).into(), DUMMY_SP.apply_mark(mark)).into(),
-                    ),
-                    init: Some(c.into()),
-                    definite: false,
-                }],
-            }
-            .into(),
-        );
-        Stmt::Decl(decl)
+                name: Pat::Ident(Ident::new(format!("_{}", name).into(), DUMMY_SP, ctxt).into()),
+                init: Some(c.into()),
+                definite: false,
+            }],
+            ..Default::default()
+        }
+        .into()
     }
 
     fn map_helper_ref_ident(&mut self, ref_ident: &Ident) -> Option<Expr> {
         self.helper_ctxt
-            .filter(|ctxt| ctxt == &ref_ident.span.ctxt)
+            .filter(|ctxt| ctxt == &ref_ident.ctxt)
             .map(|_| {
                 let ident = ref_ident.clone().without_loc();
 
                 MemberExpr {
                     span: ref_ident.span,
                     obj: Box::new(ident.into()),
-                    prop: quote_ident!("_").into(),
+                    prop: MemberProp::Ident("_".into()),
                 }
                 .into()
             })
@@ -553,7 +583,7 @@ impl VisitMut for Marker {
     }
 
     fn visit_mut_ident(&mut self, i: &mut Ident) {
-        i.span.ctxt = self.decls.get(&i.sym).copied().unwrap_or(self.base);
+        i.ctxt = self.decls.get(&i.sym).copied().unwrap_or(self.base);
     }
 
     fn visit_mut_member_prop(&mut self, p: &mut MemberProp) {
@@ -564,7 +594,7 @@ impl VisitMut for Marker {
 
     fn visit_mut_param(&mut self, n: &mut Param) {
         if let Pat::Ident(i) = &n.pat {
-            self.decls.insert(i.id.sym.clone(), self.decl_ctxt);
+            self.decls.insert(i.sym.clone(), self.decl_ctxt);
         }
 
         n.visit_mut_children_with(self);
@@ -584,14 +614,14 @@ impl VisitMut for Marker {
 
     fn visit_mut_var_declarator(&mut self, v: &mut VarDeclarator) {
         if let Pat::Ident(i) = &mut v.name {
-            if &*i.id.sym == "id" {
-                i.id.span.ctxt = self.base;
-                self.decls.insert(i.id.sym.clone(), self.base);
+            if &*i.sym == "id" || &*i.sym == "resource" {
+                i.ctxt = self.base;
+                self.decls.insert(i.sym.clone(), self.base);
                 return;
             }
 
-            if !i.id.sym.starts_with("__") {
-                self.decls.insert(i.id.sym.clone(), self.decl_ctxt);
+            if !i.sym.starts_with("__") {
+                self.decls.insert(i.sym.clone(), self.decl_ctxt);
             }
         }
 
@@ -601,11 +631,9 @@ impl VisitMut for Marker {
 
 #[cfg(test)]
 mod tests {
-    use swc_ecma_visit::{as_folder, FoldWith};
     use testing::DebugUsingDisplay;
 
     use super::*;
-    use crate::pass::noop;
 
     #[test]
     fn external_helper() {
@@ -613,9 +641,7 @@ mod tests {
         crate::tests::Tester::run(|tester| {
             HELPERS.set(&Helpers::new(true), || {
                 let expected = tester.apply_transform(
-                    as_folder(DropSpan {
-                        preserve_ctxt: false,
-                    }),
+                    DropSpan,
                     "output.js",
                     Default::default(),
                     "import { _ as _throw } from \"@swc/helpers/_/_throw\";
@@ -625,11 +651,11 @@ _throw();",
 
                 eprintln!("----- Actual -----");
 
-                let tr = as_folder(inject_helpers(Mark::new()));
+                let tr = inject_helpers(Mark::new());
                 let actual = tester
                     .apply_transform(tr, "input.js", Default::default(), input)?
-                    .fold_with(&mut crate::hygiene::hygiene())
-                    .fold_with(&mut crate::fixer::fixer(None));
+                    .apply(crate::hygiene::hygiene())
+                    .apply(crate::fixer::fixer(None));
 
                 if actual == expected {
                     return Ok(());
@@ -658,7 +684,7 @@ _throw();",
             Default::default(),
             |_| {
                 enable_helper!(throw);
-                as_folder(inject_helpers(Mark::new()))
+                inject_helpers(Mark::new())
             },
             "'use strict'",
             "'use strict'
@@ -677,7 +703,7 @@ function _throw(e) {
             Default::default(),
             |_| {
                 enable_helper!(throw);
-                as_folder(inject_helpers(Mark::new()))
+                inject_helpers(Mark::new())
             },
             "let _throw = null",
             "function _throw(e) {
@@ -689,11 +715,12 @@ let _throw1 = null;
             Default::default,
         )
     }
+
     #[test]
     fn use_strict_abort() {
         crate::tests::test_transform(
             Default::default(),
-            |_| noop(),
+            |_| noop_pass(),
             "'use strict'
 
 let x = 4;",
@@ -703,5 +730,85 @@ let x = 4;",
             false,
             Default::default,
         );
+    }
+
+    #[test]
+    fn issue_8871() {
+        crate::tests::test_transform(
+            Default::default(),
+            |_| {
+                enable_helper!(using_ctx);
+                inject_helpers(Mark::new())
+            },
+            "let _throw = null",
+            r#"
+            function _using_ctx() {
+                var _disposeSuppressedError = typeof SuppressedError === "function" ? SuppressedError : function(error, suppressed) {
+                    var err = new Error();
+                    err.name = "SuppressedError";
+                    err.suppressed = suppressed;
+                    err.error = error;
+                    return err;
+                }, empty = {}, stack = [];
+                function using(isAwait, value) {
+                    if (value != null) {
+                        if (Object(value) !== value) {
+                            throw new TypeError("using declarations can only be used with objects, functions, null, or undefined.");
+                        }
+                        if (isAwait) {
+                            var dispose = value[Symbol.asyncDispose || Symbol.for("Symbol.asyncDispose")];
+                        }
+                        if (dispose == null) {
+                            dispose = value[Symbol.dispose || Symbol.for("Symbol.dispose")];
+                        }
+                        if (typeof dispose !== "function") {
+                            throw new TypeError(`Property [Symbol.dispose] is not a function.`);
+                        }
+                        stack.push({
+                            v: value,
+                            d: dispose,
+                            a: isAwait
+                        });
+                    } else if (isAwait) {
+                        stack.push({
+                            d: value,
+                            a: isAwait
+                        });
+                    }
+                    return value;
+                }
+                return {
+                    e: empty,
+                    u: using.bind(null, false),
+                    a: using.bind(null, true),
+                    d: function() {
+                        var error = this.e;
+                        function next() {
+                            while(resource = stack.pop()){
+                                try {
+                                    var resource, disposalResult = resource.d && resource.d.call(resource.v);
+                                    if (resource.a) {
+                                        return Promise.resolve(disposalResult).then(next, err);
+                                    }
+                                } catch (e) {
+                                    return err(e);
+                                }
+                            }
+                            if (error !== empty) throw error;
+                        }
+                        function err(e) {
+                            error = error !== empty ? new _disposeSuppressedError(error, e) : e;
+                            return next();
+                        }
+                        return next();
+                    }
+                };
+            }
+                    
+let _throw = null;
+"#,
+            false,
+            Default::default,
+        )
     }
 }

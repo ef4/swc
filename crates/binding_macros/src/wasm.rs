@@ -25,9 +25,11 @@ pub use swc_common::{
 };
 use swc_common::{sync::Lrc, FilePathMapping, SourceMap};
 #[doc(hidden)]
+pub use swc_ecma_ast::noop_pass;
+#[doc(hidden)]
 pub use swc_ecma_ast::{EsVersion, Program};
 #[doc(hidden)]
-pub use swc_ecma_transforms::{pass::noop, resolver};
+pub use swc_ecma_transforms::resolver;
 #[doc(hidden)]
 pub use swc_ecma_visit::VisitMutWith;
 #[doc(hidden)]
@@ -111,8 +113,8 @@ macro_rules! build_minify_sync {
                       .map_err(|e| $crate::wasm::anyhow::anyhow!("failed to parse options: {}", e))?
                   };
 
-                  let fm = c.cm.new_source_file($crate::wasm::FileName::Anon, s.into());
-                  let program = $crate::wasm::anyhow::Context::context(c.minify(fm, handler, &opts), "failed to minify file")?;
+                  let fm = c.cm.new_source_file($crate::wasm::FileName::Anon.into(), s.into());
+                  let program = $crate::wasm::anyhow::Context::context(c.minify(fm, handler, &opts, Default::default()), "failed to minify file")?;
 
                   program
                     .serialize($crate::wasm::compat_serializer().as_ref())
@@ -167,7 +169,7 @@ macro_rules! build_parse_sync {
                         .map_err(|e| $crate::wasm::anyhow::anyhow!("failed to parse options: {}", e))?
                   };
 
-                  let fm = c.cm.new_source_file($crate::wasm::FileName::Anon, s.into());
+                  let fm = c.cm.new_source_file($crate::wasm::FileName::Anon.into(), s.into());
 
                   let cmts = c.comments().clone();
                   let comments = if opts.comments {
@@ -293,7 +295,7 @@ macro_rules! build_print {
 #[macro_export]
 macro_rules! build_transform_sync {
   ($(#[$m:meta])*) => {
-    build_transform_sync!($(#[$m])*, |_| $crate::wasm::noop(), |_| $crate::wasm::noop(), Default::default());
+    build_transform_sync!($(#[$m])*, |_| $crate::wasm::noop_pass(), |_| $crate::wasm::noop_pass(), Default::default());
   };
   ($(#[$m:meta])*, $before_pass: expr, $after_pass: expr) => {
     build_transform_sync!($(#[$m])*, $before_pass, $after_pass, Default::default());
@@ -371,9 +373,9 @@ macro_rules! build_transform_sync {
                       Ok(s) => {
                           let fm = c.cm.new_source_file(
                               if opts.filename.is_empty() {
-                                $crate::wasm::FileName::Anon
+                                $crate::wasm::FileName::Anon.into()
                               } else {
-                                $crate::wasm::FileName::Real(opts.filename.clone().into())
+                                $crate::wasm::FileName::Real(opts.filename.clone().into()).into()
                               },
                               s.into(),
                           );

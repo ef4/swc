@@ -1,15 +1,15 @@
 //// [arrayLiterals.ts]
 // Empty array literal with no contextual type has type Undefined[]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var arr1 = [
     [],
     [
         1
     ],
     [
-        ""
+        ''
     ]
 ];
 var arr2 = [
@@ -20,20 +20,20 @@ var arr2 = [
         1
     ],
     [
-        ""
+        ''
     ]
 ];
 // Array literal with elements of only EveryType E has type E[]
 var stringArrArr = [
     [
-        ""
+        ''
     ],
     [
         ""
     ]
 ];
 var stringArr = [
-    "",
+    '',
     ""
 ];
 var numberArr = [
@@ -65,9 +65,9 @@ var classTypeArray; // Should OK, not be a parse error
 // Contextual type C with numeric index signature makes array literal of EveryType E of type BCT(E,C)[]
 var context1 = [
     {
-        a: "",
+        a: '',
         b: 0,
-        c: ""
+        c: ''
     },
     {
         a: "",
@@ -77,9 +77,9 @@ var context1 = [
 ];
 var context2 = [
     {
-        a: "",
+        a: '',
         b: 0,
-        c: ""
+        c: ''
     },
     {
         a: "",
@@ -95,20 +95,18 @@ var Base = function Base() {
 var Derived1 = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(Derived1, Base);
-    var _super = _create_super(Derived1);
     function Derived1() {
         _class_call_check(this, Derived1);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived1, arguments);
     }
     return Derived1;
 }(Base);
 var Derived2 = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(Derived2, Base);
-    var _super = _create_super(Derived2);
     function Derived2() {
         _class_call_check(this, Derived2);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived2, arguments);
     }
     return Derived2;
 }(Base);

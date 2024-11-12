@@ -3,14 +3,14 @@ use std::{borrow::Cow, mem};
 use swc_common::{pass::CompilerPass, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::perf::{should_work, Check};
-use swc_ecma_utils::{private_ident, quote_ident, undefined, ExprFactory};
+use swc_ecma_utils::{private_ident, quote_ident, ExprFactory};
 use swc_ecma_visit::{
-    as_folder, noop_visit_mut_type, noop_visit_type, Fold, Visit, VisitMut, VisitMutWith,
+    noop_visit_mut_type, noop_visit_type, visit_mut_pass, Visit, VisitMut, VisitMutWith,
 };
 use swc_trace_macro::swc_trace;
 
-pub fn new_target() -> impl Fold + VisitMut + CompilerPass {
-    as_folder(NewTarget {
+pub fn new_target() -> impl Pass {
+    visit_mut_pass(NewTarget {
         ctx: Ctx::Constructor,
     })
 }
@@ -37,7 +37,7 @@ impl NewTarget {
 
 #[swc_trace]
 impl VisitMut for NewTarget {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_class_method(&mut self, c: &mut ClassMethod) {
         c.key.visit_mut_with(self);
@@ -68,21 +68,23 @@ impl VisitMut for NewTarget {
             };
             match &self.ctx {
                 Ctx::Constructor => *e = this_ctor(*span),
-                Ctx::Method => *e = *undefined(DUMMY_SP),
+                Ctx::Method => *e = *Expr::undefined(DUMMY_SP),
                 Ctx::Function(i) => {
-                    *e = Expr::Cond(CondExpr {
+                    *e = CondExpr {
                         span: *span,
                         // this instanceof Foo
-                        test: Box::new(Expr::Bin(BinExpr {
+                        test: BinExpr {
                             span: DUMMY_SP,
                             op: op!("instanceof"),
                             left: Box::new(Expr::This(ThisExpr { span: DUMMY_SP })),
                             right: Box::new(Expr::Ident(i.clone())),
-                        })),
+                        }
+                        .into(),
                         cons: Box::new(this_ctor(DUMMY_SP)),
                         // void 0
-                        alt: undefined(DUMMY_SP),
-                    })
+                        alt: Expr::undefined(DUMMY_SP),
+                    }
+                    .into()
                 }
             }
         }
@@ -136,7 +138,7 @@ impl VisitMut for NewTarget {
 }
 
 impl CompilerPass for NewTarget {
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("new-target")
     }
 }
@@ -147,7 +149,7 @@ struct ShouldWork {
 }
 
 impl Visit for ShouldWork {
-    noop_visit_type!();
+    noop_visit_type!(fail);
 
     fn visit_meta_prop_expr(&mut self, n: &MetaPropExpr) {
         if let MetaPropExpr {

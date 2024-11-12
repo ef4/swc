@@ -2,7 +2,6 @@
 // Generic functions used as arguments for function typed parameters are not used to make inferences from
 // Using function arguments, no errors expected
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
-var ImmediatelyFix;
 (function(ImmediatelyFix) {
     var C = /*#__PURE__*/ function() {
         "use strict";
@@ -17,13 +16,13 @@ var ImmediatelyFix;
     }();
     var c = new C();
     var r = c.foo(function(x) {
-        return "";
+        return '';
     }); // {}
     var r2 = c.foo(function(x) {
-        return "";
+        return '';
     }); // string 
     var r3 = c.foo(function(x) {
-        return "";
+        return '';
     }); // {}
     var C2 = /*#__PURE__*/ function() {
         "use strict";
@@ -44,7 +43,6 @@ var ImmediatelyFix;
         return 1;
     }); // number
 })(ImmediatelyFix || (ImmediatelyFix = {}));
-var WithCandidates;
 (function(WithCandidates) {
     var C = /*#__PURE__*/ function() {
         "use strict";
@@ -59,12 +57,12 @@ var WithCandidates;
     }();
     var c;
     var r4 = c.foo2(1, function(a) {
-        return "";
+        return '';
     }); // string, contextual signature instantiation is applied to generic functions
     var r5 = c.foo2(1, function(a) {
-        return "";
+        return '';
     }); // string
-    var r6 = c.foo2("", function(a) {
+    var r6 = c.foo2('', function(a) {
         return 1;
     }); // number
     var C2 = /*#__PURE__*/ function() {
@@ -80,11 +78,11 @@ var WithCandidates;
     }();
     var c2;
     var r7 = c2.foo3(1, function(a) {
-        return "";
-    }, ""); // string
+        return '';
+    }, ''); // string
     var r8 = c2.foo3(1, function(a) {
-        return "";
-    }, ""); // string
+        return '';
+    }, ''); // string
     var C3 = /*#__PURE__*/ function() {
         "use strict";
         function C3() {
@@ -99,19 +97,20 @@ var WithCandidates;
     var c3;
     function other(t, u) {
         var r10 = c.foo2(1, function(x) {
-            return "";
+            return '';
         }); // error
         var r10 = c.foo2(1, function(x) {
-            return "";
+            return '';
         }); // string
         var r11 = c3.foo3(1, function(x) {
-            return "";
-        }, ""); // error
+            return '';
+        }, ''); // error
         var r11b = c3.foo3(1, function(x) {
-            return "";
+            return '';
         }, 1); // error
         var r12 = c3.foo3(1, function(a) {
-            return "";
+            return '';
         }, 1); // error
     }
 })(WithCandidates || (WithCandidates = {}));
+var ImmediatelyFix, WithCandidates;

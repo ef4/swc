@@ -25,11 +25,12 @@ impl VisitMut for ConsoleOutputReplacer {
                         self.metadata.source_map.lookup_char_pos(ident.span.lo)
                     );
                     if ident.sym == *"console" {
-                        call.args[0].expr = Box::new(Expr::Lit(Lit::Str(Str {
+                        call.args[0].expr = Lit::Str(Str {
                             span: DUMMY_SP,
                             value: JsWord::from("changed_via_plugin"),
                             raw: Some(Atom::from("\"changed_via_plugin\"")),
-                        })));
+                        })
+                        .into();
                     }
                 }
             }
@@ -58,29 +59,39 @@ impl VisitMut for ConsoleOutputReplacer {
 /// important steps manually need to be performed like sending transformed
 /// results back to host. Refer swc_plugin_macro how does it work internally.
 #[plugin_transform]
-pub fn process(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
+pub fn process(mut program: Program, metadata: TransformPluginProgramMetadata) -> Program {
+    dbg!();
     HANDLER.with(|handler| {
         handler
             .struct_span_err(DUMMY_SP, "Test diagnostics from plugin")
             .emit();
     });
+    dbg!();
 
     let _stmt = quote!(
         "const $name = 4;" as Stmt,
-        name = Ident::new("ref".into(), DUMMY_SP)
+        name = Ident::new_no_ctxt("ref".into(), DUMMY_SP)
     );
+
+    dbg!();
 
     let filename = metadata
         .get_context(&TransformPluginMetadataContextKind::Filename)
         .expect("Filename should exists");
 
+    dbg!();
+
     let env = metadata
         .get_context(&TransformPluginMetadataContextKind::Env)
         .expect("Metadata should exists");
+
+    dbg!();
+
     if env != "development" {
         panic!("Env should be development");
     }
 
+    dbg!();
     let experimental_value = metadata
         .get_experimental_context("TestExperimental")
         .expect("Experimental metadata should exist");
@@ -90,19 +101,29 @@ pub fn process(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
         panic!("Experimental metadata should be `ExperimentalValue`");
     }
 
+    dbg!();
+
     let experimental_value = metadata
         .get_experimental_context("OtherTest")
         .expect("Experimental metadata 'othertest' should exist");
+
+    dbg!();
 
     if &experimental_value != "OtherVal" {
         panic!("Experimental metadata 'othertest' should be `OtherVal`");
     }
 
+    dbg!();
+
     let nonexistent_value = metadata.get_experimental_context("Nonexistent");
+
+    dbg!();
 
     if nonexistent_value.is_some() {
         panic!("Experimental metadata 'nonexistent' should not exist");
     }
+
+    dbg!();
 
     let plugin_config = metadata
         .get_transform_plugin_config()
@@ -111,5 +132,8 @@ pub fn process(program: Program, metadata: TransformPluginProgramMetadata) -> Pr
         panic!("Plugin config should be testValue");
     }
 
-    program.fold_with(&mut as_folder(ConsoleOutputReplacer { metadata }))
+    dbg!();
+
+    program.visit_mut_with(&mut ConsoleOutputReplacer { metadata });
+    program
 }

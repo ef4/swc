@@ -6,19 +6,22 @@ use swc_common::Spanned;
 use super::{util::ExprExt, *};
 use crate::{
     parser::{class_and_fn::is_not_this, expr::AssignTargetOrSpread},
-    token::IdentLike,
+    token::{IdentLike, Keyword},
 };
 
 impl<I: Tokens> Parser<I> {
     pub fn parse_pat(&mut self) -> PResult<Pat> {
-        self.parse_binding_pat_or_ident()
+        self.parse_binding_pat_or_ident(false)
     }
 
-    pub(super) fn parse_opt_binding_ident(&mut self) -> PResult<Option<BindingIdent>> {
+    pub(super) fn parse_opt_binding_ident(
+        &mut self,
+        disallow_let: bool,
+    ) -> PResult<Option<BindingIdent>> {
         trace_cur!(self, parse_opt_binding_ident);
 
         if is!(self, BindingIdent) || (self.input.syntax().typescript() && is!(self, "this")) {
-            self.parse_binding_ident().map(Some)
+            self.parse_binding_ident(disallow_let).map(Some)
         } else {
             Ok(None)
         }
@@ -27,8 +30,14 @@ impl<I: Tokens> Parser<I> {
     /// babel: `parseBindingIdentifier`
     ///
     /// spec: `BindingIdentifier`
-    pub(super) fn parse_binding_ident(&mut self) -> PResult<BindingIdent> {
+    pub(super) fn parse_binding_ident(&mut self, disallow_let: bool) -> PResult<BindingIdent> {
         trace_cur!(self, parse_binding_ident);
+
+        if disallow_let {
+            if let Some(Token::Word(Word::Keyword(Keyword::Let))) = self.input.cur() {
+                unexpected!(self, "let is reserved in const, let, class declaration")
+            }
+        }
 
         // "yield" and "await" is **lexically** accepted.
         let ident = self.parse_ident(true, true)?;
@@ -45,11 +54,11 @@ impl<I: Tokens> Parser<I> {
         Ok(ident.into())
     }
 
-    pub(super) fn parse_binding_pat_or_ident(&mut self) -> PResult<Pat> {
+    pub(super) fn parse_binding_pat_or_ident(&mut self, disallow_let: bool) -> PResult<Pat> {
         trace_cur!(self, parse_binding_pat_or_ident);
 
-        match *cur!(self, true)? {
-            tok!("yield") | Word(..) => self.parse_binding_ident().map(Pat::from),
+        match *cur!(self, true) {
+            tok!("yield") | Word(..) => self.parse_binding_ident(disallow_let).map(Pat::from),
             tok!('[') => self.parse_array_binding_pat(),
             tok!('{') => self.parse_object(),
             // tok!('(') => {
@@ -67,7 +76,7 @@ impl<I: Tokens> Parser<I> {
         trace_cur!(self, parse_binding_element);
 
         let start = cur_pos!(self);
-        let left = self.parse_binding_pat_or_ident()?;
+        let left = self.parse_binding_pat_or_ident(false)?;
 
         if eat!(self, '=') {
             let right = self.include_in_expr(true).parse_assignment_expr()?;
@@ -76,11 +85,12 @@ impl<I: Tokens> Parser<I> {
                 self.emit_err(span!(self, start), SyntaxError::TS2371);
             }
 
-            return Ok(Pat::Assign(AssignPat {
+            return Ok(AssignPat {
                 span: span!(self, start),
                 left: Box::new(left),
                 right,
-            }));
+            }
+            .into());
         }
 
         Ok(left)
@@ -91,7 +101,7 @@ impl<I: Tokens> Parser<I> {
 
         assert_and_bump!(self, '[');
 
-        let mut elems = vec![];
+        let mut elems = Vec::new();
         let mut comma = 0;
         let mut rest_span = Span::default();
 
@@ -115,14 +125,15 @@ impl<I: Tokens> Parser<I> {
                 is_rest = true;
                 let dot3_token = span!(self, start);
 
-                let pat = self.parse_binding_pat_or_ident()?;
+                let pat = self.parse_binding_pat_or_ident(false)?;
                 rest_span = span!(self, start);
-                let pat = Pat::Rest(RestPat {
+                let pat = RestPat {
                     span: rest_span,
                     dot3_token,
                     arg: Box::new(pat),
                     type_ann: None,
-                });
+                }
+                .into();
                 elems.push(Some(pat));
             } else {
                 elems.push(self.parse_binding_element().map(Some)?);
@@ -139,12 +150,13 @@ impl<I: Tokens> Parser<I> {
         expect!(self, ']');
         let optional = (self.input.syntax().dts() || self.ctx().in_declare) && eat!(self, '?');
 
-        Ok(Pat::Array(ArrayPat {
+        Ok(ArrayPat {
             span: span!(self, start),
             elems,
             optional,
             type_ann: None,
-        }))
+        }
+        .into())
     }
 
     pub(super) fn eat_any_ts_modifier(&mut self) -> PResult<bool> {
@@ -214,11 +226,6 @@ impl<I: Tokens> Parser<I> {
                     ref mut span,
                     ..
                 })
-                | Pat::Ident(BindingIdent {
-                    ref mut type_ann,
-                    id: Ident { ref mut span, .. },
-                    ..
-                })
                 | Pat::Object(ObjectPat {
                     ref mut type_ann,
                     ref mut span,
@@ -231,13 +238,21 @@ impl<I: Tokens> Parser<I> {
                 }) => {
                     let new_type_ann = self.try_parse_ts_type_ann()?;
                     if new_type_ann.is_some() {
-                        *span = Span::new(pat_start, self.input.prev_span().hi, Default::default());
+                        *span = Span::new(pat_start, self.input.prev_span().hi);
                     }
                     *type_ann = new_type_ann;
                 }
+
+                Pat::Ident(BindingIdent {
+                    ref mut type_ann, ..
+                }) => {
+                    let new_type_ann = self.try_parse_ts_type_ann()?;
+                    *type_ann = new_type_ann;
+                }
+
                 Pat::Assign(AssignPat { ref mut span, .. }) => {
                     if (self.try_parse_ts_type_ann()?).is_some() {
-                        *span = Span::new(pat_start, self.input.prev_span().hi, Default::default());
+                        *span = Span::new(pat_start, self.input.prev_span().hi);
                         self.emit_err(*span, SyntaxError::TSTypeAnnotationAfterAssign);
                     }
                 }
@@ -257,11 +272,12 @@ impl<I: Tokens> Parser<I> {
                 self.emit_err(span!(self, start), SyntaxError::TS2371);
             }
 
-            Pat::Assign(AssignPat {
+            AssignPat {
                 span: span!(self, start),
                 left: Box::new(pat),
                 right,
-            })
+            }
+            .into()
         } else {
             pat
         };
@@ -275,7 +291,7 @@ impl<I: Tokens> Parser<I> {
     }
 
     pub(super) fn parse_constructor_params(&mut self) -> PResult<Vec<ParamOrTsParamProp>> {
-        let mut params = vec![];
+        let mut params = Vec::new();
         let mut rest_span = Span::default();
 
         while !eof!(self) && !is!(self, ')') {
@@ -292,7 +308,7 @@ impl<I: Tokens> Parser<I> {
                 is_rest = true;
                 let dot3_token = span!(self, pat_start);
 
-                let pat = self.parse_binding_pat_or_ident()?;
+                let pat = self.parse_binding_pat_or_ident(false)?;
                 let type_ann = if self.input.syntax().typescript() && is!(self, ':') {
                     let cur_pos = cur_pos!(self);
                     Some(self.parse_ts_type_ann(/* eat_colon */ true, cur_pos)?)
@@ -301,12 +317,13 @@ impl<I: Tokens> Parser<I> {
                 };
 
                 rest_span = span!(self, pat_start);
-                let pat = Pat::Rest(RestPat {
+                let pat = RestPat {
                     span: rest_span,
                     dot3_token,
                     arg: Box::new(pat),
                     type_ann,
-                });
+                }
+                .into();
                 params.push(ParamOrTsParamProp::Param(Param {
                     span: span!(self, param_start),
                     decorators,
@@ -389,7 +406,7 @@ impl<I: Tokens> Parser<I> {
     }
 
     pub(super) fn parse_formal_params(&mut self) -> PResult<Vec<Param>> {
-        let mut params = vec![];
+        let mut params = Vec::new();
         let mut rest_span = Span::default();
 
         while !eof!(self) && !is!(self, ')') {
@@ -404,7 +421,7 @@ impl<I: Tokens> Parser<I> {
             let pat = if eat!(self, "...") {
                 let dot3_token = span!(self, pat_start);
 
-                let mut pat = self.parse_binding_pat_or_ident()?;
+                let mut pat = self.parse_binding_pat_or_ident(false)?;
 
                 if eat!(self, '=') {
                     let right = self.parse_assignment_expr()?;
@@ -426,12 +443,13 @@ impl<I: Tokens> Parser<I> {
                 };
 
                 rest_span = span!(self, pat_start);
-                let pat = Pat::Rest(RestPat {
+                let pat = RestPat {
                     span: rest_span,
                     dot3_token,
                     arg: Box::new(pat),
                     type_ann,
-                });
+                }
+                .into();
 
                 if self.syntax().typescript() && eat!(self, '?') {
                     self.emit_err(self.input.prev_span(), SyntaxError::TS1047);
@@ -467,7 +485,6 @@ impl<I: Tokens> Parser<I> {
     }
 }
 
-///
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatType {
     BindingPat,
@@ -491,7 +508,7 @@ impl<I: Tokens> Parser<I> {
     /// rest.
     pub(super) fn reparse_expr_as_pat(&mut self, pat_ty: PatType, expr: Box<Expr>) -> PResult<Pat> {
         if let Expr::Invalid(i) = *expr {
-            return Ok(Pat::Invalid(i));
+            return Ok(i.into());
         }
 
         if pat_ty == PatType::AssignPat {
@@ -534,11 +551,11 @@ impl<I: Tokens> Parser<I> {
                     // to these rules if that phrase were substituted for
                     // LeftHandSideExpression. This rule is recursively applied.
                     Expr::Paren(..) => {
-                        return Ok(Pat::Expr(expr));
+                        return Ok(expr.into());
                     }
                     Expr::Ident(i) => return Ok(i.into()),
                     _ => {
-                        return Ok(Pat::Expr(expr));
+                        return Ok(expr.into());
                     }
                 },
             }
@@ -570,7 +587,7 @@ impl<I: Tokens> Parser<I> {
                     match *expr {
                         Expr::Ident(i) => return Ok(i.into()),
                         _ => {
-                            return Ok(Pat::Expr(expr));
+                            return Ok(expr.into());
                         }
                     }
                 }
@@ -585,7 +602,7 @@ impl<I: Tokens> Parser<I> {
         match *expr {
             Expr::Paren(..) => {
                 self.emit_err(span, SyntaxError::InvalidPat);
-                Ok(Pat::Invalid(Invalid { span }))
+                Ok(Invalid { span }.into())
             }
             Expr::Assign(
                 assign_expr @ AssignExpr {
@@ -596,7 +613,7 @@ impl<I: Tokens> Parser<I> {
                 let AssignExpr {
                     span, left, right, ..
                 } = assign_expr;
-                Ok(Pat::Assign(AssignPat {
+                Ok(AssignPat {
                     span,
                     left: match left {
                         AssignTarget::Simple(left) => {
@@ -605,7 +622,8 @@ impl<I: Tokens> Parser<I> {
                         AssignTarget::Pat(pat) => pat.into(),
                     },
                     right,
-                }))
+                }
+                .into())
             }
             Expr::Object(ObjectLit {
                 span: object_span,
@@ -613,7 +631,7 @@ impl<I: Tokens> Parser<I> {
             }) => {
                 // {}
                 let len = props.len();
-                Ok(Pat::Object(ObjectPat {
+                Ok(ObjectPat {
                     span: object_span,
                     props: props
                         .into_iter()
@@ -688,19 +706,21 @@ impl<I: Tokens> Parser<I> {
                         .collect::<PResult<_>>()?,
                     optional: false,
                     type_ann: None,
-                }))
+                }
+                .into())
             }
             Expr::Ident(ident) => Ok(ident.into()),
             Expr::Array(ArrayLit {
                 elems: mut exprs, ..
             }) => {
                 if exprs.is_empty() {
-                    return Ok(Pat::Array(ArrayPat {
+                    return Ok(ArrayPat {
                         span,
-                        elems: vec![],
+                        elems: Vec::new(),
                         optional: false,
                         type_ann: None,
-                    }));
+                    }
+                    .into());
                 }
 
                 // Trailing comma may exist. We should remove those commas.
@@ -751,12 +771,13 @@ impl<I: Tokens> Parser<I> {
                             let expr_span = expr.span();
                             self.reparse_expr_as_pat(pat_ty.element(), expr)
                                 .map(|pat| {
-                                    Pat::Rest(RestPat {
+                                    RestPat {
                                         span: expr_span,
                                         dot3_token,
                                         arg: Box::new(pat),
                                         type_ann: None,
-                                    })
+                                    }
+                                    .into()
                                 })
                                 .map(Some)?
                         }
@@ -769,30 +790,31 @@ impl<I: Tokens> Parser<I> {
                     };
                     params.push(last);
                 }
-                Ok(Pat::Array(ArrayPat {
+                Ok(ArrayPat {
                     span,
                     elems: params,
                     optional: false,
                     type_ann: None,
-                }))
+                }
+                .into())
             }
 
             // Invalid patterns.
             // Note that assignment expression with '=' is valid, and handled above.
             Expr::Lit(..) | Expr::Assign(..) => {
                 self.emit_err(span, SyntaxError::InvalidPat);
-                Ok(Pat::Invalid(Invalid { span }))
+                Ok(Invalid { span }.into())
             }
 
             Expr::Yield(..) if self.ctx().in_generator => {
                 self.emit_err(span, SyntaxError::InvalidPat);
-                Ok(Pat::Invalid(Invalid { span }))
+                Ok(Invalid { span }.into())
             }
 
             _ => {
                 self.emit_err(span, SyntaxError::InvalidPat);
 
-                Ok(Pat::Invalid(Invalid { span }))
+                Ok(Invalid { span }.into())
             }
         }
     }
@@ -806,7 +828,7 @@ impl<I: Tokens> Parser<I> {
 
         let len = exprs.len();
         if len == 0 {
-            return Ok(vec![]);
+            return Ok(Vec::new());
         }
 
         let mut params = Vec::with_capacity(len);
@@ -843,12 +865,13 @@ impl<I: Tokens> Parser<I> {
                 }
                 let expr_span = expr.span();
                 self.reparse_expr_as_pat(pat_ty, expr).map(|pat| {
-                    Pat::Rest(RestPat {
+                    RestPat {
                         span: expr_span,
                         dot3_token,
                         arg: Box::new(pat),
                         type_ann: None,
-                    })
+                    }
+                    .into()
                 })?
             }
             AssignTargetOrSpread::ExprOrSpread(ExprOrSpread { expr, .. }) => {
@@ -880,8 +903,8 @@ impl<I: Tokens> Parser<I> {
     fn pat_is_valid_argument_in_strict(&self, pat: &Pat) {
         match pat {
             Pat::Ident(i) => {
-                if i.id.is_reserved_in_strict_bind() {
-                    self.emit_strict_mode_err(i.id.span, SyntaxError::EvalAndArgumentsInStrict)
+                if i.is_reserved_in_strict_bind() {
+                    self.emit_strict_mode_err(i.span, SyntaxError::EvalAndArgumentsInStrict)
                 }
             }
             Pat::Array(arr) => {
@@ -926,20 +949,29 @@ mod tests {
     }
 
     fn object_pat(s: &'static str) -> Pat {
-        test_parser(s, Syntax::default(), |p| p.parse_binding_pat_or_ident())
+        test_parser(s, Syntax::default(), |p| {
+            p.parse_binding_pat_or_ident(false)
+        })
     }
 
     fn ident(s: &str) -> Ident {
-        Ident::new(s.into(), span)
+        Ident::new_no_ctxt(s.into(), span)
+    }
+
+    fn ident_name(s: &str) -> IdentName {
+        IdentName::new(s.into(), span)
     }
 
     fn rest() -> Option<Pat> {
-        Some(Pat::Rest(RestPat {
-            span,
-            dot3_token: span,
-            type_ann: None,
-            arg: Box::new(Pat::Ident(ident("tail").into())),
-        }))
+        Some(
+            RestPat {
+                span,
+                dot3_token: span,
+                type_ann: None,
+                arg: ident("tail").into(),
+            }
+            .into(),
+        )
     }
 
     #[test]
@@ -1147,12 +1179,13 @@ mod tests {
         fn prop(key: PropName, assign_name: &str, expr: Expr) -> PropOrSpread {
             PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                 key,
-                value: Box::new(Expr::Assign(AssignExpr {
+                value: AssignExpr {
                     span,
                     op: AssignOp::Assign,
                     left: ident(assign_name).into(),
                     right: Box::new(expr),
-                })),
+                }
+                .into(),
             })))
         }
 
@@ -1171,7 +1204,7 @@ mod tests {
                         span,
                         props: vec![
                             prop(
-                                PropName::Ident(ident("$")),
+                                PropName::Ident(ident_name("$")),
                                 "num",
                                 Expr::Lit(Lit::Num(Number {
                                     span,
@@ -1206,7 +1239,7 @@ mod tests {
                                 }))
                             ),
                             prop(
-                                PropName::Ident(ident("_")),
+                                PropName::Ident(ident_name("_")),
                                 "under",
                                 Expr::Array(ArrayLit {
                                     span,

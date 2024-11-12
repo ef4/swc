@@ -1,7 +1,7 @@
 //// [ifDoWhileStatements.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var M, N, M1, N1, C = function C() {
     _class_call_check(this, C);
 }, D = function D() {
@@ -42,7 +42,7 @@ for(;;);
 for(var c = void 0; c;);
 do ;
 while (c);
-for(var e = "a string"; e;);
+for(var e = 'a string'; e;);
 do ;
 while (e);
 for(var g = /[a-z]/; g;);
@@ -62,7 +62,7 @@ do ;
 while (j);
 for(var k = {
     x: 1,
-    y: "a"
+    y: 'a'
 }; k;);
 do ;
 while (k);

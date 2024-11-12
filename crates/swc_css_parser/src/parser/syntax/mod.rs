@@ -29,7 +29,7 @@ where
 
         // Return the stylesheet.
         Ok(Stylesheet {
-            span: Span::new(start.lo, last, Default::default()),
+            span: Span::new(start.lo, last),
             rules,
         })
     }
@@ -43,7 +43,7 @@ where
         // To consume a list of rules, given a top-level flag:
 
         // Create an initially empty list of rules.
-        let mut rules = vec![];
+        let mut rules = Vec::new();
 
         // Repeatedly consume the next input token:
 
@@ -107,7 +107,7 @@ where
                             let span = self.input.cur_span();
                             let mut list_of_component_values = ListOfComponentValues {
                                 span: Default::default(),
-                                children: vec![],
+                                children: Vec::new(),
                             };
 
                             while !is_one_of!(self, EOF) {
@@ -150,18 +150,18 @@ where
         let is_dashed_ident = at_keyword_name.0.starts_with("--");
         let name = if is_dashed_ident {
             AtRuleName::DashedIdent(DashedIdent {
-                span: Span::new(span.lo + BytePos(1), span.hi, Default::default()),
+                span: Span::new(span.lo + BytePos(1), span.hi),
                 value: self.input.atom(&at_keyword_name.0[2..]),
                 raw: Some(at_keyword_name.1),
             })
         } else {
             AtRuleName::Ident(Ident {
-                span: Span::new(span.lo + BytePos(1), span.hi, Default::default()),
+                span: Span::new(span.lo + BytePos(1), span.hi),
                 value: at_keyword_name.0,
                 raw: Some(at_keyword_name.1),
             })
         };
-        let mut prelude = vec![];
+        let mut prelude = Vec::new();
         let mut at_rule = AtRule {
             span: Default::default(),
             name,
@@ -256,7 +256,7 @@ where
         // Create a new qualified rule with its prelude initially set to an empty list,
         // and its value initially set to nothing.
         let span = self.input.cur_span();
-        let mut prelude = vec![];
+        let mut prelude = Vec::new();
 
         // Repeatedly consume the next input token:
         loop {
@@ -323,8 +323,8 @@ where
     I: ParserInput,
 {
     fn parse(&mut self) -> PResult<Vec<StyleBlock>> {
-        let mut declarations = vec![];
-        let mut rules = vec![];
+        let mut declarations = Vec::new();
+        let mut rules = Vec::new();
 
         loop {
             // <EOF-token>
@@ -350,11 +350,8 @@ where
                     if let Some(StyleBlock::ListOfComponentValues(list_of_component_values)) =
                         declarations.last_mut()
                     {
-                        list_of_component_values.span = Span::new(
-                            list_of_component_values.span_lo(),
-                            token_and_span.span_hi(),
-                            Default::default(),
-                        );
+                        list_of_component_values.span =
+                            Span::new(list_of_component_values.span_lo(), token_and_span.span_hi());
                         list_of_component_values
                             .children
                             .push(ComponentValue::PreservedToken(Box::new(token_and_span)));
@@ -396,7 +393,7 @@ where
                     let span = self.input.cur_span();
                     let mut temporary_list = ListOfComponentValues {
                         span: Default::default(),
-                        children: vec![],
+                        children: Vec::new(),
                     };
 
                     while !is_one_of!(self, ";", EOF) {
@@ -446,7 +443,7 @@ where
                             // For recovery mode
                             let mut list_of_component_values = ListOfComponentValues {
                                 span: Default::default(),
-                                children: vec![],
+                                children: Vec::new(),
                             };
 
                             while !is_one_of!(self, ";", EOF) {
@@ -474,7 +471,7 @@ where
 {
     fn parse(&mut self) -> PResult<Vec<DeclarationOrAtRule>> {
         // Create an initially empty list of declarations.
-        let mut declarations = vec![];
+        let mut declarations = Vec::new();
 
         // Repeatedly consume the next input token:
         loop {
@@ -500,11 +497,8 @@ where
                         list_of_component_values,
                     )) = declarations.last_mut()
                     {
-                        list_of_component_values.span = Span::new(
-                            list_of_component_values.span_lo(),
-                            token_and_span.span_hi(),
-                            Default::default(),
-                        );
+                        list_of_component_values.span =
+                            Span::new(list_of_component_values.span_lo(), token_and_span.span_hi());
                         list_of_component_values
                             .children
                             .push(ComponentValue::PreservedToken(Box::new(token_and_span)));
@@ -533,7 +527,7 @@ where
                     let span = self.input.cur_span();
                     let mut temporary_list = ListOfComponentValues {
                         span: Default::default(),
-                        children: vec![],
+                        children: Vec::new(),
                     };
 
                     while !is_one_of!(self, ";", EOF) {
@@ -574,7 +568,7 @@ where
                     // For recovery mode
                     let mut list_of_component_values = ListOfComponentValues {
                         span: Default::default(),
-                        children: vec![],
+                        children: Vec::new(),
                     };
 
                     while !is_one_of!(self, ";", EOF) {
@@ -636,7 +630,7 @@ where
         let mut declaration = Declaration {
             span: Default::default(),
             name,
-            value: vec![],
+            value: Vec::new(),
             important: None,
         };
 
@@ -746,11 +740,7 @@ where
         if let (Some(exclamation_point_span), Some(important_ident)) =
             (exclamation_point_span, important_ident)
         {
-            let span = Span::new(
-                exclamation_point_span.lo,
-                important_ident.span_hi(),
-                Default::default(),
-            );
+            let span = Span::new(exclamation_point_span.lo, important_ident.span_hi());
             let value = match important_ident.token {
                 Token::Ident { value, raw, .. } => (value, raw),
                 _ => {
@@ -862,7 +852,7 @@ where
         let mut simple_block = SimpleBlock {
             span: Default::default(),
             name,
-            value: vec![],
+            value: Vec::new(),
         };
 
         // Repeatedly consume the next input token and process it as follows:
@@ -944,13 +934,13 @@ where
         let is_dashed_ident = function_name.0.starts_with("--");
         let name = if is_dashed_ident {
             FunctionName::DashedIdent(DashedIdent {
-                span: Span::new(span.lo, span.hi - BytePos(1), Default::default()),
+                span: Span::new(span.lo, span.hi - BytePos(1)),
                 value: self.input.atom(&function_name.0[2..]),
                 raw: Some(function_name.1),
             })
         } else {
             FunctionName::Ident(Ident {
-                span: Span::new(span.lo, span.hi - BytePos(1), Default::default()),
+                span: Span::new(span.lo, span.hi - BytePos(1)),
                 value: function_name.0,
                 raw: Some(function_name.1),
             })
@@ -958,7 +948,7 @@ where
         let mut function = Function {
             span: Default::default(),
             name,
-            value: vec![],
+            value: Vec::new(),
         };
 
         // Repeatedly consume the next input token and process it as follows:
@@ -1010,7 +1000,7 @@ where
 {
     fn parse(&mut self) -> PResult<ListOfComponentValues> {
         let span = self.input.cur_span();
-        let mut children = vec![];
+        let mut children = Vec::new();
 
         // Repeatedly consume a component value from input until an <EOF-token> is
         // returned, appending the returned values (except the final <EOF-token>) into a

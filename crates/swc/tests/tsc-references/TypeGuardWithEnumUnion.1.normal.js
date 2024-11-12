@@ -1,10 +1,11 @@
 //// [TypeGuardWithEnumUnion.ts]
-var Color;
-(function(Color) {
+import { _ as _type_of } from "@swc/helpers/_/_type_of";
+var Color = /*#__PURE__*/ function(Color) {
     Color[Color["R"] = 0] = "R";
     Color[Color["G"] = 1] = "G";
     Color[Color["B"] = 2] = "B";
-})(Color || (Color = {}));
+    return Color;
+}(Color || {});
 function f1(x) {
     if (typeof x === "number") {
         var y = x;
@@ -15,7 +16,7 @@ function f1(x) {
     }
 }
 function f2(x) {
-    if (typeof x === "object") {
+    if ((typeof x === "undefined" ? "undefined" : _type_of(x)) === "object") {
         var y = x;
         var y;
     }

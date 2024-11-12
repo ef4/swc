@@ -1,29 +1,25 @@
 //// [a.js]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
-var _this = this, B = function() {
+var _this = this, B = /*#__PURE__*/ function() {
     function B() {
         _class_call_check(this, B), this.n = 1;
     }
     return B.prototype.foo = function() {}, B;
 }();
-(function(B) {
-    _inherits(C, B);
-    var _super = _create_super(C);
+/*#__PURE__*/ (function(B) {
     function C() {
-        return _class_call_check(this, C), _super.apply(this, arguments);
+        return _class_call_check(this, C), _call_super(this, C, arguments);
     }
-    return C;
-})(B).prototype.foo = function() {}, function(B) {
-    _inherits(D, B);
-    var _super = _create_super(D);
+    return _inherits(C, B), C;
+})(B).prototype.foo = function() {}, /*#__PURE__*/ function(B) {
     function D() {
-        return _class_call_check(this, D), _super.apply(this, arguments);
+        return _class_call_check(this, D), _call_super(this, D, arguments);
     }
-    return D;
+    return _inherits(D, B), D;
 }(B).prototype.foo = function() {
-    _this.n = "not checked, so no error";
+    _this.n = 'not checked, so no error';
 };
 var Module = function Module() {
     _class_call_check(this, Module);

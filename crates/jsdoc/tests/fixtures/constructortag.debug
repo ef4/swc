@@ -1,85 +1,29 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                1,
-            ),
-            hi: BytePos(
-                1,
-            ),
-            ctxt: #0,
-        },
+        span: 1..1,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    1,
-                ),
-                hi: BytePos(
-                    41,
-                ),
-                ctxt: #0,
-            },
+            span: 1..41,
             value: "Describe your constructor function here.",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        6,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..6,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            6,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..6,
                     value: "class",
                 },
                 tag: Class(
                     ClassTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                6,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..6,
                         ty: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        1,
-                                    ),
-                                    hi: BytePos(
-                                        26,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 1..26,
                                 value: "Describe your class here.",
                             },
                         ),
                         name: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        1,
-                                    ),
-                                    hi: BytePos(
-                                        13,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 1..13,
                                 value: "@constructor",
                             },
                         ),
@@ -87,111 +31,39 @@
                 ),
             },
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        6,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..6,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            6,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..6,
                     value: "param",
                 },
                 tag: Parameter(
                     ParameterTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                6,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..6,
                         name: None,
                         ty: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        1,
-                                    ),
-                                    hi: BytePos(
-                                        9,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 1..9,
                                 value: "{string}",
                             },
                         ),
                         desc: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    4,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..4,
                             value: "url",
                         },
                     },
                 ),
             },
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        7,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..7,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            7,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..7,
                     value: "throws",
                 },
                 tag: Throw(
                     ThrowTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                7,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..7,
                         text: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    13,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..13,
                             value: "MalformedURL",
                         },
                     },
@@ -200,25 +72,9 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                181,
-            ),
-            hi: BytePos(
-                181,
-            ),
-            ctxt: #0,
-        },
+        span: 181..181,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    181,
-                ),
-                hi: BytePos(
-                    207,
-                ),
-                ctxt: #0,
-            },
+            span: 181..207,
             value: "Document your method here.",
         },
         tags: [],

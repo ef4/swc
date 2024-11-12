@@ -1,7 +1,7 @@
 use indexmap::IndexSet;
 use preset_env_base::version::{should_enable, Version};
-use swc_atoms::{js_word, JsWord};
-use swc_common::{collections::ARandomState, DUMMY_SP};
+use swc_atoms::JsWord;
+use swc_common::collections::ARandomState;
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 
@@ -25,7 +25,7 @@ pub(crate) struct UsageVisitor {
 
 impl UsageVisitor {
     pub fn new(target: Versions, shipped_proposals: bool, corejs_version: Version) -> Self {
-        //        let mut v = Self { required: vec![] };
+        //        let mut v = Self { required: Vec::new() };
         //
         //
         //        let is_web_target = target
@@ -154,7 +154,7 @@ impl UsageVisitor {
 }
 
 impl Visit for UsageVisitor {
-    noop_visit_type!();
+    noop_visit_type!(fail);
 
     /// `[a, b] = c`
     fn visit_array_pat(&mut self, p: &ArrayPat) {
@@ -254,7 +254,7 @@ impl Visit for UsageVisitor {
                 self.visit_object_pat_props(init, &o.props)
             }
         } else if let Pat::Object(ref o) = d.name {
-            self.visit_object_pat_props(&Expr::Ident(Ident::new(js_word!(""), DUMMY_SP)), &o.props)
+            self.visit_object_pat_props(&Ident::default().into(), &o.props)
         }
     }
 

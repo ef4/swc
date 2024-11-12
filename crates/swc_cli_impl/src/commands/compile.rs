@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{self, Read, Write},
+    io::{self, IsTerminal, Read, Write},
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
@@ -146,6 +146,7 @@ fn get_files_list(
             .into_iter()
             .filter_map(|e| e.ok())
             .map(|e| e.into_path())
+            .filter(|e| e.is_file())
             .filter(|e| {
                 extensions
                     .iter()
@@ -237,7 +238,17 @@ fn emit_output(
             fs::write(source_map_path, source_map)?;
         }
 
-        fs::write(output_file_path, &output.code)?;
+        fs::write(&output_file_path, &output.code)?;
+
+        if let Some(extra) = &output.output {
+            let mut extra: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_str(extra).context("failed to parse extra output")?;
+
+            if let Some(dts_code) = extra.remove("__swc_isolated_declarations__") {
+                let dts_file_path = output_file_path.with_extension("d.ts");
+                fs::write(dts_file_path, dts_code.as_str().unwrap())?;
+            }
+        }
     } else {
         let source_map = if let Some(ref source_map) = output.map {
             &**source_map
@@ -251,12 +262,13 @@ fn emit_output(
 }
 
 fn collect_stdin_input() -> Option<String> {
-    if atty::is(atty::Stream::Stdin) {
+    let stdin = io::stdin();
+    if stdin.is_terminal() {
         return None;
     }
 
     let mut buffer = String::new();
-    let result = io::stdin().lock().read_to_string(&mut buffer);
+    let result = stdin.lock().read_to_string(&mut buffer);
 
     if result.is_ok() && !buffer.is_empty() {
         Some(buffer)
@@ -308,7 +320,10 @@ impl CompileOptions {
             });
 
         if let Some(file_path) = *file_path {
-            options.filename = file_path.to_str().unwrap_or_default().to_owned();
+            file_path
+                .to_str()
+                .unwrap_or_default()
+                .clone_into(&mut options.filename);
         }
 
         if let Some(env_name) = &self.env_name {
@@ -322,8 +337,9 @@ impl CompileOptions {
                 value => SourceMapsConfig::Str(value.to_string()),
             });
 
-            options.source_file_name = self.source_file_name.to_owned();
-            options.source_root = self.source_root.to_owned();
+            self.source_file_name
+                .clone_into(&mut options.source_file_name);
+            self.source_root.clone_into(&mut options.source_root);
         }
 
         Ok(options)
@@ -377,9 +393,9 @@ impl CompileOptions {
 
             let fm = compiler.cm.new_source_file(
                 if options.filename.is_empty() {
-                    FileName::Anon
+                    FileName::Anon.into()
                 } else {
-                    FileName::Real(options.filename.clone().into())
+                    FileName::Real(options.filename.clone().into()).into()
                 },
                 stdin_input,
             );
@@ -437,10 +453,11 @@ impl CompileOptions {
             )?;
             let mut buf = File::create(single_out_file)?;
             let mut buf_srcmap = None;
+            let mut buf_dts = None;
             let mut source_map_path = None;
 
             // write all transformed files to single output buf
-            result?.iter().try_for_each(|r| {
+            for r in result?.iter() {
                 if let Some(src_map) = r.map.as_ref() {
                     if buf_srcmap.is_none() {
                         let map_out_file = if let Some(source_map_target) = &self.source_map_target
@@ -478,8 +495,27 @@ impl CompileOptions {
                         .and(Ok(()))?;
                 }
 
-                buf.write(r.code.as_bytes()).and(Ok(()))
-            })?;
+                if let Some(extra) = &r.output {
+                    let mut extra: serde_json::Map<String, serde_json::Value> =
+                        serde_json::from_str(extra).context("failed to parse extra output")?;
+
+                    if let Some(dts_code) = extra.remove("__swc_isolated_declarations__") {
+                        if buf_dts.is_none() {
+                            let dts_file_path = single_out_file.with_extension("d.ts");
+                            buf_dts = Some(File::create(dts_file_path)?);
+                        }
+
+                        let dts_code = dts_code.as_str().expect("dts code should be string");
+                        buf_dts
+                            .as_ref()
+                            .expect("dts buffer should be available")
+                            .write(dts_code.as_bytes())
+                            .and(Ok(()))?;
+                    }
+                }
+
+                buf.write(r.code.as_bytes()).and(Ok(()))?;
+            }
 
             if let Some(source_map_path) = source_map_path {
                 buf.write_all(b"\n//# sourceMappingURL=")?;

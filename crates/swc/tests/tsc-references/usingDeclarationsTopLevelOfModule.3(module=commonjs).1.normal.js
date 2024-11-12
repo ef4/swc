@@ -9,22 +9,27 @@ Object.defineProperty(exports, "y", {
         return y;
     }
 });
-const _dispose = require("@swc/helpers/_/_dispose");
-const _using = require("@swc/helpers/_/_using");
-function f() {
-    console.log(y, z);
-}
+const _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource");
+const _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources");
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var z = _using._(_stack, {
+    const z = _ts_add_disposable_resource._(env, {
         [Symbol.dispose] () {}
-    });
+    }, false);
+    ;
     if (false) {
         var y = 1;
     }
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+    function f() {
+        console.log(y, z);
+    }
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    _dispose._(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
 }

@@ -1,14 +1,15 @@
 use either::Either;
+use smartstring::{LazyCompact, SmartString};
 
 use super::*;
-use crate::token::Token;
 
-impl<'a> Lexer<'a> {
+impl Lexer<'_> {
     pub(super) fn read_jsx_token(&mut self) -> LexResult<Option<Token>> {
         debug_assert!(self.syntax.jsx());
 
+        let start = self.input.cur_pos();
         let mut chunk_start = self.input.cur_pos();
-        let mut out = String::new();
+        let mut value = String::new();
 
         loop {
             let cur = match self.input.cur() {
@@ -22,11 +23,11 @@ impl<'a> Lexer<'a> {
 
             match cur {
                 '<' if self.had_line_break_before_last() && self.is_str("<<<<<< ") => {
-                    let span = Span::new(cur_pos, cur_pos + BytePos(7), Default::default());
+                    let span = Span::new(cur_pos, cur_pos + BytePos(7));
 
                     self.emit_error_span(span, SyntaxError::TS1185);
                     self.skip_line_comment(6);
-                    self.skip_space::<true>()?;
+                    self.skip_space::<true>();
                     return self.read_token();
                 }
                 '<' | '{' => {
@@ -41,14 +42,31 @@ impl<'a> Lexer<'a> {
                         }
                         return self.read_token();
                     }
-                    out.push_str(unsafe {
-                        // Safety: We already checked for the range
-                        self.input.slice(chunk_start, cur_pos)
-                    });
 
-                    return Ok(Some(Token::JSXText {
-                        raw: self.atoms.atom(out),
-                    }));
+                    let value = if value.is_empty() {
+                        // Fast path: We don't need to allocate extra buffer for value
+                        let s = unsafe {
+                            // Safety: We already checked for the range
+                            self.input.slice(chunk_start, cur_pos)
+                        };
+                        self.atoms.atom(s)
+                    } else {
+                        value.push_str(unsafe {
+                            // Safety: We already checked for the range
+                            self.input.slice(chunk_start, cur_pos)
+                        });
+                        self.atoms.atom(value)
+                    };
+
+                    let raw = {
+                        let s = unsafe {
+                            // Safety: We already checked for the range
+                            self.input.slice(start, cur_pos)
+                        };
+                        self.atoms.atom(s)
+                    };
+
+                    return Ok(Some(Token::JSXText { raw, value }));
                 }
                 '>' => {
                     self.emit_error(
@@ -75,28 +93,28 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '&' => {
-                    out.push_str(unsafe {
+                    value.push_str(unsafe {
                         // Safety: We already checked for the range
                         self.input.slice(chunk_start, cur_pos)
                     });
 
                     let jsx_entity = self.read_jsx_entity()?;
 
-                    out.push(jsx_entity.0);
+                    value.push(jsx_entity.0);
                     chunk_start = self.input.cur_pos();
                 }
 
                 _ => {
                     if cur.is_line_terminator() {
-                        out.push_str(unsafe {
+                        value.push_str(unsafe {
                             // Safety: We already checked for the range
                             self.input.slice(chunk_start, cur_pos)
                         });
                         match self.read_jsx_new_line(true)? {
-                            Either::Left(s) => out.push_str(s),
-                            Either::Right(c) => out.push(c),
+                            Either::Left(s) => value.push_str(s),
+                            Either::Right(c) => value.push(c),
                         }
-                        chunk_start = cur_pos;
+                        chunk_start = self.input.cur_pos();
                     } else {
                         unsafe {
                             // Safety: cur() was Some(c)
@@ -129,7 +147,7 @@ impl<'a> Lexer<'a> {
             s.chars().all(|c| c.is_ascii_digit())
         }
 
-        let mut s = String::new();
+        let mut s = SmartString::<LazyCompact>::default();
 
         let c = self.input.cur();
         debug_assert_eq!(c, Some('&'));
@@ -212,9 +230,7 @@ impl<'a> Lexer<'a> {
     pub(super) fn read_jsx_str(&mut self, quote: char) -> LexResult<Token> {
         debug_assert!(self.syntax.jsx());
 
-        let mut raw = String::new();
-
-        raw.push(quote);
+        let start = self.input.cur_pos();
 
         unsafe {
             // Safety: cur() was Some(quote)
@@ -244,8 +260,6 @@ impl<'a> Lexer<'a> {
 
                 out.push_str(value);
                 out.push('\\');
-                raw.push_str(value);
-                raw.push('\\');
 
                 self.bump();
 
@@ -265,12 +279,10 @@ impl<'a> Lexer<'a> {
                 };
 
                 out.push_str(value);
-                raw.push_str(value);
 
                 let jsx_entity = self.read_jsx_entity()?;
 
                 out.push(jsx_entity.0);
-                raw.push_str(&jsx_entity.1);
 
                 chunk_start = self.input.cur_pos();
             } else if ch.is_line_terminator() {
@@ -280,16 +292,13 @@ impl<'a> Lexer<'a> {
                 };
 
                 out.push_str(value);
-                raw.push_str(value);
 
                 match self.read_jsx_new_line(false)? {
                     Either::Left(s) => {
                         out.push_str(s);
-                        raw.push_str(s);
                     }
                     Either::Right(c) => {
                         out.push(c);
-                        raw.push(c);
                     }
                 }
 
@@ -302,14 +311,27 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let cur_pos = self.input.cur_pos();
-        let value = unsafe {
-            // Safety: We already checked for the range
-            self.input.slice(chunk_start, cur_pos)
-        };
+        let value = if out.is_empty() {
+            // Fast path: We don't need to allocate
 
-        out.push_str(value);
-        raw.push_str(value);
+            let cur_pos = self.input.cur_pos();
+            let value = unsafe {
+                // Safety: We already checked for the range
+                self.input.slice(chunk_start, cur_pos)
+            };
+
+            self.atoms.atom(value)
+        } else {
+            let cur_pos = self.input.cur_pos();
+            let value = unsafe {
+                // Safety: We already checked for the range
+                self.input.slice(chunk_start, cur_pos)
+            };
+
+            out.push_str(value);
+
+            self.atoms.atom(out)
+        };
 
         // it might be at the end of the file when
         // the string literal is unterminated
@@ -320,10 +342,14 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        raw.push(quote);
+        let end = self.input.cur_pos();
+        let raw = unsafe {
+            // Safety: Both of `start` and `end` are generated from `cur_pos()`
+            self.input.slice(start, end)
+        };
 
         Ok(Token::Str {
-            value: self.atoms.atom(out),
+            value,
             raw: self.atoms.atom(raw),
         })
     }

@@ -7,7 +7,7 @@ include       = ["Cargo.toml", "src/**/*.rs", "src/**/*.js"]
 license       = "Apache-2.0"
 name          = "swc_ecma_transforms_base"
 repository    = "https://github.com/swc-project/swc.git"
-version       = "0.137.11"
+version       = "5.0.1"
 
 [lib]
 bench = false
@@ -17,42 +17,40 @@ concurrent         = ["concurrent-renamer", "rayon", "swc_ecma_utils/concurrent"
 concurrent-renamer = ["rayon"]
 
 [dependencies]
-better_scoped_tls = { version = "0.1.1", path = "../better_scoped_tls" }
-bitflags          = "2.3.2"
-indexmap          = "2.0.0"
-once_cell         = "1.18.0"
-phf               = { version = "0.11", features = ["macros"] }
-rayon             = { version = "1", optional = true }
-rustc-hash        = "1.1.0"
-serde             = { version = "1", features = ["derive"] }
-smallvec          = "1.8.0"
-tracing           = "0.1.37"
+better_scoped_tls = { version = "1.0.0", path = "../better_scoped_tls" }
+bitflags          = { workspace = true }
+indexmap          = { workspace = true }
+once_cell         = { workspace = true }
+phf               = { workspace = true, features = ["macros"] }
+rayon             = { workspace = true, optional = true }
+rustc-hash        = { workspace = true }
+serde             = { workspace = true, features = ["derive"] }
+smallvec          = { workspace = true }
+tracing           = { workspace = true }
 
-swc_atoms       = { version = "0.6.5", path = "../swc_atoms" }
-swc_common      = { version = "0.33.18", path = "../swc_common" }
-swc_ecma_ast    = { version = "0.112.4", path = "../swc_ecma_ast" }
-swc_ecma_parser = { version = "0.143.6", path = "../swc_ecma_parser" }
-swc_ecma_utils  = { version = "0.127.8", path = "../swc_ecma_utils" }
-swc_ecma_visit  = { version = "0.98.5", path = "../swc_ecma_visit" }
+swc_atoms       = { version = "2.0.0", path = "../swc_atoms" }
+swc_common      = { version = "4.0.0", path = "../swc_common" }
+swc_ecma_ast    = { version = "4.0.1", path = "../swc_ecma_ast" }
+swc_ecma_parser = { version = "5.0.0", path = "../swc_ecma_parser" }
+swc_ecma_utils  = { version = "5.0.0", path = "../swc_ecma_utils" }
+swc_ecma_visit  = { version = "4.0.0", path = "../swc_ecma_visit" }
 
 [dev-dependencies]
-criterion = "0.5"
-rayon     = "1"
+codspeed-criterion-compat = { workspace = true }
+criterion                 = { workspace = true }
+rayon                     = { workspace = true }
 
-swc_ecma_codegen           = { version = "0.148.8", path = "../swc_ecma_codegen" }
-swc_ecma_transforms_macros = { version = "0.5.4", path = "../swc_ecma_transforms_macros" }
-swc_malloc                 = { version = "0.5.10", path = "../swc_malloc" }
-testing                    = { version = "0.35.19", path = "../testing" }
+swc_ecma_codegen           = { version = "4.0.2", path = "../swc_ecma_codegen" }
+swc_ecma_transforms_macros = { version = "1.0.0", path = "../swc_ecma_transforms_macros" }
+swc_malloc                 = { version = "1.0.0", path = "../swc_malloc" }
+testing                    = { version = "4.0.0", path = "../testing" }
 
 [[bench]]
 harness = false
 name    = "base"
 [[bench]]
 harness = false
-name    = "parallel"
-[[bench]]
-harness = false
 name    = "deps"
 [[bench]]
 harness = false
-name    = "time_complexity"
+name    = "parallel"

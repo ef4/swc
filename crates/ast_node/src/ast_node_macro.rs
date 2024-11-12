@@ -1,6 +1,5 @@
 use swc_macros_common::prelude::*;
 use syn::{
-    self,
     parse::{Parse, ParseStream},
     *,
 };
@@ -17,7 +16,7 @@ impl Parse for Args {
 }
 
 pub fn expand_struct(args: Args, i: DeriveInput) -> Vec<ItemImpl> {
-    let mut items = vec![];
+    let mut items = Vec::new();
     let generics = i.generics.clone();
     // let item_ident = Ident::new("Item", i.ident.span());
 
@@ -129,7 +128,7 @@ pub fn expand_struct(args: Args, i: DeriveInput) -> Vec<ItemImpl> {
     //     let item = DeriveInput {
     //         vis: Visibility::Inherited,
     //         ident: item_ident,
-    //         attrs: vec![],
+    //         attrs: Vec::new(),
     //         data: item_data,
     //         ..cloned
     //     };

@@ -1,18 +1,23 @@
 //// [usingDeclarationsTopLevelOfModule.2.ts]
 define([
     "require",
-    "@swc/helpers/_/_dispose",
-    "@swc/helpers/_/_using"
-], function(require, _dispose, _using) {
+    "@swc/helpers/_/_ts_add_disposable_resource",
+    "@swc/helpers/_/_ts_dispose_resources"
+], function(require, _ts_add_disposable_resource, _ts_dispose_resources) {
+    let env = {
+        stack: [],
+        error: void 0,
+        hasError: !1
+    };
     try {
-        var _stack = [], z = _using._(_stack, {
+        let z = _ts_add_disposable_resource._(env, {
             [Symbol.dispose] () {}
-        });
+        }, !1);
         console.log(2, z);
-    } catch (_) {
-        var _error = _, _hasError = !0;
+    } catch (e) {
+        env.error = e, env.hasError = !0;
     } finally{
-        _dispose._(_stack, _error, _hasError);
+        _ts_dispose_resources._(env);
     }
     return 4;
 });

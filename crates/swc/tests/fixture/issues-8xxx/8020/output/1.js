@@ -1,16 +1,20 @@
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
-function baz() {
-    return bar;
-}
+var _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource");
+var _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources");
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var foo = _using(_stack, null);
-    var bar = 1;
+    const foo = _ts_add_disposable_resource._(env, null, false);
+    const bar = 1;
     console.log(baz());
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+    function baz() {
+        return bar;
+    }
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    _dispose(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
 }

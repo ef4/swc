@@ -5,7 +5,7 @@ use swc_common::{
     comments::{Comment, CommentKind, Comments},
     BytePos, DUMMY_SP,
 };
-use swc_ecma_parser::{parse_file_as_module, EsConfig, Syntax};
+use swc_ecma_parser::{parse_file_as_module, EsSyntax, Syntax};
 use testing::NormalizedOutput;
 
 #[testing::fixture("tests/fixtures/**/*.js")]
@@ -15,11 +15,11 @@ fn fixture(path: PathBuf) {
 
         let fm = cm.load_file(&path).expect("failed to load fixture file");
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
 
         if let Err(err) = parse_file_as_module(
             &fm,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -35,7 +35,7 @@ fn fixture(path: PathBuf) {
         if handler.has_errors() {
             return Err(());
         }
-        let mut res = vec![];
+        let mut res = Vec::new();
         let mut comments: Vec<_> = comments.leading.into_iter().collect();
         comments.sort_by_key(|v| v.0);
 

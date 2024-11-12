@@ -4,8 +4,10 @@ extern crate swc_malloc;
 
 use std::fs::read_to_string;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Criterion};
+use swc_allocator::Allocator;
 use swc_common::{errors::HANDLER, sync::Lrc, FileName, Mark, SourceMap};
+use swc_ecma_ast::Program;
 use swc_ecma_codegen::text_writer::JsWriter;
 use swc_ecma_minifier::{
     optimize,
@@ -13,18 +15,20 @@ use swc_ecma_minifier::{
 };
 use swc_ecma_parser::parse_file_as_module;
 use swc_ecma_transforms_base::{fixer::fixer, resolver};
-use swc_ecma_visit::FoldWith;
 
 pub fn bench_files(c: &mut Criterion) {
-    let mut group = c.benchmark_group("es/minify/libraries");
+    let mut group = c.benchmark_group("es/minifier/libs");
     group.sample_size(10);
 
     let mut bench_file = |name: &str| {
         let src = read_to_string(format!("benches/full/{}.js", name)).unwrap();
 
-        group.bench_function(name, |b| {
+        group.bench_function(format!("es/minifier/libs/{}", name), |b| {
             b.iter(|| {
                 // We benchmark full time, including time for creating cm, handler
+                let allocator = Allocator::default();
+                let _guard = unsafe { allocator.guard() };
+
                 run(&src)
             })
         });
@@ -50,7 +54,7 @@ criterion_main!(files);
 fn run(src: &str) {
     testing::run_test2(false, |cm, handler| {
         HANDLER.set(&handler, || {
-            let fm = cm.new_source_file(FileName::Anon, src.into());
+            let fm = cm.new_source_file(FileName::Anon.into(), src.into());
 
             let unresolved_mark = Mark::new();
             let top_level_mark = Mark::new();
@@ -60,16 +64,17 @@ fn run(src: &str) {
                 Default::default(),
                 Default::default(),
                 None,
-                &mut vec![],
+                &mut Vec::new(),
             )
             .map_err(|err| {
                 err.into_diagnostic(&handler).emit();
             })
-            .map(|module| module.fold_with(&mut resolver(unresolved_mark, top_level_mark, false)))
+            .map(Program::Module)
+            .map(|module| module.apply(resolver(unresolved_mark, top_level_mark, false)))
             .unwrap();
 
             let output = optimize(
-                program.into(),
+                program,
                 cm.clone(),
                 None,
                 None,
@@ -83,7 +88,6 @@ fn run(src: &str) {
                         keep_fn_names: false,
                         keep_private_props: false,
                         ie8: false,
-                        safari10: false,
                         ..Default::default()
                     }),
                     wrap: false,
@@ -92,11 +96,11 @@ fn run(src: &str) {
                 &ExtraOptions {
                     unresolved_mark,
                     top_level_mark,
+                    mangle_name_cache: None,
                 },
-            )
-            .expect_module();
+            );
 
-            let output = output.fold_with(&mut fixer(None));
+            let output = output.apply(fixer(None));
 
             let code = print(cm, &[output], true);
 
@@ -108,7 +112,7 @@ fn run(src: &str) {
 }
 
 fn print<N: swc_ecma_codegen::Node>(cm: Lrc<SourceMap>, nodes: &[N], minify: bool) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
 
     {
         let mut emitter = swc_ecma_codegen::Emitter {

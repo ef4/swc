@@ -12,8 +12,7 @@ use swc_ecma_ast::*;
 use swc_ecma_transforms_optimization::debug_assert_valid;
 use swc_ecma_usage_analyzer::{analyzer::UsageAnalyzer, marks::Marks};
 use swc_ecma_utils::{
-    prepend_stmts, undefined, ExprCtx, ExprExt, ExprFactory, IsEmpty, ModuleItemLike, StmtLike,
-    Type, Value,
+    prepend_stmts, ExprCtx, ExprExt, ExprFactory, IsEmpty, ModuleItemLike, StmtLike, Type, Value,
 };
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith, VisitWith};
 #[cfg(feature = "debug")]
@@ -71,18 +70,17 @@ pub(super) fn optimizer<'a>(
         "top_retain should not contain empty string"
     );
 
-    let mut ctx = Ctx::default();
-
-    if options.module {
-        ctx.in_strict = true
-    }
-
-    Optimizer {
-        marks,
+    let ctx = Ctx {
         expr_ctx: ExprCtx {
             unresolved_ctxt: SyntaxContext::empty().apply_mark(marks.unresolved_mark),
             is_unresolved_ref_safe: false,
+            in_strict: options.module,
         },
+        ..Ctx::default()
+    };
+
+    Optimizer {
+        marks,
         changed: false,
         options,
         mangle_options,
@@ -101,10 +99,9 @@ pub(super) fn optimizer<'a>(
 /// Syntactic context.
 ///
 /// This should not be modified directly. Use `.with_ctx()` instead.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 struct Ctx {
-    /// See [crate::marks::Marks]
-    skip_standalone: bool,
+    expr_ctx: ExprCtx,
 
     /// `true` if the [VarDecl] has const annotation.
     #[allow(dead_code)]
@@ -121,9 +118,6 @@ struct Ctx {
 
     var_kind: Option<VarDeclKind>,
 
-    /// `true` if we are in the strict mode. This will be set to `true` for
-    /// statements **after** `'use strict'`
-    in_strict: bool,
     /// `true` if we are try block. `true` means we cannot be sure about control
     /// flow.
     in_try_block: bool,
@@ -172,12 +166,14 @@ struct Ctx {
 
     in_with_stmt: bool,
 
+    in_param: bool,
+
     /// Current scope.
     scope: SyntaxContext,
 }
 
 impl Ctx {
-    pub fn is_top_level_for_block_level_vars(self) -> bool {
+    pub fn is_top_level_for_block_level_vars(&self) -> bool {
         if !self.top_level {
             return false;
         }
@@ -188,14 +184,13 @@ impl Ctx {
         true
     }
 
-    pub fn in_top_level(self) -> bool {
+    pub fn in_top_level(&self) -> bool {
         self.top_level || !self.in_fn_like
     }
 }
 
 struct Optimizer<'a> {
     marks: Marks,
-    expr_ctx: ExprCtx,
 
     changed: bool,
     options: &'a CompressOptions,
@@ -269,6 +264,7 @@ impl Vars {
             || !self.lits.is_empty()
             || !self.lits_for_cmp.is_empty()
             || !self.lits_for_array_access.is_empty()
+            || !self.hoisted_props.is_empty()
             || !self.removed.is_empty()
         {
             let mut v = Finalizer {
@@ -327,7 +323,7 @@ impl Optimizer<'_> {
             return false;
         }
 
-        if id.span.ctxt != self.marks.top_level_ctxt {
+        if id.ctxt != self.marks.top_level_ctxt {
             return true;
         }
 
@@ -339,11 +335,27 @@ impl Optimizer<'_> {
     }
 
     fn may_add_ident(&self) -> bool {
+        if self.ctx.in_top_level() && self.data.top.has_eval_call {
+            return false;
+        }
+
+        if self.data.scopes.get(&self.ctx.scope).unwrap().has_eval_call {
+            return false;
+        }
+
         if !self.ctx.in_top_level() {
             return true;
         }
 
         self.options.top_level()
+    }
+
+    fn ident_reserved(&self, sym: &JsWord) -> bool {
+        if let Some(MangleOptions { reserved, .. }) = self.mangle_options {
+            reserved.contains(sym)
+        } else {
+            false
+        }
     }
 
     fn handle_stmts(&mut self, stmts: &mut Vec<Stmt>, will_terminate: bool) {
@@ -363,11 +375,10 @@ impl Optimizer<'_> {
             return;
         }
 
-        let ctx = Ctx { ..self.ctx };
+        self.with_ctx(self.ctx.clone()).inject_else(stmts);
 
-        self.with_ctx(ctx).inject_else(stmts);
-
-        self.with_ctx(ctx).handle_stmt_likes(stmts, will_terminate);
+        self.with_ctx(self.ctx.clone())
+            .handle_stmt_likes(stmts, will_terminate);
 
         drop_invalid_stmts(stmts);
 
@@ -398,7 +409,7 @@ impl Optimizer<'_> {
         let append_stmts = self.append_stmts.take();
 
         {
-            let mut child_ctx = self.ctx;
+            let mut child_ctx = self.ctx.clone();
             let mut directive_count = 0;
 
             if !stmts.is_empty() {
@@ -409,7 +420,7 @@ impl Optimizer<'_> {
 
                         match &v.raw {
                             Some(value) if value == "\"use strict\"" || value == "'use strict'" => {
-                                child_ctx.in_strict = true;
+                                child_ctx.expr_ctx.in_strict = true;
                             }
                             Some(value) if value == "\"use asm\"" || value == "'use asm'" => {
                                 child_ctx.in_asm = true;
@@ -424,14 +435,14 @@ impl Optimizer<'_> {
 
             let mut new = Vec::with_capacity(stmts.len() * 11 / 10);
             for (i, mut stmt) in stmts.take().into_iter().enumerate() {
-                // debug_assert_eq!(self.prepend_stmts, vec![]);
-                // debug_assert_eq!(self.append_stmts, vec![]);
+                // debug_assert_eq!(self.prepend_stmts, Vec::new());
+                // debug_assert_eq!(self.append_stmts, Vec::new());
 
                 if i < directive_count {
                     // Don't set in_strict for directive itself.
                     stmt.visit_mut_with(self);
                 } else {
-                    let child_optimizer = &mut *self.with_ctx(child_ctx);
+                    let child_optimizer = &mut *self.with_ctx(child_ctx.clone());
                     stmt.visit_mut_with(child_optimizer);
                 }
 
@@ -440,21 +451,21 @@ impl Optimizer<'_> {
                     stmt.visit_with(&mut AssertValid);
                 }
 
-                new.extend(self.prepend_stmts.drain(..).map(T::from_stmt));
+                new.extend(self.prepend_stmts.drain(..).map(T::from));
 
                 match stmt.try_into_stmt() {
-                    Ok(Stmt::Block(s)) if s.span.has_mark(self.marks.fake_block) => {
-                        new.extend(s.stmts.into_iter().map(T::from_stmt));
+                    Ok(Stmt::Block(s)) if s.ctxt.has_mark(self.marks.fake_block) => {
+                        new.extend(s.stmts.into_iter().map(T::from));
                     }
                     Ok(s) => {
-                        new.push(T::from_stmt(s));
+                        new.push(T::from(s));
                     }
                     Err(stmt) => {
                         new.push(stmt);
                     }
                 }
 
-                new.extend(self.append_stmts.drain(..).map(T::from_stmt));
+                new.extend(self.append_stmts.drain(..).map(T::from));
             }
             *stmts = new;
         }
@@ -501,11 +512,11 @@ impl Optimizer<'_> {
             stmts.visit_with(&mut AssertValid);
         }
 
-        // stmts.extend(self.append_stmts.drain(..).map(T::from_stmt));
+        // stmts.extend(self.append_stmts.drain(..).map(T::from));
 
         drop_invalid_stmts(stmts);
 
-        // debug_assert_eq!(self.prepend_stmts, vec![]);
+        // debug_assert_eq!(self.prepend_stmts, Vec::new());
         self.prepend_stmts = prepend_stmts;
         self.append_stmts = append_stmts;
     }
@@ -528,7 +539,7 @@ impl Optimizer<'_> {
             Expr::Bin(BinExpr {
                 left, op, right, ..
             }) => match &**left {
-                Expr::Ident(r) if lhs.sym == r.sym && lhs.span.ctxt == r.span.ctxt => (op, right),
+                Expr::Ident(r) if lhs.sym == r.sym && lhs.ctxt == r.ctxt => (op, right),
                 _ => return,
             },
             _ => return,
@@ -608,7 +619,7 @@ impl Optimizer<'_> {
     fn compress_undefined(&mut self, e: &mut Expr) {
         if let Expr::Ident(Ident { span, sym, .. }) = e {
             if &**sym == "undefined" {
-                *e = *undefined(*span);
+                *e = *Expr::undefined(*span);
             }
         }
     }
@@ -626,15 +637,17 @@ impl Optimizer<'_> {
             if let Lit::Bool(v) = lit {
                 self.changed = true;
                 report_change!("Compressing boolean literal");
-                *e = Expr::Unary(UnaryExpr {
+                *e = UnaryExpr {
                     span: v.span,
                     op: op!("!"),
-                    arg: Box::new(Expr::Lit(Lit::Num(Number {
+                    arg: Lit::Num(Number {
                         span: v.span,
                         value: if v.value { 0.0 } else { 1.0 },
                         raw: None,
-                    }))),
-                });
+                    })
+                    .into(),
+                }
+                .into();
             }
         }
     }
@@ -701,11 +714,11 @@ impl Optimizer<'_> {
                     .any(|m| m.as_static_block().iter().any(|s| !s.body.is_empty()))
                 {
                     // there's nothing we can do about it
-                    return Some(Expr::Class(cls.take()));
+                    return Some(cls.take().into());
                 }
 
                 let exprs: Vec<Box<Expr>> =
-                    extract_class_side_effect(&self.expr_ctx, *cls.class.take())
+                    extract_class_side_effect(&self.ctx.expr_ctx, *cls.class.take())
                         .into_iter()
                         .filter_map(|mut e| self.ignore_return_value(&mut e))
                         .map(Box::new)
@@ -715,10 +728,13 @@ impl Optimizer<'_> {
                     return None;
                 }
 
-                return Some(Expr::Seq(SeqExpr {
-                    span: cls.class.span,
-                    exprs,
-                }));
+                return Some(
+                    SeqExpr {
+                        span: cls.class.span,
+                        exprs,
+                    }
+                    .into(),
+                );
             }
 
             Expr::Paren(e) => return self.ignore_return_value(&mut e.expr),
@@ -729,7 +745,7 @@ impl Optimizer<'_> {
                 let ctx = Ctx {
                     dont_use_negated_iife: self.ctx.dont_use_negated_iife
                         || self.options.side_effects,
-                    ..self.ctx
+                    ..self.ctx.clone()
                 };
                 let new_r = self.with_ctx(ctx).ignore_return_value(right);
 
@@ -792,10 +808,13 @@ impl Optimizer<'_> {
 
                 self.changed = true;
                 report_change!("ignore_return_value: Compressing binary as seq");
-                return Some(Expr::Seq(SeqExpr {
-                    span,
-                    exprs: vec![Box::new(left.unwrap()), Box::new(right.unwrap())],
-                }));
+                return Some(
+                    SeqExpr {
+                        span,
+                        exprs: vec![Box::new(left.unwrap()), Box::new(right.unwrap())],
+                    }
+                    .into(),
+                );
             }
 
             // Pure calls can be removed
@@ -875,10 +894,13 @@ impl Optimizer<'_> {
                                         return None;
                                     }
 
-                                    return Some(Expr::Array(ArrayLit {
-                                        span: callee.span,
-                                        elems,
-                                    }));
+                                    return Some(
+                                        ArrayLit {
+                                            span: callee.span,
+                                            elems,
+                                        }
+                                        .into(),
+                                    );
                                 }
 
                                 let args = args
@@ -892,10 +914,13 @@ impl Optimizer<'_> {
                                     return None;
                                 }
 
-                                return Some(Expr::Seq(SeqExpr {
-                                    span: callee.span,
-                                    exprs: args,
-                                }));
+                                return Some(
+                                    SeqExpr {
+                                        span: callee.span,
+                                        exprs: args,
+                                    }
+                                    .into(),
+                                );
                             }
                         }
                     }
@@ -909,7 +934,7 @@ impl Optimizer<'_> {
             }) if left.is_simple() && !op.may_short_circuit() => {
                 if let AssignTarget::Simple(expr) = left {
                     if let SimpleAssignTarget::Member(m) = expr {
-                        if !m.obj.may_have_side_effects(&self.expr_ctx)
+                        if !m.obj.may_have_side_effects(&self.ctx.expr_ctx)
                             && (m.obj.is_object()
                                 || m.obj.is_fn_expr()
                                 || m.obj.is_arrow()
@@ -1007,28 +1032,31 @@ impl Optimizer<'_> {
                     }) => true,
                     _ => false,
                 }) {
-                    return Some(Expr::Array(ArrayLit {
-                        elems: arr
-                            .elems
-                            .take()
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|mut e| {
-                                if e.spread.is_some() {
-                                    return Some(e);
-                                }
+                    return Some(
+                        ArrayLit {
+                            elems: arr
+                                .elems
+                                .take()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|mut e| {
+                                    if e.spread.is_some() {
+                                        return Some(e);
+                                    }
 
-                                self.ignore_return_value(&mut e.expr)
-                                    .map(Box::new)
-                                    .map(|expr| ExprOrSpread { expr, spread: None })
-                            })
-                            .map(Some)
-                            .collect(),
-                        ..*arr
-                    }));
+                                    self.ignore_return_value(&mut e.expr)
+                                        .map(Box::new)
+                                        .map(|expr| ExprOrSpread { expr, spread: None })
+                                })
+                                .map(Some)
+                                .collect(),
+                            ..*arr
+                        }
+                        .into(),
+                    );
                 }
 
-                let mut exprs = vec![];
+                let mut exprs = Vec::new();
                 self.changed = true;
                 report_change!("ignore_return_value: Inverting an array literal");
                 exprs.extend(
@@ -1045,14 +1073,17 @@ impl Optimizer<'_> {
                     return None;
                 }
 
-                return Some(Expr::Seq(SeqExpr {
-                    span: arr.span,
-                    exprs,
-                }));
+                return Some(
+                    SeqExpr {
+                        span: arr.span,
+                        exprs,
+                    }
+                    .into(),
+                );
             }
 
             Expr::Object(obj) => {
-                let mut exprs = vec![];
+                let mut exprs = Vec::new();
                 self.changed = true;
                 report_change!("ignore_return_value: Inverting an object literal");
                 for prop in obj.props.take() {
@@ -1105,10 +1136,13 @@ impl Optimizer<'_> {
                     return None;
                 }
 
-                return Some(Expr::Seq(SeqExpr {
-                    span: obj.span,
-                    exprs,
-                }));
+                return Some(
+                    SeqExpr {
+                        span: obj.span,
+                        exprs,
+                    }
+                    .into(),
+                );
             }
 
             // Preserves negated iife
@@ -1159,10 +1193,11 @@ impl Optimizer<'_> {
                 let left = self.ignore_return_value(left).map(Box::new);
                 let right = self.ignore_return_value(right).map(Box::new);
 
-                let mut seq = Expr::Seq(SeqExpr {
+                let mut seq = SeqExpr {
                     span: *span,
                     exprs: left.into_iter().chain(right).collect(),
-                });
+                }
+                .into();
                 return self.ignore_return_value(&mut seq);
             }
 
@@ -1174,36 +1209,39 @@ impl Optimizer<'_> {
                 let ctx = Ctx {
                     dont_use_negated_iife: self.ctx.dont_use_negated_iife
                         || self.options.side_effects,
-                    ..self.ctx
+                    ..self.ctx.clone()
                 };
 
                 let cons_span = cond.cons.span();
                 let alt_span = cond.alt.span();
                 let cons = self
-                    .with_ctx(ctx)
+                    .with_ctx(ctx.clone())
                     .ignore_return_value(&mut cond.cons)
                     .map(Box::new);
                 let alt = self
-                    .with_ctx(ctx)
+                    .with_ctx(ctx.clone())
                     .ignore_return_value(&mut cond.alt)
                     .map(Box::new);
 
                 // TODO: Remove if test is side effect free.
 
-                return Some(Expr::Cond(CondExpr {
-                    span: cond.span,
-                    test: cond.test.take(),
-                    cons: cons.unwrap_or_else(|| {
-                        report_change!("ignore_return_value: Dropped `cons`");
-                        self.changed = true;
-                        undefined(cons_span)
-                    }),
-                    alt: alt.unwrap_or_else(|| {
-                        report_change!("ignore_return_value: Dropped `alt`");
-                        self.changed = true;
-                        undefined(alt_span)
-                    }),
-                }));
+                return Some(
+                    CondExpr {
+                        span: cond.span,
+                        test: cond.test.take(),
+                        cons: cons.unwrap_or_else(|| {
+                            report_change!("ignore_return_value: Dropped `cons`");
+                            self.changed = true;
+                            Expr::undefined(cons_span)
+                        }),
+                        alt: alt.unwrap_or_else(|| {
+                            report_change!("ignore_return_value: Dropped `alt`");
+                            self.changed = true;
+                            Expr::undefined(alt_span)
+                        }),
+                    }
+                    .into(),
+                );
             }
 
             Expr::Seq(seq) => {
@@ -1226,7 +1264,7 @@ impl Optimizer<'_> {
                         }
                         let ctx = Ctx {
                             dont_use_negated_iife: idx != 0,
-                            ..self.ctx
+                            ..self.ctx.clone()
                         };
                         self.with_ctx(ctx).ignore_return_value(expr)
                     })
@@ -1236,7 +1274,7 @@ impl Optimizer<'_> {
                     return exprs.pop().map(|v| *v);
                 } else {
                     let is_last_undefined =
-                        is_pure_undefined(&self.expr_ctx, exprs.last().unwrap());
+                        is_pure_undefined(&self.ctx.expr_ctx, exprs.last().unwrap());
 
                     // (foo(), void 0) => void foo()
                     if is_last_undefined {
@@ -1248,11 +1286,12 @@ impl Optimizer<'_> {
                         if let Some(last) = exprs.last_mut() {
                             report_change!("ignore_return_value: Shifting void");
                             self.changed = true;
-                            *last = Box::new(Expr::Unary(UnaryExpr {
+                            *last = UnaryExpr {
                                 span: DUMMY_SP,
                                 op: op!("void"),
                                 arg: last.take(),
-                            }));
+                            }
+                            .into();
                         }
                     }
 
@@ -1261,14 +1300,17 @@ impl Optimizer<'_> {
                         return None;
                     }
 
-                    return Some(Expr::Seq(SeqExpr {
-                        span: seq.span,
-                        exprs,
-                    }));
+                    return Some(
+                        SeqExpr {
+                            span: seq.span,
+                            exprs,
+                        }
+                        .into(),
+                    );
                 }
             }
 
-            Expr::Ident(id) if id.span.ctxt != self.expr_ctx.unresolved_ctxt => {
+            Expr::Ident(id) if id.ctxt != self.ctx.expr_ctx.unresolved_ctxt => {
                 report_change!("ignore_return_value: Dropping a declared ident {}", id);
                 self.changed = true;
                 return None;
@@ -1284,13 +1326,13 @@ impl Optimizer<'_> {
             Stmt::Block(bs) => {
                 if bs.stmts.is_empty() {
                     report_change!("Converting empty block to empty statement");
-                    *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                    *s = EmptyStmt { span: DUMMY_SP }.into();
                     return;
                 }
 
                 // Remove nested blocks
                 if bs.stmts.len() == 1 {
-                    if bs.span.has_mark(self.marks.fake_block) {
+                    if bs.ctxt.has_mark(self.marks.fake_block) {
                         report_change!("Unwrapping a fake block");
                         *s = bs.stmts.take().into_iter().next().unwrap();
                         return;
@@ -1339,7 +1381,7 @@ impl Optimizer<'_> {
                         if block.stmts.is_empty() {
                             self.changed = true;
                             report_change!("optimizer: Removing empty block");
-                            *stmt = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                            *stmt = EmptyStmt { span: DUMMY_SP }.into();
                             return;
                         }
                     }
@@ -1352,7 +1394,9 @@ impl Optimizer<'_> {
                             report_change!("optimizer: Unwrapping block stmt");
                             self.changed = true;
                         }
-                        Stmt::Decl(Decl::Fn(..)) if allow_fn_decl && !self.ctx.in_strict => {
+                        Stmt::Decl(Decl::Fn(..))
+                            if allow_fn_decl && !self.ctx.expr_ctx.in_strict =>
+                        {
                             *s = bs.stmts[0].take();
                             report_change!("optimizer: Unwrapping block stmt in non strcit mode");
                             self.changed = true;
@@ -1401,7 +1445,7 @@ impl Optimizer<'_> {
 
         match s {
             Stmt::Block(block) if block.stmts.is_empty() => {
-                *s = Stmt::Empty(EmptyStmt { span: block.span });
+                *s = EmptyStmt { span: block.span }.into();
             }
             Stmt::Block(block)
                 if block.stmts.len() == 1 && is_fine_for_if_cons(&block.stmts[0]) =>
@@ -1426,10 +1470,11 @@ impl Optimizer<'_> {
             if let Stmt::Expr(cons) = &mut *stmt.cons {
                 self.changed = true;
                 report_change!("Converting if statement to a form `test && cons`");
-                *s = Stmt::Expr(ExprStmt {
+                *s = ExprStmt {
                     span: stmt.span,
                     expr: Box::new(stmt.test.take().make_bin(op!("&&"), *cons.expr.take())),
-                });
+                }
+                .into();
             }
         }
     }
@@ -1458,9 +1503,16 @@ impl VisitMut for Optimizer<'_> {
 
         let prepend = self.prepend_stmts.take();
 
-        let ctx = self.ctx;
+        {
+            let ctx = Ctx {
+                in_param: true,
+                ..self.ctx.clone()
+            };
 
-        n.visit_mut_children_with(&mut *self.with_ctx(ctx));
+            n.params.visit_mut_with(&mut *self.with_ctx(ctx));
+        }
+
+        n.body.visit_mut_with(self);
 
         if !self.prepend_stmts.is_empty() {
             let mut stmts = self.prepend_stmts.take().take_stmts();
@@ -1472,13 +1524,17 @@ impl VisitMut for Optimizer<'_> {
                     self.changed = true;
                     report_change!("Converting a body of an arrow expression to BlockStmt");
 
-                    stmts.push(Stmt::Return(ReturnStmt {
-                        span: DUMMY_SP,
-                        arg: Some(v.take()),
-                    }));
+                    stmts.push(
+                        ReturnStmt {
+                            span: DUMMY_SP,
+                            arg: Some(v.take()),
+                        }
+                        .into(),
+                    );
                     n.body = Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                         span: DUMMY_SP,
                         stmts,
+                        ..Default::default()
                     }));
                 }
             }
@@ -1497,7 +1553,7 @@ impl VisitMut for Optimizer<'_> {
             let ctx = Ctx {
                 is_lhs_of_assign: true,
                 is_exact_lhs_of_assign: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             e.left.visit_mut_with(&mut *self.with_ctx(ctx));
 
@@ -1516,7 +1572,7 @@ impl VisitMut for Optimizer<'_> {
         n.visit_mut_children_with(self);
 
         if let Some(value) = &n.value {
-            if is_pure_undefined(&self.expr_ctx, value) {
+            if is_pure_undefined(&self.ctx.expr_ctx, value) {
                 n.value = None;
             }
         }
@@ -1527,7 +1583,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 in_cond: self.ctx.in_cond || n.op.may_short_circuit(),
-                ..self.ctx
+                ..self.ctx.clone()
             };
 
             n.visit_mut_children_with(&mut *self.with_ctx(ctx));
@@ -1559,8 +1615,9 @@ impl VisitMut for Optimizer<'_> {
         let ctx = Ctx {
             top_level: false,
             in_block: true,
-            scope: n.span.ctxt,
-            ..self.ctx
+            scope: n.ctxt,
+            in_param: false,
+            ..self.ctx.clone()
         };
         n.visit_mut_children_with(&mut *self.with_ctx(ctx));
     }
@@ -1594,7 +1651,7 @@ impl VisitMut for Optimizer<'_> {
                 is_lhs_of_assign: false,
                 is_exact_lhs_of_assign: false,
                 is_update_arg: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             e.callee.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -1602,18 +1659,20 @@ impl VisitMut for Optimizer<'_> {
         if is_this_undefined {
             if let Callee::Expr(callee) = &mut e.callee {
                 if let Expr::Member(..) = &mut **callee {
-                    let zero = Box::new(Expr::Lit(Lit::Num(Number {
+                    let zero = Lit::Num(Number {
                         span: DUMMY_SP,
                         value: 0.0,
                         raw: None,
-                    })));
+                    })
+                    .into();
                     self.changed = true;
                     report_change!("injecting zero to preserve `this` in call");
 
-                    *callee = Box::new(Expr::Seq(SeqExpr {
+                    *callee = SeqExpr {
                         span: callee.span(),
                         exprs: vec![zero, callee.take()],
-                    }));
+                    }
+                    .into();
                 }
             }
         }
@@ -1624,7 +1683,7 @@ impl VisitMut for Optimizer<'_> {
                 is_lhs_of_assign: false,
                 is_exact_lhs_of_assign: false,
                 is_update_arg: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             // TODO: Prevent inline if callee is unknown.
             e.args.visit_mut_with(&mut *self.with_ctx(ctx));
@@ -1642,16 +1701,19 @@ impl VisitMut for Optimizer<'_> {
             let ctx = Ctx {
                 dont_invoke_iife: true,
                 is_update_arg: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.super_class.visit_mut_with(&mut *self.with_ctx(ctx));
         }
 
         {
             let ctx = Ctx {
-                in_strict: true,
                 is_update_arg: false,
-                ..self.ctx
+                expr_ctx: ExprCtx {
+                    in_strict: true,
+                    ..self.ctx.clone().expr_ctx
+                },
+                ..self.ctx.clone()
             };
             n.body.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -1699,7 +1761,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 executed_multiple_time: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.visit_mut_children_with(&mut *self.with_ctx(ctx));
         }
@@ -1713,7 +1775,7 @@ impl VisitMut for Optimizer<'_> {
 
         let ctx = Ctx {
             is_exported: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         n.visit_mut_children_with(&mut *self.with_ctx(ctx));
     }
@@ -1721,7 +1783,7 @@ impl VisitMut for Optimizer<'_> {
     fn visit_mut_export_default_decl(&mut self, n: &mut ExportDefaultDecl) {
         let ctx = Ctx {
             is_exported: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         n.visit_mut_children_with(&mut *self.with_ctx(ctx));
     }
@@ -1740,7 +1802,7 @@ impl VisitMut for Optimizer<'_> {
         let ctx = Ctx {
             is_exported: false,
             is_callee: false,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         e.visit_mut_children_with(&mut *self.with_ctx(ctx));
         #[cfg(feature = "trace-ast")]
@@ -1756,7 +1818,9 @@ impl VisitMut for Optimizer<'_> {
 
         match e {
             Expr::Seq(seq) if seq.exprs.len() == 1 => {
+                let span = seq.span;
                 *e = *seq.exprs[0].take();
+                e.set_span(span);
             }
 
             Expr::Assign(AssignExpr {
@@ -1987,7 +2051,7 @@ impl VisitMut for Optimizer<'_> {
                     #[cfg(feature = "debug")]
                     dump_change_detail!("Removed {}", start);
 
-                    undefined(DUMMY_SP)
+                    Expr::undefined(DUMMY_SP)
                 });
             }
         } else {
@@ -2032,7 +2096,7 @@ impl VisitMut for Optimizer<'_> {
             in_fn_like: true,
             is_lhs_of_assign: false,
             is_exact_lhs_of_assign: false,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         f.visit_mut_children_with(&mut *self.with_ctx(ctx));
     }
@@ -2056,7 +2120,7 @@ impl VisitMut for Optimizer<'_> {
             in_fn_like: true,
             is_lhs_of_assign: false,
             is_exact_lhs_of_assign: false,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         e.visit_mut_children_with(&mut *self.with_ctx(ctx));
     }
@@ -2069,7 +2133,7 @@ impl VisitMut for Optimizer<'_> {
             let ctx = Ctx {
                 in_var_decl_of_for_in_or_of_loop: true,
                 is_exact_lhs_of_assign: n.left.is_pat(),
-                ..self.ctx
+                ..self.ctx.clone()
             };
             self.with_ctx(ctx).visit_with_prepend(&mut n.left);
         }
@@ -2077,7 +2141,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 executed_multiple_time: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.body.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2091,7 +2155,7 @@ impl VisitMut for Optimizer<'_> {
             let ctx = Ctx {
                 in_var_decl_of_for_in_or_of_loop: true,
                 is_exact_lhs_of_assign: n.left.is_pat(),
-                ..self.ctx
+                ..self.ctx.clone()
             };
             self.with_ctx(ctx).visit_with_prepend(&mut n.left);
         }
@@ -2099,7 +2163,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 executed_multiple_time: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.body.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2116,36 +2180,27 @@ impl VisitMut for Optimizer<'_> {
 
         let ctx = Ctx {
             executed_multiple_time: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
-        s.body.visit_mut_with(&mut *self.with_ctx(ctx));
+        s.body.visit_mut_with(&mut *self.with_ctx(ctx.clone()));
 
-        self.with_ctx(ctx).optimize_init_of_for_stmt(s);
+        self.with_ctx(ctx.clone()).optimize_init_of_for_stmt(s);
     }
 
     #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
     fn visit_mut_function(&mut self, n: &mut Function) {
         n.decorators.visit_mut_with(self);
 
-        let is_standalone = n.span.has_mark(self.marks.standalone);
-
-        // We don't dig into standalone function, as it does not share any variable with
-        // outer scope.
-        if self.ctx.skip_standalone && is_standalone {
-            return;
-        }
-
         let old_in_asm = self.ctx.in_asm;
 
         {
             let ctx = Ctx {
-                skip_standalone: self.ctx.skip_standalone || is_standalone,
                 in_fn_like: true,
-                scope: n.span.ctxt,
+                scope: n.ctxt,
                 top_level: false,
 
-                ..self.ctx
+                ..self.ctx.clone()
             };
             let optimizer = &mut *self.with_ctx(ctx);
 
@@ -2181,8 +2236,8 @@ impl VisitMut for Optimizer<'_> {
         }
 
         {
-            let ctx = self.ctx;
-            self.with_ctx(ctx).optimize_usage_of_arguments(n);
+            self.with_ctx(self.ctx.clone())
+                .optimize_usage_of_arguments(n);
         }
 
         self.ctx.in_asm = old_in_asm;
@@ -2203,12 +2258,12 @@ impl VisitMut for Optimizer<'_> {
 
         let ctx = Ctx {
             in_cond: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
-        n.cons.visit_mut_with(&mut *self.with_ctx(ctx));
+        n.cons.visit_mut_with(&mut *self.with_ctx(ctx.clone()));
 
-        n.alt.visit_mut_with(&mut *self.with_ctx(ctx));
+        n.alt.visit_mut_with(&mut *self.with_ctx(ctx.clone()));
 
         self.negate_if_stmt(n);
 
@@ -2220,9 +2275,9 @@ impl VisitMut for Optimizer<'_> {
         let ctx = Ctx {
             dont_use_prepend_nor_append: contains_leaping_continue_with_label(
                 &n.body,
-                n.label.to_id(),
+                n.label.sym.clone(),
             ),
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
         n.visit_mut_children_with(&mut *self.with_ctx(ctx));
@@ -2237,7 +2292,7 @@ impl VisitMut for Optimizer<'_> {
                 in_obj_of_non_computed_member: !n.prop.is_computed(),
                 is_exact_lhs_of_assign: false,
                 is_update_arg: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.obj.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2246,7 +2301,7 @@ impl VisitMut for Optimizer<'_> {
                 is_exact_lhs_of_assign: false,
                 is_lhs_of_assign: false,
                 is_update_arg: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             c.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2268,27 +2323,10 @@ impl VisitMut for Optimizer<'_> {
     }
 
     #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
-    fn visit_mut_script(&mut self, s: &mut Script) {
-        let ctx = Ctx {
-            top_level: true,
-            skip_standalone: true,
-            ..self.ctx
-        };
-        s.visit_mut_children_with(&mut *self.with_ctx(ctx));
-
-        if self.vars.inline_with_multi_replacer(s) {
-            self.changed = true;
-        }
-
-        drop_invalid_stmts(&mut s.body);
-    }
-
-    #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
     fn visit_mut_module_items(&mut self, stmts: &mut Vec<ModuleItem>) {
         let ctx = Ctx {
             top_level: true,
-            skip_standalone: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         self.with_ctx(ctx).handle_stmt_likes(stmts, true);
 
@@ -2306,7 +2344,7 @@ impl VisitMut for Optimizer<'_> {
                 is_callee: true,
                 is_exact_lhs_of_assign: false,
                 is_lhs_of_assign: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.callee.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2315,7 +2353,7 @@ impl VisitMut for Optimizer<'_> {
             let ctx = Ctx {
                 is_exact_lhs_of_assign: false,
                 is_lhs_of_assign: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.args.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2359,7 +2397,8 @@ impl VisitMut for Optimizer<'_> {
     fn visit_mut_param(&mut self, n: &mut Param) {
         let ctx = Ctx {
             var_kind: None,
-            ..self.ctx
+            in_param: true,
+            ..self.ctx.clone()
         };
         let mut o = self.with_ctx(ctx);
         n.visit_mut_children_with(&mut *o);
@@ -2379,12 +2418,12 @@ impl VisitMut for Optimizer<'_> {
 
         if let Prop::Shorthand(i) = n {
             if self.vars.has_pending_inline_for(&i.to_id()) {
-                let mut e = Box::new(Expr::Ident(i.clone()));
+                let mut e: Expr = i.clone().into();
                 e.visit_mut_with(self);
 
                 *n = Prop::KeyValue(KeyValueProp {
-                    key: PropName::Ident(i.clone()),
-                    value: e,
+                    key: PropName::Ident(i.clone().into()),
+                    value: Box::new(e),
                 });
             }
         }
@@ -2405,6 +2444,21 @@ impl VisitMut for Optimizer<'_> {
     }
 
     #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
+    fn visit_mut_script(&mut self, s: &mut Script) {
+        let ctx = Ctx {
+            top_level: true,
+            ..self.ctx.clone()
+        };
+        s.visit_mut_children_with(&mut *self.with_ctx(ctx));
+
+        if self.vars.inline_with_multi_replacer(s) {
+            self.changed = true;
+        }
+
+        drop_invalid_stmts(&mut s.body);
+    }
+
+    #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
     fn visit_mut_seq_expr(&mut self, n: &mut SeqExpr) {
         let should_preserve_zero = n
             .exprs
@@ -2414,7 +2468,7 @@ impl VisitMut for Optimizer<'_> {
 
         let ctx = Ctx {
             dont_use_negated_iife: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
         let exprs = n
@@ -2427,7 +2481,7 @@ impl VisitMut for Optimizer<'_> {
                 let _span =
                     tracing::span!(tracing::Level::ERROR, "seq_expr_with_children").entered();
 
-                expr.visit_mut_with(&mut *self.with_ctx(ctx));
+                expr.visit_mut_with(&mut *self.with_ctx(ctx.clone()));
                 let is_injected_zero = match &**expr {
                     Expr::Lit(Lit::Num(v)) => v.span.is_dummy(),
                     _ => false,
@@ -2488,7 +2542,7 @@ impl VisitMut for Optimizer<'_> {
             in_bang_arg: false,
             is_exported: false,
             in_obj_of_non_computed_member: false,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         s.visit_mut_children_with(&mut *self.with_ctx(ctx));
 
@@ -2496,14 +2550,14 @@ impl VisitMut for Optimizer<'_> {
             match s {
                 // We use var decl with no declarator to indicate we dropped an decl.
                 Stmt::Decl(Decl::Var(v)) if v.decls.is_empty() => {
-                    *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                    *s = EmptyStmt { span: DUMMY_SP }.into();
                     self.prepend_stmts = old_prepend;
                     self.append_stmts = old_append;
                     return;
                 }
                 Stmt::Expr(es) => {
                     if es.expr.is_invalid() {
-                        *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                        *s = EmptyStmt { span: DUMMY_SP }.into();
                         self.prepend_stmts = old_prepend;
                         self.append_stmts = old_append;
                         return;
@@ -2542,6 +2596,7 @@ impl VisitMut for Optimizer<'_> {
                     return;
                 }
             }
+
             _ => {}
         }
 
@@ -2570,8 +2625,9 @@ impl VisitMut for Optimizer<'_> {
             report_change!("Creating a fake block because of prepend or append");
 
             let span = s.span();
-            *s = Stmt::Block(BlockStmt {
-                span: span.apply_mark(self.marks.fake_block),
+            *s = BlockStmt {
+                span,
+                ctxt: SyntaxContext::empty().apply_mark(self.marks.fake_block),
                 stmts: self
                     .prepend_stmts
                     .take_stmts()
@@ -2584,7 +2640,8 @@ impl VisitMut for Optimizer<'_> {
                         _ => true,
                     })
                     .collect(),
-            });
+            }
+            .into();
 
             #[cfg(debug_assertions)]
             {
@@ -2611,8 +2668,8 @@ impl VisitMut for Optimizer<'_> {
         debug_assert_eq!(self.append_stmts.len(), append_len);
 
         if let Stmt::Expr(ExprStmt { expr, .. }) = s {
-            if is_pure_undefined(&self.expr_ctx, expr) {
-                *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+            if is_pure_undefined(&self.ctx.expr_ctx, expr) {
+                *s = EmptyStmt { span: DUMMY_SP }.into();
                 return;
             }
 
@@ -2620,27 +2677,27 @@ impl VisitMut for Optimizer<'_> {
 
             if self.options.directives
                 && is_directive
-                && self.ctx.in_strict
+                && self.ctx.expr_ctx.in_strict
                 && match &**expr {
                     Expr::Lit(Lit::Str(Str { value, .. })) => *value == *"use strict",
                     _ => false,
                 }
             {
                 report_change!("Removing 'use strict'");
-                *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                *s = EmptyStmt { span: DUMMY_SP }.into();
                 return;
             }
 
             if self.options.unused {
                 let can_be_removed = !is_directive
                     && !expr.is_ident()
-                    && !expr.may_have_side_effects(&self.expr_ctx);
+                    && !expr.may_have_side_effects(&self.ctx.expr_ctx);
 
                 if can_be_removed {
                     self.changed = true;
                     report_change!("unused: Dropping an expression without side effect");
                     dump_change_detail!("unused: Dropping \n{}\n", dump(&*expr, false));
-                    *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                    *s = EmptyStmt { span: DUMMY_SP }.into();
                     return;
                 }
             }
@@ -2652,7 +2709,7 @@ impl VisitMut for Optimizer<'_> {
         match s {
             // We use var decl with no declarator to indicate we dropped an decl.
             Stmt::Decl(Decl::Var(v)) if v.decls.is_empty() => {
-                *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+                *s = EmptyStmt { span: DUMMY_SP }.into();
                 return;
             }
             _ => {}
@@ -2751,7 +2808,7 @@ impl VisitMut for Optimizer<'_> {
             let ctx = Ctx {
                 is_exact_lhs_of_assign: false,
                 is_lhs_of_assign: false,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             c.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -2776,7 +2833,7 @@ impl VisitMut for Optimizer<'_> {
     fn visit_mut_tagged_tpl(&mut self, n: &mut TaggedTpl) {
         n.tag.visit_mut_with(&mut *self.with_ctx(Ctx {
             is_this_aware_callee: true,
-            ..self.ctx
+            ..self.ctx.clone()
         }));
 
         n.tpl.exprs.visit_mut_with(self);
@@ -2796,7 +2853,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 in_tpl_expr: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             let mut o = self.with_ctx(ctx);
             n.visit_mut_children_with(&mut *o);
@@ -2811,7 +2868,7 @@ impl VisitMut for Optimizer<'_> {
     fn visit_mut_try_stmt(&mut self, n: &mut TryStmt) {
         let ctx = Ctx {
             in_try_block: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
         n.block.visit_mut_with(&mut *self.with_ctx(ctx));
 
@@ -2820,12 +2877,27 @@ impl VisitMut for Optimizer<'_> {
         n.finalizer.visit_mut_with(self);
     }
 
+    fn visit_mut_catch_clause(&mut self, n: &mut CatchClause) {
+        n.visit_mut_children_with(self);
+
+        if self.options.ecma < EsVersion::Es2019 || !self.options.unused {
+            return;
+        }
+
+        if let Some(param) = &mut n.param {
+            self.take_pat_if_unused(param, None, false);
+            if param.is_invalid() {
+                n.param = None;
+            }
+        }
+    }
+
     #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
     fn visit_mut_unary_expr(&mut self, n: &mut UnaryExpr) {
         let ctx = Ctx {
             in_bang_arg: n.op == op!("!"),
             is_delete_arg: n.op == op!("delete"),
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
         n.visit_mut_children_with(&mut *self.with_ctx(ctx));
@@ -2849,10 +2921,24 @@ impl VisitMut for Optimizer<'_> {
     fn visit_mut_update_expr(&mut self, n: &mut UpdateExpr) {
         let ctx = Ctx {
             is_update_arg: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
         n.visit_mut_children_with(&mut *self.with_ctx(ctx));
+    }
+
+    #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
+    fn visit_mut_using_decl(&mut self, n: &mut UsingDecl) {
+        let ctx = Ctx {
+            is_update_arg: false,
+            has_const_ann: false,
+            var_kind: None,
+            ..self.ctx.clone()
+        };
+
+        for decl in n.decls.iter_mut() {
+            decl.init.visit_mut_with(&mut *self.with_ctx(ctx.clone()));
+        }
     }
 
     #[cfg_attr(feature = "debug", tracing::instrument(skip_all))]
@@ -2860,9 +2946,9 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 is_update_arg: false,
-                has_const_ann: self.has_const_ann(n.span),
+                has_const_ann: self.has_const_ann(n.ctxt),
                 var_kind: Some(n.kind),
-                ..self.ctx
+                ..self.ctx.clone()
             };
 
             n.visit_mut_children_with(&mut *self.with_ctx(ctx));
@@ -2871,7 +2957,7 @@ impl VisitMut for Optimizer<'_> {
         if n.kind == VarDeclKind::Let {
             n.decls.iter_mut().for_each(|var| {
                 if let Some(e) = &var.init {
-                    if is_pure_undefined(&self.expr_ctx, e) {
+                    if is_pure_undefined(&self.ctx.expr_ctx, e) {
                         self.changed = true;
                         report_change!(
                             "Dropping explicit initializer which evaluates to `undefined`"
@@ -2909,7 +2995,8 @@ impl VisitMut for Optimizer<'_> {
                 var.init = None
             }
 
-            if id.is_dummy() {
+            // Dummy check.
+            if id.sym.is_empty() {
                 var.name = Pat::dummy();
             }
         };
@@ -2927,10 +3014,38 @@ impl VisitMut for Optimizer<'_> {
                 return false;
             }
 
-            var.visit_mut_with(self);
+            true
+        });
 
+        {
+            // We loop with index to avoid borrow checker issue.
+            // We use splice so we cannot use for _ in vars
+            let mut idx = 0;
+
+            while idx < vars.len() {
+                let var = &mut vars[idx];
+                var.visit_mut_with(self);
+
+                // The varaible is dropped.
+                if var.name.is_invalid() {
+                    vars.remove(idx);
+                    continue;
+                }
+
+                let new = self.hoist_props_of_var(var);
+
+                if let Some(new) = new {
+                    let len = new.len();
+                    vars.splice(idx..=idx, new);
+                    idx += len;
+                } else {
+                    idx += 1;
+                }
+            }
+        }
+
+        vars.retain_mut(|var| {
             if var.name.is_invalid() {
-                // It will be inlined.
                 self.changed = true;
                 return false;
             }
@@ -2940,15 +3055,13 @@ impl VisitMut for Optimizer<'_> {
             true
         });
 
-        self.hoist_props_of_vars(vars);
-
         let uses_eval = self.data.scopes.get(&self.ctx.scope).unwrap().has_eval_call;
 
         if !uses_eval && !self.ctx.dont_use_prepend_nor_append {
             for v in vars.iter_mut() {
                 if v.init
                     .as_deref()
-                    .map(|e| !e.is_ident() && !e.may_have_side_effects(&self.expr_ctx))
+                    .map(|e| !e.is_ident() && !e.may_have_side_effects(&self.ctx.expr_ctx))
                     .unwrap_or(true)
                 {
                     self.drop_unused_var_declarator(v, &mut None);
@@ -2956,7 +3069,7 @@ impl VisitMut for Optimizer<'_> {
             }
 
             let mut can_prepend = true;
-            let mut side_effects = vec![];
+            let mut side_effects = Vec::new();
 
             for v in vars.iter_mut() {
                 let mut storage = None;
@@ -2989,17 +3102,21 @@ impl VisitMut for Optimizer<'_> {
                 if can_prepend {
                     can_prepend = false;
 
-                    self.prepend_stmts.push(Stmt::Expr(ExprStmt {
-                        span: DUMMY_SP,
-                        expr: if side_effects.len() == 1 {
-                            side_effects.remove(0)
-                        } else {
-                            Box::new(Expr::Seq(SeqExpr {
-                                span: DUMMY_SP,
-                                exprs: side_effects.take(),
-                            }))
-                        },
-                    }));
+                    self.prepend_stmts.push(
+                        ExprStmt {
+                            span: DUMMY_SP,
+                            expr: if side_effects.len() == 1 {
+                                side_effects.remove(0)
+                            } else {
+                                SeqExpr {
+                                    span: DUMMY_SP,
+                                    exprs: side_effects.take(),
+                                }
+                                .into()
+                            },
+                        }
+                        .into(),
+                    );
                 } else {
                     // We prepend side effects to the initializer.
 
@@ -3014,17 +3131,21 @@ impl VisitMut for Optimizer<'_> {
 
             // We append side effects.
             if !side_effects.is_empty() {
-                self.append_stmts.push(Stmt::Expr(ExprStmt {
-                    span: DUMMY_SP,
-                    expr: if side_effects.len() == 1 {
-                        side_effects.remove(0)
-                    } else {
-                        Box::new(Expr::Seq(SeqExpr {
-                            span: DUMMY_SP,
-                            exprs: side_effects,
-                        }))
-                    },
-                }));
+                self.append_stmts.push(
+                    ExprStmt {
+                        span: DUMMY_SP,
+                        expr: if side_effects.len() == 1 {
+                            side_effects.remove(0)
+                        } else {
+                            SeqExpr {
+                                span: DUMMY_SP,
+                                exprs: side_effects,
+                            }
+                            .into()
+                        },
+                    }
+                    .into(),
+                );
             }
 
             vars.retain_mut(|var| {
@@ -3059,7 +3180,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 executed_multiple_time: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.visit_mut_children_with(&mut *self.with_ctx(ctx));
         }
@@ -3072,7 +3193,7 @@ impl VisitMut for Optimizer<'_> {
         {
             let ctx = Ctx {
                 in_with_stmt: true,
-                ..self.ctx
+                ..self.ctx.clone()
             };
             n.body.visit_mut_with(&mut *self.with_ctx(ctx));
         }
@@ -3085,7 +3206,7 @@ impl VisitMut for Optimizer<'_> {
         if let Some(arg) = &mut n.arg {
             self.compress_undefined(arg);
 
-            if !n.delegate && is_pure_undefined(&self.expr_ctx, arg) {
+            if !n.delegate && is_pure_undefined(&self.ctx.expr_ctx, arg) {
                 n.arg = None;
             }
         }

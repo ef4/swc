@@ -6,7 +6,7 @@ use swc_ecma_utils::{
     constructor::inject_after_super, default_constructor, is_literal, is_simple_pure_expr,
     private_ident, prop_name_to_member_prop, ExprFactory, ModuleItemLike, StmtLike,
 };
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
 /// # What does this module do?
 ///
@@ -83,8 +83,8 @@ use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWit
 ///     }
 /// }
 /// ```
-pub fn class_fields_use_set(pure_getters: bool) -> impl Fold + VisitMut {
-    as_folder(ClassFieldsUseSet { pure_getters })
+pub fn class_fields_use_set(pure_getters: bool) -> impl Pass {
+    visit_mut_pass(ClassFieldsUseSet { pure_getters })
 }
 
 #[derive(Debug)]
@@ -93,7 +93,7 @@ struct ClassFieldsUseSet {
 }
 
 impl VisitMut for ClassFieldsUseSet {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_module_items(&mut self, n: &mut Vec<ModuleItem>) {
         self.visit_mut_stmts_like(n);
@@ -104,27 +104,14 @@ impl VisitMut for ClassFieldsUseSet {
     }
 
     fn visit_mut_class(&mut self, n: &mut Class) {
+        // visit inner classes first
         n.visit_mut_children_with(self);
 
-        let mut fields_handler = FieldsHandler::default();
-        n.visit_mut_with(&mut fields_handler);
-
-        let FieldsHandler {
-            constructor_inits,
-            constructor_found,
-            ..
-        } = fields_handler;
-
-        if constructor_inits.is_empty() {
-            return;
-        }
-
-        let mut constructor_handler = ConstructorHandler {
+        let mut fields_handler = FieldsHandler {
             has_super: n.super_class.is_some(),
-            constructor_inits,
-            constructor_found,
         };
-        n.visit_mut_with(&mut constructor_handler);
+
+        n.body.visit_mut_with(&mut fields_handler);
     }
 }
 
@@ -157,6 +144,7 @@ impl ClassFieldsUseSet {
                         kind: VarDeclKind::Let,
                         declare: false,
                         decls: var_decls,
+                        ..Default::default()
                     }
                     .into(),
                 ))
@@ -170,112 +158,105 @@ impl ClassFieldsUseSet {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct FieldsHandler {
-    constructor_inits: Vec<Box<Expr>>,
-    constructor_found: bool,
+    has_super: bool,
 }
 
 impl VisitMut for FieldsHandler {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
-    fn visit_mut_class(&mut self, n: &mut Class) {
-        n.body.visit_mut_with(self);
+    fn visit_mut_class(&mut self, _: &mut Class) {
+        // skip inner classes
+        // In fact, FieldsHandler does not visit children recursively.
+        // We call FieldsHandler with the class.body as the only entry point.
+        // The FieldsHandler actually operates in a iterative way.
     }
 
-    fn visit_mut_class_member(&mut self, n: &mut ClassMember) {
-        match n {
-            ClassMember::Constructor(..) => self.constructor_found = true,
-            ClassMember::ClassProp(ClassProp {
-                ref span,
-                ref is_static,
-                key,
-                value,
-                ..
-            }) => {
-                if let Some(value) = value.take() {
-                    let init_expr: Expr = AssignExpr {
-                        span: *span,
-                        op: op!("="),
-                        left: MemberExpr {
-                            span: DUMMY_SP,
-                            obj: ThisExpr::dummy().into(),
-                            prop: prop_name_to_member_prop(key.take()),
-                        }
-                        .into(),
-                        right: value,
-                    }
-                    .into();
+    fn visit_mut_class_members(&mut self, n: &mut Vec<ClassMember>) {
+        let mut constructor_inits = Vec::new();
 
-                    if *is_static {
-                        *n = StaticBlock {
-                            span: DUMMY_SP,
-                            body: BlockStmt {
+        for member in n.iter_mut() {
+            match member {
+                ClassMember::ClassProp(ClassProp {
+                    ref span,
+                    ref is_static,
+                    key,
+                    value,
+                    ..
+                }) => {
+                    if let Some(value) = value.take() {
+                        let init_expr: Expr = AssignExpr {
+                            span: *span,
+                            op: op!("="),
+                            left: MemberExpr {
                                 span: DUMMY_SP,
-                                stmts: vec![init_expr.into_stmt()],
-                            },
+                                obj: ThisExpr::dummy().into(),
+                                prop: prop_name_to_member_prop(key.take()),
+                            }
+                            .into(),
+                            right: value,
                         }
                         .into();
 
-                        return;
-                    } else {
-                        self.constructor_inits.push(init_expr.into());
-                    }
-                }
+                        if *is_static {
+                            *member = StaticBlock {
+                                span: DUMMY_SP,
+                                body: BlockStmt {
+                                    span: DUMMY_SP,
+                                    stmts: vec![init_expr.into_stmt()],
+                                    ..Default::default()
+                                },
+                            }
+                            .into();
 
-                n.take();
-            }
-            ClassMember::PrivateProp(PrivateProp {
-                ref span,
-                is_static: false,
-                key,
-                value,
-                ..
-            }) => {
-                if let Some(value) = value.take() {
-                    let init_expr: Expr = AssignExpr {
-                        span: *span,
-                        op: op!("="),
-                        left: MemberExpr {
-                            span: DUMMY_SP,
-                            obj: ThisExpr::dummy().into(),
-                            prop: MemberProp::PrivateName(key.clone()),
+                            continue;
+                        } else {
+                            constructor_inits.push(init_expr.into());
                         }
-                        .into(),
-                        right: value,
                     }
-                    .into();
 
-                    self.constructor_inits.push(init_expr.into());
+                    member.take();
                 }
+                ClassMember::PrivateProp(PrivateProp {
+                    ref span,
+                    is_static: false,
+                    key,
+                    value,
+                    ..
+                }) => {
+                    if let Some(value) = value.take() {
+                        let init_expr: Expr = AssignExpr {
+                            span: *span,
+                            op: op!("="),
+                            left: MemberExpr {
+                                span: DUMMY_SP,
+                                obj: ThisExpr::dummy().into(),
+                                prop: MemberProp::PrivateName(key.clone()),
+                            }
+                            .into(),
+                            right: value,
+                        }
+                        .into();
+
+                        constructor_inits.push(init_expr.into());
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
-    }
-}
 
-#[derive(Debug, Default)]
-struct ConstructorHandler {
-    has_super: bool,
-    constructor_inits: Vec<Box<Expr>>,
-    constructor_found: bool,
-}
+        if constructor_inits.is_empty() {
+            return;
+        }
 
-impl VisitMut for ConstructorHandler {
-    noop_visit_mut_type!();
-
-    fn visit_mut_class(&mut self, n: &mut Class) {
-        if !self.constructor_found {
-            let mut constructor = default_constructor(self.has_super);
-            constructor.visit_mut_with(self);
-            n.body.push(constructor.into());
+        if let Some(c) = n.iter_mut().find_map(|m| m.as_mut_constructor()) {
+            inject_after_super(c, constructor_inits.take());
         } else {
-            n.body.visit_mut_children_with(self);
+            let mut c = default_constructor(self.has_super);
+            inject_after_super(&mut c, constructor_inits.take());
+            n.push(c.into());
         }
-    }
-
-    fn visit_mut_constructor(&mut self, n: &mut Constructor) {
-        inject_after_super(n, self.constructor_inits.take());
     }
 }
 
@@ -287,7 +268,7 @@ struct ComputedFieldsHandler {
 }
 
 impl VisitMut for ComputedFieldsHandler {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_class_prop(&mut self, n: &mut ClassProp) {
         match &mut n.key {
@@ -295,7 +276,7 @@ impl VisitMut for ComputedFieldsHandler {
                 if !is_literal(expr) && !is_simple_pure_expr(expr, self.pure_getters) =>
             {
                 let ref_key = private_ident!("prop");
-                let mut computed_expr = Box::new(Expr::Ident(ref_key.clone()));
+                let mut computed_expr = ref_key.clone().into();
 
                 mem::swap(expr, &mut computed_expr);
 
@@ -333,6 +314,7 @@ impl VisitMut for ComputedFieldsHandler {
                     body: BlockStmt {
                         span: DUMMY_SP,
                         stmts: self.static_init_blocks.take(),
+                        ..Default::default()
                     },
                 }
                 .into(),

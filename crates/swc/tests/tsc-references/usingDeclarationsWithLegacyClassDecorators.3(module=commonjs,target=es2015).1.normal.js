@@ -10,19 +10,24 @@ Object.defineProperty(exports, "default", {
     }
 });
 const _ts_decorate = require("@swc/helpers/_/_ts_decorate");
-const _dispose = require("@swc/helpers/_/_dispose");
-const _using = require("@swc/helpers/_/_using");
+const _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource");
+const _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources");
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var before = _using._(_stack, null);
-    var C = class C {
-    };
+    const before = _ts_add_disposable_resource._(env, null, false);
+    ;
     C = _ts_decorate._([
         dec
     ], C);
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    _dispose._(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
+}
+class C {
 }

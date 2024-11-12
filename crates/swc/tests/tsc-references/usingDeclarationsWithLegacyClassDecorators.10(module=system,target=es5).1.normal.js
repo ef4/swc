@@ -2,11 +2,11 @@
 System.register([
     "@swc/helpers/_/_class_call_check",
     "@swc/helpers/_/_ts_decorate",
-    "@swc/helpers/_/_dispose",
-    "@swc/helpers/_/_using"
+    "@swc/helpers/_/_ts_add_disposable_resource",
+    "@swc/helpers/_/_ts_dispose_resources"
 ], function(_export, _context) {
     "use strict";
-    var _class_call_check, _ts_decorate, _dispose, _using;
+    var _class_call_check, _ts_decorate, _ts_add_disposable_resource, _ts_dispose_resources, env, _class;
     return {
         setters: [
             function(_class_call_check1) {
@@ -15,30 +15,35 @@ System.register([
             function(_ts_decorate1) {
                 _ts_decorate = _ts_decorate1._;
             },
-            function(_dispose1) {
-                _dispose = _dispose1._;
+            function(_ts_add_disposable_resource1) {
+                _ts_add_disposable_resource = _ts_add_disposable_resource1._;
             },
-            function(_using1) {
-                _using = _using1._;
+            function(_ts_dispose_resources1) {
+                _ts_dispose_resources = _ts_dispose_resources1._;
             }
         ],
         execute: function() {
+            env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var _class = function _class() {
-                    "use strict";
-                    _class_call_check(this, _class);
-                };
                 _export("default", _class = _ts_decorate([
                     dec
                 ], _class));
-                var after = _using(_stack, null);
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+                var after = _ts_add_disposable_resource(env, null, false);
+                ;
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack, _error, _hasError);
+                _ts_dispose_resources(env);
             }
+            _export("default", _class = function _class() {
+                "use strict";
+                _class_call_check(this, _class);
+            });
         }
     };
 });

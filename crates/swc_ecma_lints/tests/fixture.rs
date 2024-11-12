@@ -9,7 +9,6 @@ use swc_ecma_lints::{
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, Syntax};
 use swc_ecma_transforms_base::resolver;
-use swc_ecma_visit::VisitMutWith;
 
 #[testing::fixture("tests/pass/**/input.js")]
 #[testing::fixture("tests/pass/**/input.ts")]
@@ -22,7 +21,7 @@ fn pass(input: PathBuf) {
             if input.extension().unwrap() == "ts" {
                 Syntax::Typescript(Default::default())
             } else if input.extension().unwrap() == "tsx" {
-                Syntax::Typescript(swc_ecma_parser::TsConfig {
+                Syntax::Typescript(swc_ecma_parser::TsSyntax {
                     tsx: true,
                     ..Default::default()
                 })
@@ -42,7 +41,7 @@ fn pass(input: PathBuf) {
 
         let need_ts = input.extension().unwrap() == "ts" || input.extension().unwrap() == "tsx";
 
-        program.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, need_ts));
+        program.mutate(resolver(unresolved_mark, top_level_mark, need_ts));
 
         let unresolved_ctxt = SyntaxContext::empty().apply_mark(unresolved_mark);
         let top_level_ctxt = SyntaxContext::empty().apply_mark(top_level_mark);

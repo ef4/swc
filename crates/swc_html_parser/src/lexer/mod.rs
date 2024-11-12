@@ -135,7 +135,7 @@ where
             finished: false,
             state: State::Data,
             return_state: State::Data,
-            errors: vec![],
+            errors: Vec::new(),
             last_start_tag_name: None,
             pending_tokens: VecDeque::with_capacity(16),
             buf: Rc::new(RefCell::new(String::with_capacity(256))),
@@ -281,7 +281,7 @@ where
     #[cold]
     fn emit_error(&mut self, kind: ErrorKind) {
         self.errors.push(Error::new(
-            Span::new(self.cur_pos, self.input.cur_pos(), Default::default()),
+            Span::new(self.cur_pos, self.input.cur_pos()),
             kind,
         ));
     }
@@ -290,7 +290,7 @@ where
     fn emit_token(&mut self, token: Token) {
         let cur_pos = self.input.cur_pos();
 
-        let span = Span::new(self.last_token_pos, cur_pos, Default::default());
+        let span = Span::new(self.last_token_pos, cur_pos);
 
         self.last_token_pos = cur_pos;
         self.pending_tokens.push_back(TokenAndSpan { span, token });
@@ -620,7 +620,7 @@ where
             tag_name: js_word!(""),
             raw_tag_name: None,
             is_self_closing: false,
-            attributes: vec![],
+            attributes: Vec::new(),
         });
     }
 
@@ -632,7 +632,7 @@ where
             raw_tag_name: None,
             is_self_closing: false,
             // In valid HTML code closed tags do not have attributes
-            attributes: vec![],
+            attributes: Vec::new(),
         });
     }
 
@@ -778,8 +778,7 @@ where
 
                     let name: JsWord = buf.clone().into();
                     let raw_name = Atom::new(sub_buf.clone());
-                    let span =
-                        Span::new(attribute_start_position, self.cur_pos, Default::default());
+                    let span = Span::new(attribute_start_position, self.cur_pos);
 
                     if self.attributes_validator.contains(&name) {
                         self.errors
@@ -896,8 +895,7 @@ where
                         sub_buf.clear();
                     }
 
-                    last.span =
-                        Span::new(attribute_start_position, self.cur_pos, Default::default());
+                    last.span = Span::new(attribute_start_position, self.cur_pos);
                 }
             }
         }

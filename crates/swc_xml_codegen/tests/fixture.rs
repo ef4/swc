@@ -22,18 +22,9 @@ fn print_document(
     codegen_config: Option<CodegenConfig>,
 ) {
     let dir = input.parent().unwrap();
-    let parser_config = match parser_config {
-        Some(parser_config) => parser_config,
-        _ => ParserConfig::default(),
-    };
-    let writer_config = match writer_config {
-        Some(writer_config) => writer_config,
-        _ => BasicXmlWriterConfig::default(),
-    };
-    let codegen_config = match codegen_config {
-        Some(codegen_config) => codegen_config,
-        _ => CodegenConfig::default(),
-    };
+    let parser_config = parser_config.unwrap_or_default();
+    let writer_config = writer_config.unwrap_or_default();
+    let codegen_config = codegen_config.unwrap_or_default();
     let output = if codegen_config.minify {
         dir.join(format!(
             "output.min.{}",
@@ -48,7 +39,7 @@ fn print_document(
 
     run_test2(false, |cm, handler| {
         let fm = cm.load_file(input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut document: Document =
             parse_file_as_document(&fm, parser_config, &mut errors).unwrap();
 
@@ -68,7 +59,7 @@ fn print_document(
             .compare_to_file(output)
             .unwrap();
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut document_parsed_again =
             parse_file_as_document(&fm_output, parser_config, &mut errors).map_err(|err| {
                 err.to_diagnostics(&handler).emit();
@@ -95,22 +86,13 @@ fn verify_document(
     codegen_config: Option<CodegenConfig>,
     ignore_errors: bool,
 ) {
-    let parser_config = match parser_config {
-        Some(parser_config) => parser_config,
-        _ => ParserConfig::default(),
-    };
-    let writer_config = match writer_config {
-        Some(writer_config) => writer_config,
-        _ => BasicXmlWriterConfig::default(),
-    };
-    let codegen_config = match codegen_config {
-        Some(codegen_config) => codegen_config,
-        _ => CodegenConfig::default(),
-    };
+    let parser_config = parser_config.unwrap_or_default();
+    let writer_config = writer_config.unwrap_or_default();
+    let codegen_config = codegen_config.unwrap_or_default();
 
     testing::run_test2(false, |cm, handler| {
         let fm = cm.load_file(input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
 
         let mut document =
             parse_file_as_document(&fm, parser_config, &mut errors).map_err(|err| {
@@ -129,8 +111,8 @@ fn verify_document(
 
         gen.emit(&document).unwrap();
 
-        let new_fm = cm.new_source_file(FileName::Anon, xml_str);
-        let mut parsed_errors = vec![];
+        let new_fm = cm.new_source_file(FileName::Anon.into(), xml_str);
+        let mut parsed_errors = Vec::new();
         let mut document_parsed_again =
             parse_file_as_document(&new_fm, parser_config, &mut parsed_errors).map_err(|err| {
                 err.to_diagnostics(&handler).emit();

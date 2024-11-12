@@ -1,9 +1,12 @@
 use std::env;
 
+use once_cell::sync::Lazy;
+
 use crate::collections::AHashMap;
 
-/// Indexable key to the metadata context for a transform plugin, avoiding
-/// serialization & allocation to the host by using incremental number.
+/// Indexable key to the metadata context for a transform plugin.
+///
+/// Avoiding serialization & allocation to the host by using incremental number.
 /// TransformPluginMetadataContext does not implement Index trait, instead
 /// host does manual matching to corresponding value.
 #[derive(Copy, Clone)]
@@ -47,12 +50,16 @@ impl TransformPluginMetadataContext {
         env: String,
         experimental: Option<AHashMap<String, String>>,
     ) -> Self {
+        static CWD: Lazy<Option<String>> = Lazy::new(|| {
+            env::current_dir()
+                .map(|cwd| cwd.as_path().to_string_lossy().to_string())
+                .ok()
+        });
+
         TransformPluginMetadataContext {
             filename,
             env,
-            cwd: env::current_dir()
-                .map(|cwd| cwd.as_path().to_string_lossy().to_string())
-                .ok(),
+            cwd: CWD.clone(),
             experimental: experimental.unwrap_or_default(),
         }
     }

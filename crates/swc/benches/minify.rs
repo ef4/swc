@@ -3,7 +3,7 @@ extern crate swc_malloc;
 
 use std::{path::PathBuf, sync::Arc};
 
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use swc::{config::JsMinifyOptions, try_with_handler, BoolOrDataConfig};
 use swc_common::{FilePathMapping, SourceMap};
 use swc_ecma_utils::swc_common::GLOBALS;
@@ -39,13 +39,14 @@ fn bench_minify(b: &mut Bencher, filename: &str) {
                     &JsMinifyOptions {
                         compress: BoolOrDataConfig::from_bool(true),
                         mangle: BoolOrDataConfig::from_bool(true),
-                        toplevel: true,
+                        toplevel: Some(true),
                         source_map: BoolOrDataConfig::from_bool(true),
                         output_path: Default::default(),
                         inline_sources_content: true,
                         emit_source_map_columns: true,
                         ..Default::default()
                     },
+                    Default::default(),
                 )
             })
         })
@@ -62,7 +63,7 @@ fn files_group(c: &mut Criterion) {
     group.sample_size(10);
 
     let mut bench_file = |name: &str| {
-        group.bench_function(name, |b| {
+        group.bench_function(format!("es/full/minify/libraries/{name}"), |b| {
             bench_minify(b, &format!("{}.js", name));
         });
     };

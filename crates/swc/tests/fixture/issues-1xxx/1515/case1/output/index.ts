@@ -11,13 +11,10 @@ Object.defineProperty(exports, "ServiceError", {
 const _define_property = require("@swc/helpers/_/_define_property");
 class ServiceError extends Error {
     constructor(...args){
-        super(...args);
-        _define_property._(this, "code", ServiceError.Code.badResponse);
-        _define_property._(this, "name", "ServiceError.BadResponse");
+        super(...args), _define_property._(this, "code", ServiceError.Code.badResponse), _define_property._(this, "name", "ServiceError.BadResponse");
     }
 }
 (function(ServiceError) {
-    let Code;
     (function(Code) {
         Code[Code["serviceNotFound"] = 404] = "serviceNotFound";
         Code[Code["serviceNotCompatible"] = 426] = "serviceNotCompatible";
@@ -26,13 +23,11 @@ class ServiceError extends Error {
         Code[Code["timedOut"] = 504] = "timedOut";
         Code[Code["badRequest"] = 400] = "badRequest";
         Code[Code["badResponse"] = 422] = "badResponse";
-    })(Code = ServiceError.Code || (ServiceError.Code = {}));
+    })(ServiceError.Code || (ServiceError.Code = {}));
     class ServiceNotFound extends ServiceError {
         constructor(...args){
-            super(...args);
-            // Service was probably not registered, or using the wrong channel
-            _define_property._(this, "code", 404);
-            _define_property._(this, "name", "ServiceError.ServiceNotFound");
+            super(...args), // Service was probably not registered, or using the wrong channel
+            _define_property._(this, "code", 404), _define_property._(this, "name", "ServiceError.ServiceNotFound");
         }
     }
     ServiceError.ServiceNotFound = ServiceNotFound;

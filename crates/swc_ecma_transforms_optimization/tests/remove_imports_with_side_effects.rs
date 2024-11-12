@@ -1,11 +1,11 @@
-use swc_common::{chain, pass::Repeat, Mark};
-use swc_ecma_parser::{EsConfig, Syntax};
+use swc_common::{pass::Repeat, Mark};
+use swc_ecma_ast::Pass;
+use swc_ecma_parser::{EsSyntax, Syntax};
 use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_optimization::simplify::dce::{dce, Config};
 use swc_ecma_transforms_testing::test;
-use swc_ecma_visit::Fold;
 
-fn tr() -> impl Fold {
+fn tr() -> impl Pass {
     Repeat::new(dce(
         Config {
             top_level: true,
@@ -19,11 +19,11 @@ fn tr() -> impl Fold {
 macro_rules! to {
     ($name:ident, $src:expr) => {
         test!(
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 decorators: true,
                 ..Default::default()
             }),
-            |_| chain!(resolver(Mark::new(), Mark::new(), false), tr()),
+            |_| (resolver(Mark::new(), Mark::new(), false), tr()),
             $name,
             $src
         );

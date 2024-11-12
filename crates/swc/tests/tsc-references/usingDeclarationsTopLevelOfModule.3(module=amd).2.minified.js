@@ -2,9 +2,9 @@
 define([
     "require",
     "exports",
-    "@swc/helpers/_/_dispose",
-    "@swc/helpers/_/_using"
-], function(require, exports, _dispose, _using) {
+    "@swc/helpers/_/_ts_add_disposable_resource",
+    "@swc/helpers/_/_ts_dispose_resources"
+], function(require, exports, _ts_add_disposable_resource, _ts_dispose_resources) {
     Object.defineProperty(exports, "__esModule", {
         value: !0
     }), Object.defineProperty(exports, "y", {
@@ -13,14 +13,19 @@ define([
             return y;
         }
     });
+    let env = {
+        stack: [],
+        error: void 0,
+        hasError: !1
+    };
     try {
-        var y, _stack = [];
-        _using._(_stack, {
+        var y;
+        _ts_add_disposable_resource._(env, {
             [Symbol.dispose] () {}
-        });
-    } catch (_) {
-        var _error = _, _hasError = !0;
+        }, !1);
+    } catch (e) {
+        env.error = e, env.hasError = !0;
     } finally{
-        _dispose._(_stack, _error, _hasError);
+        _ts_dispose_resources._(env);
     }
 });

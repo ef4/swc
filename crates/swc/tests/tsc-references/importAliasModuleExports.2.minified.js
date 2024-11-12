@@ -1,6 +1,6 @@
 //// [mod1.js]
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
-var Alias = function() {
+var Alias = /*#__PURE__*/ function() {
     function Alias() {
         _class_call_check(this, Alias);
     }
@@ -10,7 +10,7 @@ var Alias = function() {
 }();
 module.exports = Alias;
 //// [main.js]
-import A from "./mod1";
+import A from './mod1';
 A.prototype.foo = 0, A.prototype.func = function() {
     this._func = 0;
 }, Object.defineProperty(A.prototype, "def", {

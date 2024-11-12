@@ -3,7 +3,7 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 var x = 1;
 export var r1;
 var y = {
-    foo: ""
+    foo: ''
 };
 export var r2;
 var C = function C() {
@@ -19,9 +19,8 @@ export var i;
 var i2;
 export var r5;
 export var r5;
-var M;
 (function(M) {
-    M.foo = "";
+    M.foo = '';
     var C = function C() {
         "use strict";
         _class_call_check(this, C);
@@ -32,10 +31,10 @@ export var r6;
 export var r7;
 export var r8;
 export var r9;
-var E;
-(function(E) {
+var E = /*#__PURE__*/ function(E) {
     E[E["A"] = 0] = "A";
-})(E || (E = {}));
+    return E;
+}(E || {});
 export var r10;
 export var r11;
 export var r12;
@@ -49,3 +48,4 @@ function foo() {}
     foo.C = C;
 })(foo || (foo = {}));
 export var r13;
+var M;

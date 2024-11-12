@@ -1,14 +1,14 @@
-use swc_common::{chain, pass::Repeat, Mark};
-use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
+use swc_common::{pass::Repeat, Mark};
+use swc_ecma_ast::Pass;
+use swc_ecma_parser::{EsSyntax, Syntax, TsSyntax};
 use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_compat::es2022::class_properties;
 use swc_ecma_transforms_optimization::simplify::dce::{dce, Config};
 use swc_ecma_transforms_proposal::decorators;
 use swc_ecma_transforms_testing::test;
 use swc_ecma_transforms_typescript::strip;
-use swc_ecma_visit::Fold;
 
-fn tr() -> impl Fold {
+fn tr() -> impl Pass {
     Repeat::new(dce(
         Config {
             top_level: true,
@@ -21,11 +21,11 @@ fn tr() -> impl Fold {
 macro_rules! to {
     ($name:ident, $src:expr) => {
         test!(
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 decorators: true,
                 ..Default::default()
             }),
-            |_| chain!(resolver(Mark::new(), Mark::new(), false), tr()),
+            |_| (resolver(Mark::new(), Mark::new(), false), tr()),
             $name,
             $src
         );
@@ -367,7 +367,7 @@ export default class X {
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
@@ -375,15 +375,15 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             decorators(decorators::Config {
                 legacy: true,
                 emit_metadata: false,
                 use_define_for_class_fields: false,
             }),
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
-            tr()
+            strip(unresolved_mark, top_level_mark),
+            tr(),
         )
     },
     issue_898_2,
@@ -399,7 +399,7 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
@@ -407,15 +407,15 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             decorators(decorators::Config {
                 legacy: true,
                 emit_metadata: false,
                 use_define_for_class_fields: false,
             }),
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
-            tr()
+            strip(unresolved_mark, top_level_mark),
+            tr(),
         )
     },
     issue_1111,
@@ -426,7 +426,7 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
@@ -434,12 +434,12 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(resolver(unresolved_mark, top_level_mark, false), tr())
+        (resolver(unresolved_mark, top_level_mark, false), tr())
     },
     issue_1150_1,
     "
 class A {
-    constructor(o: AOptions = {}) {
+    constructor(o = {}) {
         const {
             a = defaultA,
             c,
@@ -461,26 +461,25 @@ new A();
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
-    |t| {
+    |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
+            strip(unresolved_mark, top_level_mark),
             class_properties(
-                Some(t.comments.clone()),
                 class_properties::Config {
                     set_public_fields: true,
                     ..Default::default()
                 },
-                unresolved_mark
+                unresolved_mark,
             ),
-            tr()
+            tr(),
         )
     },
     issue_1156_1,
@@ -501,24 +500,23 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
-    |t| {
+    |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
+            strip(unresolved_mark, top_level_mark),
             class_properties(
-                Some(t.comments.clone()),
                 class_properties::Config {
                     set_public_fields: true,
                     ..Default::default()
                 },
-                unresolved_mark
+                unresolved_mark,
             ),
             tr(),
         )
@@ -555,7 +553,7 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
@@ -563,9 +561,9 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
+            strip(unresolved_mark, top_level_mark),
             tr(),
         )
     },
@@ -584,24 +582,23 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
-    |t| {
+    |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
+            strip(unresolved_mark, top_level_mark),
             class_properties(
-                Some(t.comments.clone()),
                 class_properties::Config {
                     set_public_fields: true,
                     ..Default::default()
                 },
-                unresolved_mark
+                unresolved_mark,
             ),
             tr(),
         )

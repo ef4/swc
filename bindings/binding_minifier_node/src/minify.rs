@@ -2,16 +2,16 @@ use std::sync::Arc;
 
 use anyhow::{Context, Error};
 use napi::{
-    bindgen_prelude::{AbortSignal, AsyncTask, Buffer},
-    Task,
+    bindgen_prelude::{AbortSignal, AsyncTask, Buffer, External},
+    JsObject, Task,
 };
 use serde::Deserialize;
 use swc_compiler_base::{
-    minify_file_comments, parse_js, IdentCollector, IsModule, PrintArgs, SourceMapsConfig,
-    TransformOutput,
+    minify_file_comments, parse_js, IdentCollector, PrintArgs, SourceMapsConfig, TransformOutput,
 };
 use swc_config::config_types::BoolOr;
 use swc_core::{
+    base::JsMinifyExtras,
     common::{
         collections::AHashMap,
         comments::{Comments, SingleThreadedComments},
@@ -21,9 +21,9 @@ use swc_core::{
     ecma::{
         minifier::{
             js::{JsMinifyCommentOption, JsMinifyOptions},
-            option::{MinifyOptions, TopLevelOptions},
+            option::{MangleCache, MinifyOptions, SimpleMangleCache, TopLevelOptions},
         },
-        parser::{EsConfig, Syntax},
+        parser::{EsSyntax, Syntax},
         transforms::base::{fixer::fixer, hygiene::hygiene, resolver},
         visit::{FoldWith, VisitMutWith, VisitWith},
     },
@@ -32,9 +32,16 @@ use swc_nodejs_common::{deserialize_json, get_deserialized, MapErr};
 
 use crate::util::try_with;
 
+#[napi(object)]
+pub struct NapiMinifyExtra {
+    #[napi(ts_type = "object")]
+    pub mangle_name_cache: Option<NameMangleCache>,
+}
+
 struct MinifyTask {
     code: String,
     options: String,
+    extras: JsMinifyExtras,
 }
 
 #[derive(Deserialize)]
@@ -49,7 +56,7 @@ enum MinifyTarget {
 impl MinifyTarget {
     fn to_file(&self, cm: Lrc<SourceMap>) -> Lrc<SourceFile> {
         match self {
-            MinifyTarget::Single(code) => cm.new_source_file(FileName::Anon, code.clone()),
+            MinifyTarget::Single(code) => cm.new_source_file(FileName::Anon.into(), code.clone()),
             MinifyTarget::Map(codes) => {
                 assert_eq!(
                     codes.len(),
@@ -59,13 +66,17 @@ impl MinifyTarget {
 
                 let (filename, code) = codes.iter().next().unwrap();
 
-                cm.new_source_file(FileName::Real(filename.clone().into()), code.clone())
+                cm.new_source_file(FileName::Real(filename.clone().into()).into(), code.clone())
             }
         }
     }
 }
 
-fn do_work(input: MinifyTarget, options: JsMinifyOptions) -> napi::Result<TransformOutput> {
+fn do_work(
+    input: MinifyTarget,
+    options: JsMinifyOptions,
+    extras: JsMinifyExtras,
+) -> napi::Result<TransformOutput> {
     let cm: Arc<SourceMap> = Arc::default();
 
     let fm = input.to_file(cm.clone());
@@ -109,11 +120,30 @@ fn do_work(input: MinifyTarget, options: JsMinifyOptions) -> napi::Result<Transf
             ..Default::default()
         };
 
+        let comments = SingleThreadedComments::default();
+
+        let module = parse_js(
+            cm.clone(),
+            fm.clone(),
+            handler,
+            target,
+            Syntax::Es(EsSyntax {
+                jsx: true,
+                decorators: true,
+                decorators_before_export: true,
+                import_attributes: true,
+                ..Default::default()
+            }),
+            options.module,
+            Some(&comments),
+        )
+        .context("failed to parse input file")?;
+
         // top_level defaults to true if module is true
 
         // https://github.com/swc-project/swc/issues/2254
 
-        if options.module {
+        if module.is_module() {
             if let Some(opts) = &mut min_opts.compress {
                 if opts.top_level.is_none() {
                     opts.top_level = Some(TopLevelOptions { functions: true });
@@ -136,25 +166,6 @@ fn do_work(input: MinifyTarget, options: JsMinifyOptions) -> napi::Result<Transf
             }
         }
 
-        let comments = SingleThreadedComments::default();
-
-        let module = parse_js(
-            cm.clone(),
-            fm.clone(),
-            handler,
-            target,
-            Syntax::Es(EsConfig {
-                jsx: true,
-                decorators: true,
-                decorators_before_export: true,
-                import_attributes: true,
-                ..Default::default()
-            }),
-            IsModule::Bool(options.module),
-            Some(&comments),
-        )
-        .context("failed to parse input file")?;
-
         let source_map_names = if source_map.enabled() {
             let mut v = IdentCollector {
                 names: Default::default(),
@@ -172,8 +183,8 @@ fn do_work(input: MinifyTarget, options: JsMinifyOptions) -> napi::Result<Transf
 
         let is_mangler_enabled = min_opts.mangle.is_some();
 
-        let module = (|| {
-            let module = module.fold_with(&mut resolver(unresolved_mark, top_level_mark, false));
+        let module = {
+            let module = module.apply(resolver(unresolved_mark, top_level_mark, false));
 
             let mut module = swc_core::ecma::minifier::optimize(
                 module,
@@ -184,6 +195,7 @@ fn do_work(input: MinifyTarget, options: JsMinifyOptions) -> napi::Result<Transf
                 &swc_core::ecma::minifier::option::ExtraOptions {
                     unresolved_mark,
                     top_level_mark,
+                    mangle_name_cache: extras.mangle_name_cache,
                 },
             );
 
@@ -192,7 +204,7 @@ fn do_work(input: MinifyTarget, options: JsMinifyOptions) -> napi::Result<Transf
             }
             module.visit_mut_with(&mut fixer(Some(&comments as &dyn Comments)));
             module
-        })();
+        };
 
         let preserve_comments = options
             .format
@@ -238,7 +250,7 @@ impl Task for MinifyTask {
         let input: MinifyTarget = deserialize_json(&self.code)?;
         let options: JsMinifyOptions = deserialize_json(&self.options)?;
 
-        do_work(input, options)
+        do_work(input, options, self.extras.clone())
     }
 
     fn resolve(&mut self, _env: napi::Env, output: Self::Output) -> napi::Result<Self::JsValue> {
@@ -246,22 +258,47 @@ impl Task for MinifyTask {
     }
 }
 
+type NameMangleCache = External<Arc<dyn MangleCache>>;
+
+#[napi(ts_return_type = "object")]
+fn new_mangle_name_cache() -> NameMangleCache {
+    let cache = Arc::new(SimpleMangleCache::default());
+    External::new(cache)
+}
+
 #[napi]
-fn minify(code: Buffer, opts: Buffer, signal: Option<AbortSignal>) -> AsyncTask<MinifyTask> {
+fn minify(
+    code: Buffer,
+    opts: Buffer,
+    extras: NapiMinifyExtra,
+    signal: Option<AbortSignal>,
+) -> AsyncTask<MinifyTask> {
     crate::util::init_default_trace_subscriber();
     let code = String::from_utf8_lossy(code.as_ref()).to_string();
     let options = String::from_utf8_lossy(opts.as_ref()).to_string();
+    let extras = JsMinifyExtras::default()
+        .with_mangle_name_cache(extras.mangle_name_cache.as_deref().cloned());
 
-    let task = MinifyTask { code, options };
+    let task = MinifyTask {
+        code,
+        options,
+        extras,
+    };
 
     AsyncTask::with_optional_signal(task, signal)
 }
 
 #[napi]
-pub fn minify_sync(code: Buffer, opts: Buffer) -> napi::Result<TransformOutput> {
+pub fn minify_sync(
+    code: Buffer,
+    opts: Buffer,
+    extras: NapiMinifyExtra,
+) -> napi::Result<TransformOutput> {
     crate::util::init_default_trace_subscriber();
     let input: MinifyTarget = get_deserialized(code)?;
     let options = get_deserialized(opts)?;
+    let extras = JsMinifyExtras::default()
+        .with_mangle_name_cache(extras.mangle_name_cache.as_deref().cloned());
 
-    do_work(input, options)
+    do_work(input, options, extras)
 }

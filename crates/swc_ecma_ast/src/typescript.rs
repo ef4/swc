@@ -21,7 +21,7 @@ use crate::{
     lit::{Bool, Number, Str},
     module::ModuleItem,
     pat::{ArrayPat, AssignPat, ObjectPat, Pat, RestPat},
-    BigInt, BindingIdent, TplElement,
+    BigInt, BindingIdent, IdentName, TplElement,
 };
 
 #[ast_node("TsTypeAnnotation")]
@@ -104,10 +104,9 @@ pub enum TsParamPropParam {
 #[derive(Eq, Hash, EqIgnoreSpan)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct TsQualifiedName {
-    #[span(lo)]
+    pub span: Span,
     pub left: TsEntityName,
-    #[span(hi)]
-    pub right: Ident,
+    pub right: IdentName,
 }
 
 #[ast_node]
@@ -185,13 +184,8 @@ pub struct TsPropertySignature {
     pub key: Box<Expr>,
     pub computed: bool,
     pub optional: bool,
-    #[cfg_attr(feature = "serde-impl", serde(default))]
-    pub init: Option<Box<Expr>>,
-    pub params: Vec<TsFnParam>,
     #[cfg_attr(feature = "serde-impl", serde(default, rename = "typeAnnotation"))]
     pub type_ann: Option<Box<TsTypeAnn>>,
-    #[cfg_attr(feature = "serde-impl", serde(default))]
-    pub type_params: Option<Box<TsTypeParamDecl>>,
 }
 
 #[ast_node("TsGetterSignature")]
@@ -199,10 +193,8 @@ pub struct TsPropertySignature {
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct TsGetterSignature {
     pub span: Span,
-    pub readonly: bool,
     pub key: Box<Expr>,
     pub computed: bool,
-    pub optional: bool,
     #[cfg_attr(feature = "serde-impl", serde(default, rename = "typeAnnotation"))]
     pub type_ann: Option<Box<TsTypeAnn>>,
 }
@@ -212,10 +204,8 @@ pub struct TsGetterSignature {
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct TsSetterSignature {
     pub span: Span,
-    pub readonly: bool,
     pub key: Box<Expr>,
     pub computed: bool,
-    pub optional: bool,
     pub param: TsFnParam,
 }
 
@@ -224,7 +214,6 @@ pub struct TsSetterSignature {
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct TsMethodSignature {
     pub span: Span,
-    pub readonly: bool,
     pub key: Box<Expr>,
     pub computed: bool,
     pub optional: bool,
@@ -740,7 +729,7 @@ impl<'de> Deserialize<'de> for TruePlusMinus {
     {
         struct TruePlusMinusVisitor;
 
-        impl<'de> Visitor<'de> for TruePlusMinusVisitor {
+        impl Visitor<'_> for TruePlusMinusVisitor {
             type Value = TruePlusMinus;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

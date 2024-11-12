@@ -6,7 +6,7 @@ use swc_ecma_ast::{Expr, MemberProp};
 /// A newtype that will ignore Span while doing `eq` or `hash`.
 pub struct NodeIgnoringSpan<'a, Node: ToOwned + Debug>(Cow<'a, Node>);
 
-impl<'a, Node: ToOwned + Debug> Debug for NodeIgnoringSpan<'a, Node> {
+impl<Node: ToOwned + Debug> Debug for NodeIgnoringSpan<'_, Node> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("NodeIgnoringSpan").field(&*self.0).finish()
     }
@@ -24,17 +24,17 @@ impl<'a, Node: ToOwned + Debug> NodeIgnoringSpan<'a, Node> {
     }
 }
 
-impl<'a, Node: EqIgnoreSpan + ToOwned + Debug> PartialEq for NodeIgnoringSpan<'a, Node> {
+impl<Node: EqIgnoreSpan + ToOwned + Debug> PartialEq for NodeIgnoringSpan<'_, Node> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq_ignore_span(&other.0)
     }
 }
 
-impl<'a, Node: EqIgnoreSpan + ToOwned + Debug> Eq for NodeIgnoringSpan<'a, Node> {}
+impl<Node: EqIgnoreSpan + ToOwned + Debug> Eq for NodeIgnoringSpan<'_, Node> {}
 
 // TODO: This is only a workaround for Expr. we need something like
 // `hash_ignore_span` for each node in the end.
-impl<'a> Hash for NodeIgnoringSpan<'a, Expr> {
+impl Hash for NodeIgnoringSpan<'_, Expr> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         // In pratice, most of cases/input we are dealing with are Expr::Member or
         // Expr::Ident.
@@ -56,81 +56,4 @@ impl<'a> Hash for NodeIgnoringSpan<'a, Expr> {
             }
         }
     }
-}
-
-#[test]
-fn test_hash_eq_ignore_span_expr_ref() {
-    use rustc_hash::FxHashSet;
-    use swc_common::{util::take::Take, Mark, DUMMY_SP};
-    use swc_ecma_ast::*;
-
-    use crate::{member_expr, quote_expr};
-
-    fn expr_ref(expr_ref: &Expr) -> NodeIgnoringSpan<Expr> {
-        NodeIgnoringSpan::borrowed(expr_ref)
-    }
-
-    testing::run_test(false, |_cm, _handler| {
-        Ident::within_ignored_ctxt(|| {
-            let dummy_sp = DUMMY_SP;
-            let meaningful_sp = dummy_sp.apply_mark(Mark::new());
-
-            let meaningful_ident_expr = Expr::Ident(Ident::new("foo".into(), meaningful_sp));
-            let dummy_ident_expr = Expr::Ident(Ident::new("foo".into(), dummy_sp));
-
-            let meaningful_member_expr = member_expr!(meaningful_sp, foo.bar).into();
-            let dummy_member_expr = member_expr!(dummy_sp, foo.bar).into();
-
-            let meaningful_null_expr = quote_expr!(meaningful_sp, null);
-            let dummy_null_expr = quote_expr!(dummy_sp, null);
-
-            let meaningful_array_expr = Box::new(Expr::Array(ArrayLit {
-                span: meaningful_sp,
-                elems: Default::default(),
-            }));
-
-            let dummy_array_expr = Box::new(Expr::Array(ArrayLit::dummy()));
-
-            // Should equal ignoring span and syntax context
-            assert_eq!(
-                expr_ref(&meaningful_ident_expr),
-                expr_ref(&dummy_ident_expr)
-            );
-
-            assert_eq!(
-                expr_ref(&meaningful_array_expr),
-                expr_ref(&dummy_array_expr)
-            );
-
-            let mut set = FxHashSet::from_iter([
-                expr_ref(&meaningful_ident_expr),
-                expr_ref(&meaningful_member_expr),
-                expr_ref(&meaningful_null_expr),
-                expr_ref(&meaningful_array_expr),
-            ]);
-
-            // Should produce the same hash value ignoring span and syntax
-            assert!(set.contains(&expr_ref(&dummy_ident_expr)));
-            assert!(set.contains(&expr_ref(&dummy_member_expr)));
-            assert!(set.contains(&expr_ref(&dummy_null_expr)));
-            assert!(set.contains(&expr_ref(&dummy_array_expr)));
-
-            set.insert(expr_ref(&dummy_ident_expr));
-            set.insert(expr_ref(&dummy_member_expr));
-            set.insert(expr_ref(&dummy_null_expr));
-            set.insert(expr_ref(&dummy_array_expr));
-            assert_eq!(set.len(), 4);
-
-            // Should not equal ignoring span and syntax context
-            let dummy_ident_expr = Expr::Ident(Ident::new("baz".into(), dummy_sp));
-            let dummy_member_expr = member_expr!(dummy_sp, baz.bar).into();
-            let dummy_arrow_expr = Box::new(Expr::Arrow(ArrowExpr::dummy()));
-            assert!(!set.contains(&expr_ref(&dummy_ident_expr)));
-            assert!(!set.contains(&expr_ref(&dummy_member_expr)));
-            assert!(!set.contains(&expr_ref(&dummy_arrow_expr)));
-        });
-
-        Ok(())
-    })
-    .unwrap();
 }

@@ -178,13 +178,12 @@ impl Optimizer<'_> {
                 && v.usage_count == 0
                 && !v.reassigned
                 && v.property_mutation_count == 0
-                && !v.declared_as_catch_param
             {
                 self.changed = true;
                 report_change!(
                     "unused: Dropping a variable '{}{:?}' because it is not used",
                     i.sym,
-                    i.span.ctxt
+                    i.ctxt
                 );
                 // This will remove variable.
                 i.take();
@@ -206,7 +205,7 @@ impl Optimizer<'_> {
                         if let Some(VarDeclKind::Const | VarDeclKind::Let) = self.ctx.var_kind {
                             *e = Null { span: DUMMY_SP }.into();
                         } else {
-                            *e = Expr::Invalid(Invalid { span: DUMMY_SP });
+                            *e = Invalid { span: DUMMY_SP }.into();
                         }
                     }
                 }
@@ -230,7 +229,7 @@ impl Optimizer<'_> {
 
         match e {
             Expr::Ident(e) => {
-                if e.span.ctxt.outer() == self.marks.unresolved_mark {
+                if e.ctxt.outer() == self.marks.unresolved_mark {
                     if is_global_var_with_pure_property_access(&e.sym) {
                         return false;
                     }
@@ -315,21 +314,31 @@ impl Optimizer<'_> {
 
         trace_op!("unused: take_pat_if_unused({})", dump(&*name, false));
 
+        let pure_mark = self.marks.pure;
+        let has_pure_ann = match init {
+            Some(Expr::Call(c)) => c.ctxt.has_mark(pure_mark),
+            Some(Expr::New(n)) => n.ctxt.has_mark(pure_mark),
+            Some(Expr::TaggedTpl(t)) => t.ctxt.has_mark(pure_mark),
+            _ => false,
+        };
+
         if !name.is_ident() {
             // TODO: Use smart logic
-            if self.options.pure_getters != PureGetterOption::Bool(true) {
+            if self.options.pure_getters != PureGetterOption::Bool(true) && !has_pure_ann {
                 return;
             }
 
-            if let Some(init) = init.as_mut() {
-                if self.should_preserve_property_access(
-                    init,
-                    PropertyAccessOpts {
-                        allow_getter: false,
-                        only_ident: false,
-                    },
-                ) {
-                    return;
+            if !has_pure_ann {
+                if let Some(init) = init.as_mut() {
+                    if self.should_preserve_property_access(
+                        init,
+                        PropertyAccessOpts {
+                            allow_getter: false,
+                            only_ident: false,
+                        },
+                    ) {
+                        return;
+                    }
                 }
             }
         }
@@ -345,25 +354,23 @@ impl Optimizer<'_> {
             }
 
             Pat::Array(arr) => {
-                for (idx, elem) in arr.elems.iter_mut().enumerate() {
-                    match elem {
-                        Some(p) => {
-                            if p.is_ident() {
-                                continue;
-                            }
+                for (idx, arr_elem) in arr.elems.iter_mut().enumerate() {
+                    if let Some(p) = arr_elem {
+                        let elem = init
+                            .as_mut()
+                            .and_then(|expr| self.access_numeric_property(expr, idx));
 
-                            let elem = init
-                                .as_mut()
-                                .and_then(|expr| self.access_numeric_property(expr, idx));
+                        self.take_pat_if_unused(p, elem, is_var_decl);
 
-                            self.take_pat_if_unused(p, elem, is_var_decl);
+                        if p.is_invalid() {
+                            *arr_elem = None;
                         }
-                        None => {}
                     }
                 }
 
-                arr.elems
-                    .retain(|elem| !matches!(elem, Some(Pat::Invalid(..))))
+                if has_pure_ann && arr.elems.iter().all(|e| e.is_none()) {
+                    name.take();
+                }
             }
 
             Pat::Object(obj) => {
@@ -385,10 +392,16 @@ impl Optimizer<'_> {
 
                             self.take_pat_if_unused(&mut p.value, None, is_var_decl);
                         }
-                        ObjectPatProp::Assign(AssignPatProp {
-                            key, value: None, ..
-                        }) => {
-                            self.take_ident_of_pat_if_unused(key, None);
+                        ObjectPatProp::Assign(AssignPatProp { key, value, .. }) => {
+                            if has_pure_ann {
+                                if let Some(e) = value {
+                                    *value = self.ignore_return_value(e).map(Box::new);
+                                }
+                            }
+
+                            if value.is_none() {
+                                self.take_ident_of_pat_if_unused(key, None);
+                            }
                         }
                         _ => {}
                     }
@@ -486,31 +499,43 @@ impl Optimizer<'_> {
                     report_change!(
                         "unused: Dropping a decl '{}{:?}' because it is not used",
                         ident.sym,
-                        ident.span.ctxt
+                        ident.ctxt
                     );
                     // This will remove the declaration.
                     let class = decl.take().class().unwrap();
-                    let mut side_effects = extract_class_side_effect(&self.expr_ctx, *class.class);
+                    let mut side_effects =
+                        extract_class_side_effect(&self.ctx.expr_ctx, *class.class);
 
                     if !side_effects.is_empty() {
-                        self.prepend_stmts.push(Stmt::Expr(ExprStmt {
-                            span: DUMMY_SP,
-                            expr: if side_effects.len() > 1 {
-                                SeqExpr {
-                                    span: DUMMY_SP,
-                                    exprs: side_effects,
-                                }
-                                .into()
-                            } else {
-                                side_effects.remove(0)
-                            },
-                        }))
+                        self.prepend_stmts.push(
+                            ExprStmt {
+                                span: DUMMY_SP,
+                                expr: if side_effects.len() > 1 {
+                                    SeqExpr {
+                                        span: DUMMY_SP,
+                                        exprs: side_effects,
+                                    }
+                                    .into()
+                                } else {
+                                    side_effects.remove(0)
+                                },
+                            }
+                            .into(),
+                        )
                     }
                 }
             }
             Decl::Fn(FnDecl { ident, .. }) => {
                 // We should skip if the name of decl is arguments.
                 if ident.sym == "arguments" {
+                    return;
+                }
+
+                if !self.may_remove_ident(ident) {
+                    log_abort!(
+                        "unused: Preserving function `{}` because it's top-level",
+                        ident.sym
+                    );
                     return;
                 }
 
@@ -526,7 +551,7 @@ impl Optimizer<'_> {
                     report_change!(
                         "unused: Dropping a decl '{}{:?}' because it is not used",
                         ident.sym,
-                        ident.span.ctxt
+                        ident.ctxt
                     );
                     // This will remove the declaration.
                     decl.take();
@@ -567,7 +592,7 @@ impl Optimizer<'_> {
                     report_change!(
                         "unused: Dropping an update '{}{:?}' because it is not used",
                         arg.sym,
-                        arg.span.ctxt
+                        arg.ctxt
                     );
                     // This will remove the update.
                     e.take();
@@ -607,7 +632,7 @@ impl Optimizer<'_> {
                     report_change!(
                         "unused: Dropping an op-assign '{}{:?}' because it is not used",
                         left.id.sym,
-                        left.id.span.ctxt
+                        left.id.ctxt
                     );
                     // This will remove the op-assign.
                     *e = *assign.right.take();
@@ -663,19 +688,20 @@ impl Optimizer<'_> {
                     && !var.exported
                     && var.usage_count == 0
                     && var.declared
-                    && (!var.declared_as_fn_param || !used_arguments || self.ctx.in_strict)
+                    && (!var.declared_as_fn_param || !used_arguments || self.ctx.expr_ctx.in_strict)
                 {
                     report_change!(
                         "unused: Dropping assignment to var '{}{:?}', which is never used",
                         i.id.sym,
-                        i.id.span.ctxt
+                        i.id.ctxt
                     );
                     self.changed = true;
                     if self.ctx.is_this_aware_callee {
-                        *e = Expr::Seq(SeqExpr {
+                        *e = SeqExpr {
                             span: DUMMY_SP,
                             exprs: vec![0.into(), assign.right.take()],
-                        })
+                        }
+                        .into()
                     } else {
                         *e = *assign.right.take();
                     }
@@ -793,7 +819,7 @@ impl Optimizer<'_> {
 
         let usage = self.data.vars.get(&name.to_id())?;
 
-        if usage.indexed_with_dynamic_key || usage.used_as_ref {
+        if usage.indexed_with_dynamic_key || usage.used_as_ref || usage.used_recursively {
             return None;
         }
 
@@ -802,7 +828,7 @@ impl Optimizer<'_> {
             PropOrSpread::Prop(p) => match &**p {
                 Prop::Shorthand(_) => false,
                 Prop::KeyValue(p) => {
-                    p.key.is_computed() || p.value.may_have_side_effects(&self.expr_ctx)
+                    p.key.is_computed() || p.value.may_have_side_effects(&self.ctx.expr_ctx)
                 }
                 Prop::Assign(_) => true,
                 Prop::Getter(p) => p.key.is_computed(),
@@ -837,6 +863,38 @@ impl Optimizer<'_> {
                 PropOrSpread::Prop(prop) => prop,
             };
 
+            match &**prop {
+                Prop::Method(prop) => {
+                    if contains_this_expr(&prop.function.body) {
+                        return None;
+                    }
+                }
+                Prop::Getter(prop) => {
+                    if contains_this_expr(&prop.body) {
+                        return None;
+                    }
+                }
+                Prop::Setter(prop) => {
+                    if contains_this_expr(&prop.body) {
+                        return None;
+                    }
+                }
+                Prop::KeyValue(prop) => match &*prop.value {
+                    Expr::Fn(f) => {
+                        if contains_this_expr(&f.function.body) {
+                            return None;
+                        }
+                    }
+                    Expr::Arrow(f) => {
+                        if contains_this_expr(&f.body) {
+                            return None;
+                        }
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+
             if contains_this_expr(prop) {
                 return None;
             }
@@ -844,11 +902,19 @@ impl Optimizer<'_> {
             match &**prop {
                 Prop::KeyValue(p) => match &p.key {
                     PropName::Str(s) => {
+                        if !can_remove_property(&s.value) {
+                            return None;
+                        }
+
                         if let Some(v) = unknown_used_props.get_mut(&s.value) {
                             *v = 0;
                         }
                     }
                     PropName::Ident(i) => {
+                        if !can_remove_property(&i.sym) {
+                            return None;
+                        }
+
                         if let Some(v) = unknown_used_props.get_mut(&i.sym) {
                             *v = 0;
                         }
@@ -856,6 +922,10 @@ impl Optimizer<'_> {
                     _ => return None,
                 },
                 Prop::Shorthand(p) => {
+                    if !can_remove_property(&p.sym) {
+                        return None;
+                    }
+
                     if let Some(v) = unknown_used_props.get_mut(&p.sym) {
                         *v = 0;
                     }
@@ -909,6 +979,10 @@ impl Optimizer<'_> {
     }
 }
 
+fn can_remove_property(sym: &str) -> bool {
+    !matches!(sym, "toString" | "valueOf")
+}
+
 #[derive(Default)]
 struct ThisPropertyVisitor {
     properties: FxHashSet<JsWord>,
@@ -952,6 +1026,34 @@ impl Visit for ThisPropertyVisitor {
             if arg.expr.is_this() {
                 self.should_abort = true;
                 return;
+            }
+        }
+    }
+
+    fn visit_callee(&mut self, c: &Callee) {
+        if self.should_abort {
+            return;
+        }
+
+        c.visit_children_with(self);
+
+        if self.should_abort {
+            return;
+        }
+
+        if let Callee::Expr(e) = c {
+            match &**e {
+                Expr::This(..) => {
+                    self.should_abort = true;
+                }
+
+                Expr::Member(e) => {
+                    if e.obj.is_this() {
+                        self.should_abort = true;
+                    }
+                }
+
+                _ => {}
             }
         }
     }

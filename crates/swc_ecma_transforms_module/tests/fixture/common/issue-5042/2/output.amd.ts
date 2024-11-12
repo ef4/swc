@@ -1,9 +1,9 @@
 define([
-    "require",
-    "foo"
-], function(require, _foo) {
+    "require"
+], function(require) {
     "use strict";
-    _foo.bar = 1;
-    _foo.bar = 2;
-    return _foo;
+    const foo = require("foo");
+    foo.bar = 1;
+    foo.bar = 2;
+    module.exports = foo;
 });

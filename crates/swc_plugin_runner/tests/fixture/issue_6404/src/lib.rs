@@ -6,14 +6,10 @@ use swc_core::{
 
 #[plugin_transform]
 pub fn process_transform(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
-    for i in 1..50000 {
+    for i in 1..5 {
         let j: u32 = i;
         // println!("i {} j {}", i, j);
-        let res = metadata.source_map.span_to_snippet(Span::new(
-            BytePos(j),
-            BytePos(j + 1000),
-            SyntaxContext::empty(),
-        ));
+        let res = metadata.source_map.span_to_snippet(Span::new(BytePos(j), BytePos(j + 10000000)));
         // let _ = dbg!(res);
     }
 

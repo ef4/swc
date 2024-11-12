@@ -13,7 +13,7 @@ use crate::{
     error::SyntaxError,
     lexer::Lexer,
     token::{Token, Word},
-    Context, EsVersion, Syntax, TsConfig,
+    Context, EsVersion, Syntax, TsSyntax,
 };
 #[cfg(test)]
 extern crate test;
@@ -70,7 +70,7 @@ impl<I: Tokens> Parser<I> {
         #[cfg(feature = "typescript")]
         let in_declare = matches!(
             input.syntax(),
-            Syntax::Typescript(TsConfig { dts: true, .. })
+            Syntax::Typescript(TsSyntax { dts: true, .. })
         );
         #[cfg(not(feature = "typescript"))]
         let in_declare = false;
@@ -88,6 +88,10 @@ impl<I: Tokens> Parser<I> {
 
     pub fn take_errors(&mut self) -> Vec<Error> {
         self.input().take_errors()
+    }
+
+    pub fn take_script_module_errors(&mut self) -> Vec<Error> {
+        self.input().take_script_module_errors()
     }
 
     pub fn parse_script(&mut self) -> PResult<Script> {
@@ -220,7 +224,7 @@ impl<I: Tokens> Parser<I> {
     }
 
     #[cold]
-    fn emit_err(&self, span: Span, error: SyntaxError) {
+    fn emit_err(&mut self, span: Span, error: SyntaxError) {
         if self.ctx().ignore_error || !self.syntax().early_errors() {
             return;
         }
@@ -229,9 +233,19 @@ impl<I: Tokens> Parser<I> {
     }
 
     #[cold]
-    fn emit_error(&self, error: Error) {
+    fn emit_error(&mut self, error: Error) {
         if self.ctx().ignore_error || !self.syntax().early_errors() {
             return;
+        }
+
+        if matches!(self.input.cur(), Some(Token::Error(..))) {
+            let err = self.input.bump();
+            match err {
+                Token::Error(err) => {
+                    self.input_ref().add_error(err);
+                }
+                _ => unreachable!(),
+            }
         }
 
         self.input_ref().add_error(error);

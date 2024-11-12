@@ -1,8 +1,6 @@
 //// [importStatementsInterfaces.ts]
-var C;
 // no code gen expected
 (function(C) {
-    var a = A;
     var m;
     var p;
     var p = {
@@ -11,12 +9,10 @@ var C;
         z: 0
     };
 })(C || (C = {}));
-var D;
 // no code gen expected
 (function(D) {
     var p;
 })(D || (D = {}));
-var E;
 // no code gen expected
 (function(E) {
     function xDist(x) {
@@ -24,3 +20,4 @@ var E;
     }
     E.xDist = xDist;
 })(E || (E = {}));
+var C, D, E;

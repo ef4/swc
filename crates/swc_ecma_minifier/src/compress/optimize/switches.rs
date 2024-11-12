@@ -1,6 +1,6 @@
-use swc_common::{util::take::Take, EqIgnoreSpan, Spanned, DUMMY_SP};
+use swc_common::{util::take::Take, EqIgnoreSpan, Spanned, SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
-use swc_ecma_utils::{prepend_stmt, ExprExt, ExprFactory, StmtExt};
+use swc_ecma_utils::{extract_var_ids, prepend_stmt, ExprExt, ExprFactory, StmtExt};
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 
 use super::Optimizer;
@@ -30,27 +30,32 @@ impl Optimizer<'_> {
 
         let discriminant = &mut stmt.discriminant;
 
-        let tail = if let Some(e) = is_primitive(&self.expr_ctx, tail_expr(discriminant)) {
+        let tail = if let Some(e) = is_primitive(&self.ctx.expr_ctx, tail_expr(discriminant)) {
             e
         } else {
             return;
         };
 
-        let mut var_ids = vec![];
+        let mut var_ids = Vec::new();
         let mut cases = Vec::new();
         let mut exact = None;
         let mut may_match_other_than_exact = false;
 
         for (idx, case) in stmt.cases.iter_mut().enumerate() {
             if let Some(test) = case.test.as_ref() {
-                if let Some(e) = is_primitive(&self.expr_ctx, tail_expr(test)) {
-                    if e.eq_ignore_span(tail) {
+                if let Some(e) = is_primitive(&self.ctx.expr_ctx, tail_expr(test)) {
+                    if match (e, tail) {
+                        (Expr::Lit(Lit::Num(e)), Expr::Lit(Lit::Num(tail))) => {
+                            e.value == tail.value
+                        }
+                        _ => e.eq_ignore_span(tail),
+                    } {
                         cases.push(case.take());
 
                         exact = Some(idx);
                         break;
                     } else {
-                        var_ids.extend(case.cons.extract_var_ids())
+                        var_ids.extend(extract_var_ids(&case.cons))
                     }
                 } else {
                     if !may_match_other_than_exact
@@ -69,19 +74,26 @@ impl Optimizer<'_> {
 
         if let Some(exact) = exact {
             let exact_case = cases.last_mut().unwrap();
-            let mut terminate = exact_case.cons.terminates();
+            let mut terminate = exact_case.cons.iter().rev().any(|s| s.terminates());
             for case in stmt.cases[(exact + 1)..].iter_mut() {
                 if terminate {
-                    var_ids.extend(case.cons.extract_var_ids())
+                    var_ids.extend(extract_var_ids(&case.cons))
                 } else {
-                    terminate |= case.cons.terminates();
+                    terminate |= case.cons.iter().rev().any(|s| s.terminates());
                     exact_case.cons.extend(case.cons.take())
                 }
             }
 
             if !may_match_other_than_exact {
                 // remove default if there's an exact match
-                cases.retain(|case| case.test.is_some());
+                cases.retain(|case| {
+                    if case.test.is_some() {
+                        true
+                    } else {
+                        var_ids.extend(extract_var_ids(&case.cons));
+                        false
+                    }
+                });
             }
 
             if cases.len() == 2 {
@@ -107,7 +119,7 @@ impl Optimizer<'_> {
             .into_iter()
             .map(|name| VarDeclarator {
                 span: DUMMY_SP,
-                name: Pat::Ident(name.into()),
+                name: name.into(),
                 init: None,
                 definite: Default::default(),
             })
@@ -130,6 +142,7 @@ impl Optimizer<'_> {
                         kind: VarDeclKind::Var,
                         declare: Default::default(),
                         decls: var_ids,
+                        ..Default::default()
                     }
                     .into(),
                 )
@@ -144,29 +157,32 @@ impl Optimizer<'_> {
             }
 
             stmts.extend(last.cons);
-            *s = Stmt::Block(BlockStmt {
-                span: DUMMY_SP,
+            *s = BlockStmt {
                 stmts,
-            })
+                ..Default::default()
+            }
+            .into()
         } else {
             report_change!("switches: Removing unreachable cases from a constant switch");
 
             stmt.cases = cases;
 
             if !var_ids.is_empty() {
-                *s = Stmt::Block(BlockStmt {
-                    span: DUMMY_SP,
+                *s = BlockStmt {
                     stmts: vec![
                         VarDecl {
                             span: DUMMY_SP,
                             kind: VarDeclKind::Var,
                             declare: Default::default(),
                             decls: var_ids,
+                            ..Default::default()
                         }
                         .into(),
                         s.take(),
                     ],
-                })
+                    ..Default::default()
+                }
+                .into()
             }
         }
     }
@@ -186,12 +202,16 @@ impl Optimizer<'_> {
         self.merge_cases_with_same_cons(cases);
 
         // last case with no empty body
-        let mut last = cases.len();
+        let mut last = 0;
 
         for (idx, case) in cases.iter_mut().enumerate().rev() {
             self.changed |= remove_last_break(&mut case.cons);
 
-            if !case.cons.is_empty() {
+            if case
+                .cons
+                .iter()
+                .any(|stmt| stmt.may_have_side_effects(&self.ctx.expr_ctx) || stmt.terminates())
+            {
                 last = idx + 1;
                 break;
             }
@@ -200,7 +220,7 @@ impl Optimizer<'_> {
         let has_side_effect = cases.iter().skip(last).rposition(|case| {
             case.test
                 .as_deref()
-                .map(|test| test.may_have_side_effects(&self.expr_ctx))
+                .map(|test| test.may_have_side_effects(&self.ctx.expr_ctx))
                 .unwrap_or(false)
         });
 
@@ -218,10 +238,18 @@ impl Optimizer<'_> {
         }
 
         if let Some(default) = default {
+            if cases.is_empty() {
+                return;
+            }
+
             let end = cases
                 .iter()
                 .skip(default)
-                .position(|case| !case.cons.is_empty())
+                .position(|case| {
+                    case.cons.iter().any(|stmt| {
+                        stmt.may_have_side_effects(&self.ctx.expr_ctx) || stmt.terminates()
+                    })
+                })
                 .unwrap_or(0)
                 + default;
 
@@ -231,9 +259,12 @@ impl Optimizer<'_> {
             let start = cases.iter().enumerate().rposition(|(idx, case)| {
                 case.test
                     .as_deref()
-                    .map(|test| test.may_have_side_effects(&self.expr_ctx))
+                    .map(|test| test.may_have_side_effects(&self.ctx.expr_ctx))
                     .unwrap_or(false)
-                    || (idx != end && !case.cons.is_empty())
+                    || (idx != end
+                        && case.cons.iter().any(|stmt| {
+                            stmt.may_have_side_effects(&self.ctx.expr_ctx) || stmt.terminates()
+                        }))
             });
 
             let start = start.map(|s| s + 1).unwrap_or(0);
@@ -273,10 +304,10 @@ impl Optimizer<'_> {
                 cannot_cross_block |= cases[j]
                     .test
                     .as_deref()
-                    .map(|test| is_primitive(&self.expr_ctx, test).is_none())
+                    .map(|test| is_primitive(&self.ctx.expr_ctx, test).is_none())
                     .unwrap_or(false)
                     || !(cases[j].cons.is_empty()
-                        || cases[j].cons.terminates()
+                        || cases[j].cons.iter().rev().any(|s| s.terminates())
                         || j == cases.len() - 1);
 
                 if cases[j].cons.is_empty() {
@@ -306,10 +337,14 @@ impl Optimizer<'_> {
                         if let Some(Stmt::Break(BreakStmt { label: None, .. })) =
                             cases[i].cons.last()
                         {
-                            cases[i].cons[..(cases[i].cons.len() - 1)]
-                                .eq_ignore_span(&cases[j].cons)
+                            SyntaxContext::within_ignored_ctxt(|| {
+                                cases[i].cons[..(cases[i].cons.len() - 1)]
+                                    .eq_ignore_span(&cases[j].cons)
+                            })
                         } else {
-                            cases[i].cons.eq_ignore_span(&cases[j].cons)
+                            SyntaxContext::within_ignored_ctxt(|| {
+                                cases[i].cons.eq_ignore_span(&cases[j].cons)
+                            })
                         }
                     };
 
@@ -341,10 +376,11 @@ impl Optimizer<'_> {
                 [] => {
                     self.changed = true;
                     report_change!("switches: Removing empty switch");
-                    *s = Stmt::Expr(ExprStmt {
+                    *s = ExprStmt {
                         span: sw.span,
                         expr: sw.discriminant.take(),
-                    })
+                    }
+                    .into()
                 }
                 [case] => {
                     if contains_nested_break(case) {
@@ -358,22 +394,25 @@ impl Optimizer<'_> {
                     let discriminant = sw.discriminant.take();
 
                     if let Some(test) = case.test {
-                        let test = Box::new(Expr::Bin(BinExpr {
+                        let test = BinExpr {
                             left: discriminant,
                             right: test,
                             op: op!("==="),
                             span: DUMMY_SP,
-                        }));
+                        }
+                        .into();
 
-                        *s = Stmt::If(IfStmt {
+                        *s = IfStmt {
                             span: sw.span,
                             test,
                             cons: Box::new(Stmt::Block(BlockStmt {
                                 span: DUMMY_SP,
                                 stmts: case.cons,
+                                ..Default::default()
                             })),
                             alt: None,
-                        })
+                        }
+                        .into()
                     } else {
                         // is default
                         let mut stmts = vec![Stmt::Expr(ExprStmt {
@@ -381,10 +420,12 @@ impl Optimizer<'_> {
                             expr: discriminant,
                         })];
                         stmts.extend(case.cons);
-                        *s = Stmt::Block(BlockStmt {
+                        *s = BlockStmt {
                             span: sw.span,
                             stmts,
-                        })
+                            ..Default::default()
+                        }
+                        .into()
                     }
                 }
                 [first, second] if first.test.is_none() || second.test.is_none() => {
@@ -393,7 +434,7 @@ impl Optimizer<'_> {
                     }
                     self.changed = true;
                     report_change!("switches: Turn two cases switch into if else");
-                    let terminate = first.cons.terminates();
+                    let terminate = first.cons.iter().rev().any(|s| s.terminates());
 
                     if terminate {
                         remove_last_break(&mut first.cons);
@@ -403,7 +444,7 @@ impl Optimizer<'_> {
                         } else {
                             (second, first)
                         };
-                        *s = Stmt::If(IfStmt {
+                        *s = IfStmt {
                             span: sw.span,
                             test: BinExpr {
                                 span: DUMMY_SP,
@@ -415,16 +456,19 @@ impl Optimizer<'_> {
                             cons: Stmt::Block(BlockStmt {
                                 span: DUMMY_SP,
                                 stmts: case.cons.take(),
+                                ..Default::default()
                             })
                             .into(),
                             alt: Some(
                                 Stmt::Block(BlockStmt {
                                     span: DUMMY_SP,
                                     stmts: def.cons.take(),
+                                    ..Default::default()
                                 })
                                 .into(),
                             ),
-                        })
+                        }
+                        .into()
                     } else {
                         let mut stmts = vec![Stmt::If(IfStmt {
                             span: DUMMY_SP,
@@ -447,15 +491,18 @@ impl Optimizer<'_> {
                             cons: Stmt::Block(BlockStmt {
                                 span: DUMMY_SP,
                                 stmts: first.cons.take(),
+                                ..Default::default()
                             })
                             .into(),
                             alt: None,
                         })];
                         stmts.extend(second.cons.take());
-                        *s = Stmt::Block(BlockStmt {
+                        *s = BlockStmt {
                             span: sw.span,
                             stmts,
-                        })
+                            ..Default::default()
+                        }
+                        .into()
                     }
                 }
                 _ => (),

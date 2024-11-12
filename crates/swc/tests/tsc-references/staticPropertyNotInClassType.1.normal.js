@@ -1,7 +1,6 @@
 //// [staticPropertyNotInClassType.ts]
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _create_class } from "@swc/helpers/_/_create_class";
-var NonGeneric;
 (function(NonGeneric) {
     var C = /*#__PURE__*/ function() {
         "use strict";
@@ -26,7 +25,7 @@ var NonGeneric;
         return C;
     }();
     (function(C) {
-        C.bar = ""; // not reflected in class type
+        C.bar = ''; // not reflected in class type
     })(C || (C = {}));
     var c = new C(1, 2);
     var r = c.fn();
@@ -34,7 +33,6 @@ var NonGeneric;
     var r5 = c.bar; // error
     var r6 = c.x; // error
 })(NonGeneric || (NonGeneric = {}));
-var Generic;
 (function(Generic) {
     var C = /*#__PURE__*/ function() {
         "use strict";
@@ -59,11 +57,12 @@ var Generic;
         return C;
     }();
     (function(C) {
-        C.bar = ""; // not reflected in class type
+        C.bar = ''; // not reflected in class type
     })(C || (C = {}));
-    var c = new C(1, "");
+    var c = new C(1, '');
     var r = c.fn();
     var r4 = c.foo; // error
     var r5 = c.bar; // error
     var r6 = c.x; // error
 })(Generic || (Generic = {}));
+var NonGeneric, Generic;
