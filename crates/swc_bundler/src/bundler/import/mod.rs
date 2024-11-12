@@ -1,5 +1,5 @@
 use anyhow::{Context, Error};
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::{
     collections::{AHashMap, AHashSet},
     sync::Lrc,
@@ -10,7 +10,7 @@ use swc_ecma_utils::find_pat_ids;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
 use super::Bundler;
-use crate::{load::Load, resolve::Resolve};
+use crate::{load::Load, resolve::Resolve, util::ExportMetadata};
 
 #[cfg(test)]
 mod tests;
@@ -57,6 +57,7 @@ where
             let path = self
                 .resolver
                 .resolve(base, module_specifier)
+                .map(|v| v.filename)
                 .with_context(|| format!("failed to resolve {} from {}", module_specifier, base))?;
 
             let path = Lrc::new(path);
@@ -199,9 +200,7 @@ where
             .iter()
             .find(|import| {
                 import.specifiers.iter().any(|specifier| match specifier {
-                    ImportSpecifier::Namespace(ns) => {
-                        ns.local.sym == id.0 && ns.local.span.ctxt == id.1
-                    }
+                    ImportSpecifier::Namespace(ns) => ns.local.sym == id.0 && ns.local.ctxt == id.1,
                     _ => false,
                 })
             })
@@ -224,14 +223,7 @@ where
 
                 match &mut e.callee {
                     Callee::Expr(callee)
-                        if self.bundler.config.require
-                            && matches!(
-                                &**callee,
-                                Expr::Ident(Ident {
-                                    sym: js_word!("require"),
-                                    ..
-                                })
-                            ) =>
+                        if self.bundler.config.require && callee.is_ident_ref_to("require") =>
                     {
                         if self.bundler.is_external(&src.value) {
                             return;
@@ -239,7 +231,7 @@ where
                         if let Expr::Ident(i) = &mut **callee {
                             self.mark_as_cjs(&src.value);
                             if let Some((_, export_ctxt)) = self.ctxt_for(&src.value) {
-                                i.span = i.span.with_ctxt(export_ctxt);
+                                i.ctxt = export_ctxt;
                             }
                         }
 
@@ -247,10 +239,11 @@ where
 
                         let decl = ImportDecl {
                             span,
-                            specifiers: vec![],
+                            specifiers: Vec::new(),
                             src: Box::new(src.clone()),
                             type_only: false,
                             with: None,
+                            phase: Default::default(),
                         };
 
                         if self.top_level {
@@ -267,7 +260,7 @@ where
                     //
                     // ExprOrSuper::Expr(ref e) => match &**e {
                     //     Expr::Ident(Ident {
-                    //         sym: js_word!("import"),
+                    //         sym: "import",
                     //         ..
                     //     }) => {
                     //         self.info.dynamic_imports.push(src.clone());
@@ -301,8 +294,7 @@ where
                     for s in &import.specifiers {
                         if let ImportSpecifier::Namespace(n) = s {
                             return obj.sym == n.local.sym
-                                && (obj.span.ctxt == self.module_ctxt
-                                    || obj.span.ctxt == n.local.span.ctxt);
+                                && (obj.ctxt == self.module_ctxt || obj.ctxt == n.local.ctxt);
                         }
                     }
 
@@ -320,8 +312,8 @@ where
                 };
                 let prop = match &e.prop {
                     MemberProp::Ident(i) => {
-                        let mut i = i.clone();
-                        i.span = i.span.with_ctxt(exported_ctxt);
+                        let mut i = Ident::from(i.clone());
+                        i.ctxt = exported_ctxt;
                         i
                     }
                     _ => unreachable!(
@@ -359,12 +351,12 @@ where
         };
 
         let mut prop = match &me.prop {
-            MemberProp::Ident(v) => v.clone(),
+            MemberProp::Ident(v) => Ident::from(v.clone()),
             _ => return,
         };
-        prop.span.ctxt = self.imported_idents.get(&obj.to_id()).copied().unwrap();
+        prop.ctxt = self.imported_idents.get(&obj.to_id()).copied().unwrap();
 
-        *e = Expr::Ident(prop);
+        *e = prop.into();
     }
 }
 
@@ -373,7 +365,7 @@ where
     L: Load,
     R: Resolve,
 {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_export_named_specifier(&mut self, s: &mut ExportNamedSpecifier) {
         let orig = match &s.orig {
@@ -386,11 +378,11 @@ where
         match &mut s.exported {
             Some(ModuleExportName::Ident(exported)) => {
                 // PR 3139 (https://github.com/swc-project/swc/pull/3139) removes the syntax context from any named exports from other sources.
-                exported.span.ctxt = self.module_ctxt;
+                exported.ctxt = self.module_ctxt;
             }
             Some(ModuleExportName::Str(..)) => unimplemented!("module string names unimplemented"),
             None => {
-                let exported = Ident::new(orig.sym.clone(), orig.span.with_ctxt(self.module_ctxt));
+                let exported = Ident::new(orig.sym.clone(), orig.span, self.module_ctxt);
                 s.exported = Some(ModuleExportName::Ident(exported));
             }
         }
@@ -431,7 +423,11 @@ where
         if !self.deglob_phase {
             if let Some((_, export_ctxt)) = self.ctxt_for(&import.src.value) {
                 // Firstly we attach proper syntax contexts.
-                import.span = import.span.with_ctxt(export_ctxt);
+                ExportMetadata {
+                    export_ctxt: Some(export_ctxt),
+                    ..Default::default()
+                }
+                .encode(&mut import.with);
 
                 // Then we store list of imported identifiers.
                 for specifier in &mut import.specifiers {
@@ -440,21 +436,20 @@ where
                             self.imported_idents.insert(n.local.to_id(), export_ctxt);
                             match &mut n.imported {
                                 Some(ModuleExportName::Ident(imported)) => {
-                                    imported.span.ctxt = export_ctxt;
+                                    imported.ctxt = export_ctxt;
                                 }
                                 Some(ModuleExportName::Str(..)) => {
                                     unimplemented!("module string names unimplemented")
                                 }
                                 None => {
                                     let mut imported: Ident = n.local.clone();
-                                    imported.span.ctxt = export_ctxt;
+                                    imported.ctxt = export_ctxt;
                                     n.imported = Some(ModuleExportName::Ident(imported));
                                 }
                             }
                         }
                         ImportSpecifier::Default(n) => {
-                            self.imported_idents
-                                .insert(n.local.to_id(), n.local.span.ctxt);
+                            self.imported_idents.insert(n.local.to_id(), n.local.ctxt);
                         }
                         ImportSpecifier::Namespace(n) => {
                             self.imported_idents.insert(n.local.to_id(), export_ctxt);
@@ -490,7 +485,7 @@ where
                                 self.idents_to_deglob.insert(id.clone());
                                 ImportSpecifier::Named(ImportNamedSpecifier {
                                     span: DUMMY_SP,
-                                    local: Ident::new(id.0, DUMMY_SP.with_ctxt(id.1)),
+                                    local: Ident::new(id.0, DUMMY_SP, id.1),
                                     imported: None,
                                     is_type_only: false,
                                 })
@@ -549,7 +544,7 @@ where
         });
 
         if self.deglob_phase {
-            let mut wrapping_required = vec![];
+            let mut wrapping_required = Vec::new();
             for import in self.info.imports.iter_mut() {
                 let use_ns = self.info.forced_ns.contains(&import.src.value)
                     || self
@@ -610,13 +605,7 @@ where
                     ref args,
                     ..
                 }) if self.bundler.config.require
-                    && matches!(
-                        &**callee,
-                        Expr::Ident(Ident {
-                            sym: js_word!("require"),
-                            ..
-                        })
-                    )
+                    && callee.is_ident_ref_to("require")
                     && args.len() == 1 =>
                 {
                     let span = *span;
@@ -636,7 +625,7 @@ where
 
                     if let Expr::Ident(i) = &mut **callee {
                         if let Some((_, export_ctxt)) = self.ctxt_for(&src.value) {
-                            i.span = i.span.with_ctxt(export_ctxt);
+                            i.ctxt = export_ctxt;
                         }
                     }
 
@@ -658,6 +647,7 @@ where
                         src: Box::new(src),
                         type_only: false,
                         with: None,
+                        phase: Default::default(),
                     };
 
                     // if self.top_level {

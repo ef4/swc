@@ -2,11 +2,12 @@ use std::path::PathBuf;
 
 use swc_common::{comments::SingleThreadedComments, errors::Handler, Spanned};
 use swc_ecma_ast::*;
-use swc_ecma_parser::{lexer::Lexer, EsConfig, Parser, Syntax, TsConfig};
+use swc_ecma_parser::{lexer::Lexer, EsSyntax, Parser, Syntax, TsSyntax};
 use swc_ecma_visit::{Visit, VisitWith};
 
 #[testing::fixture("tests/span/**/*.js")]
 #[testing::fixture("tests/span/**/*.ts")]
+#[testing::fixture("tests/comments/**/*.js")]
 fn span(entry: PathBuf) {
     let dir = entry.parent().unwrap().to_path_buf();
     let file_name = entry
@@ -22,13 +23,13 @@ fn span(entry: PathBuf) {
         let comments = SingleThreadedComments::default();
         let lexer = Lexer::new(
             if file_name.ends_with(".js") {
-                Syntax::Es(EsConfig {
+                Syntax::Es(EsSyntax {
                     jsx: true,
                     decorators: true,
                     ..Default::default()
                 })
             } else {
-                Syntax::Typescript(TsConfig {
+                Syntax::Typescript(TsSyntax {
                     tsx: true,
                     decorators: true,
                     no_early_errors: true,
@@ -53,7 +54,7 @@ fn span(entry: PathBuf) {
     })
     .expect_err("failed to run test");
 
-    let ref_file = format!("{}.swc-stderr", dir.join(&file_name).display());
+    let ref_file = format!("{}.span.swc-stderr", dir.join(&file_name).display());
 
     content.compare_to_file(ref_file).unwrap();
 }
@@ -581,8 +582,8 @@ impl Visit for Shower<'_> {
         n.visit_children_with(self)
     }
 
-    fn visit_pat_or_expr(&mut self, n: &PatOrExpr) {
-        self.show("PatOrExpr", n);
+    fn visit_assign_target(&mut self, n: &AssignTarget) {
+        self.show("AssignTarget", n);
         n.visit_children_with(self)
     }
 

@@ -12,7 +12,10 @@ use wasmer_wasix::Runtime;
 static ENGINE: Lazy<Mutex<wasmer::Engine>> = Lazy::new(|| {
     // Use empty enumset to disable simd.
     use enumset::EnumSet;
-    use wasmer::{BaseTunables, CompilerConfig, EngineBuilder, Target, Triple};
+    use wasmer::{
+        sys::{BaseTunables, EngineBuilder},
+        CompilerConfig, Target, Triple,
+    };
     let mut set = EnumSet::new();
 
     // [TODO]: Should we use is_x86_feature_detected! macro instead?
@@ -58,7 +61,7 @@ pub fn build_wasi_runtime(
     use wasmer_wasix::{
         runtime::{
             module_cache::{ModuleCache, SharedCache},
-            package_loader::BuiltinPackageLoader,
+            package_loader::UnsupportedPackageLoader,
             resolver::MultiSource,
             task_manager::tokio::TokioTaskManager,
         },
@@ -68,9 +71,9 @@ pub fn build_wasi_runtime(
     let cache =
         SharedCache::default().with_fallback(wasmer_wasix::runtime::module_cache::in_memory());
 
-    let dummy_loader = BuiltinPackageLoader::new_with_client(".", Arc::new(StubHttpClient));
+    let dummy_loader = UnsupportedPackageLoader;
     let rt = PluggableRuntime {
-        rt: Arc::new(TokioTaskManager::shared()),
+        rt: Arc::new(TokioTaskManager::default()),
         networking: Arc::new(virtual_net::UnsupportedVirtualNetworking::default()),
         engine: Some(ENGINE.lock().clone()),
         tty: None,

@@ -54,9 +54,11 @@ impl Query {
         {
             let distribs = browserslist::resolve(
                 s,
-                browserslist::Opts::new()
-                    .mobile_to_desktop(true)
-                    .ignore_unknown_versions(true),
+                &browserslist::Opts {
+                    mobile_to_desktop: true,
+                    ignore_unknown_versions: true,
+                    ..Default::default()
+                },
             )
             .with_context(|| {
                 format!(
@@ -118,6 +120,22 @@ pub fn targets_to_versions(v: Option<Targets>) -> Result<Versions, Error> {
                 if let Some(mut q) = q {
                     q.node = node;
                     return Ok(q);
+                }
+            }
+
+            let mut result = Versions::default();
+            for (k, v) in map.iter() {
+                match v {
+                    QueryOrVersion::Query(q) => {
+                        let v = q.exec().context("failed to run query")?;
+
+                        for (k, v) in v {
+                            result.insert(k, v);
+                        }
+                    }
+                    QueryOrVersion::Version(v) => {
+                        result.insert(k, Some(*v));
+                    }
                 }
             }
 

@@ -1,18 +1,17 @@
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use swc_common::{FileName, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_parser::{lexer::Lexer, parse_file_as_module, Parser, StringInput, Syntax};
-use swc_ecma_transforms_base::pass::noop;
 use swc_ecma_utils::ExprFactory;
-use swc_ecma_visit::{FoldWith, Visit, VisitWith};
+use swc_ecma_visit::{Fold, FoldWith, Visit, VisitWith};
 
 static SOURCE: &str = include_str!("assets/AjaxObservable.ts");
 
 fn module_clone(b: &mut Bencher) {
     let _ = ::testing::run_test(false, |cm, handler| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let module = parse_file_as_module(
             &fm,
             Syntax::Typescript(Default::default()),
@@ -36,9 +35,9 @@ fn module_clone(b: &mut Bencher) {
 
 fn fold_empty(b: &mut Bencher) {
     let _ = ::testing::run_test(false, |cm, handler| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let module = parse_file_as_module(
             &fm,
             Syntax::Typescript(Default::default()),
@@ -55,20 +54,19 @@ fn fold_empty(b: &mut Bencher) {
             e.into_diagnostic(handler).emit();
         }
 
-        let mut folder = noop();
+        let mut folder = noop_pass();
 
-        b.iter(|| black_box(module.clone().fold_with(&mut folder)));
+        b.iter(|| black_box(Program::Module(module.clone()).apply(&mut folder)));
         Ok(())
     });
 }
 
 /// Optimized out
-
 fn fold_noop_impl_all(b: &mut Bencher) {
     let _ = ::testing::run_test(false, |cm, handler| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
 
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let module = parse_file_as_module(
             &fm,
             Syntax::Typescript(Default::default()),
@@ -83,19 +81,18 @@ fn fold_noop_impl_all(b: &mut Bencher) {
             e.into_diagnostic(handler).emit();
         }
 
-        let mut folder = noop();
+        let mut folder = noop_pass();
 
-        b.iter(|| black_box(module.clone().fold_with(&mut folder)));
+        b.iter(|| black_box(Program::Module(module.clone()).apply(&mut folder)));
         Ok(())
     });
 }
 
 /// Optimized out
-
 fn fold_noop_impl_vec(b: &mut Bencher) {
     let _ = ::testing::run_test(false, |cm, handler| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
-        let mut errors = vec![];
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
+        let mut errors = Vec::new();
         let module = parse_file_as_module(
             &fm,
             Syntax::Typescript(Default::default()),
@@ -112,20 +109,21 @@ fn fold_noop_impl_vec(b: &mut Bencher) {
             e.into_diagnostic(handler).emit();
         }
 
-        let mut folder = noop();
+        let mut folder = noop_pass();
 
-        b.iter(|| black_box(module.clone().fold_with(&mut folder)));
+        b.iter(|| black_box(Program::Module(module.clone()).apply(&mut folder)));
         Ok(())
     });
 }
 
 fn mk_expr() -> Expr {
-    Expr::Call(CallExpr {
+    CallExpr {
         span: DUMMY_SP,
-        callee: Ident::new("foo".into(), DUMMY_SP).as_callee(),
-        args: vec![],
-        type_args: None,
-    })
+        callee: Ident::new_no_ctxt("foo".into(), DUMMY_SP).as_callee(),
+        args: Vec::new(),
+        ..Default::default()
+    }
+    .into()
 }
 
 fn boxing_boxed_clone(b: &mut Bencher) {
@@ -148,7 +146,7 @@ fn boxing_unboxed_clone(b: &mut Bencher) {
 
 fn boxing_boxed(b: &mut Bencher) {
     let _ = ::testing::run_test(false, |_, _| {
-        let mut folder = noop();
+        let mut folder = noop_fold();
         let expr = Box::new(mk_expr());
 
         b.iter(|| black_box(expr.clone().fold_with(&mut folder)));
@@ -158,27 +156,10 @@ fn boxing_boxed(b: &mut Bencher) {
 
 fn boxing_unboxed(b: &mut Bencher) {
     let _ = ::testing::run_test(false, |_, _| {
-        let mut folder = noop();
+        let mut folder = noop_fold();
         let expr = mk_expr();
 
         b.iter(|| black_box(expr.clone().fold_with(&mut folder)));
-        Ok(())
-    });
-}
-
-fn visit_empty(b: &mut Bencher) {
-    let _ = ::testing::run_test(false, |cm, _| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
-        let lexer = Lexer::new(
-            Syntax::Typescript(Default::default()),
-            Default::default(),
-            StringInput::from(&*fm),
-            None,
-        );
-        let mut parser = Parser::new_from(lexer);
-        let _module = parser.parse_module().map_err(|_| ()).unwrap();
-
-        b.iter(|| black_box(()));
         Ok(())
     });
 }
@@ -207,7 +188,7 @@ fn visit_contains_this(b: &mut Bencher) {
     }
 
     let _ = ::testing::run_test(false, |cm, _| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
         let lexer = Lexer::new(
             Syntax::Typescript(Default::default()),
             Default::default(),
@@ -243,7 +224,6 @@ fn bench_cases(c: &mut Criterion) {
     );
     c.bench_function("es/visitor/base-perf/boxing_boxed", boxing_boxed);
     c.bench_function("es/visitor/base-perf/boxing_unboxed", boxing_unboxed);
-    c.bench_function("es/visitor/base-perf/visit_empty", visit_empty);
     c.bench_function(
         "es/visitor/base-perf/visit_contains_this",
         visit_contains_this,
@@ -252,3 +232,9 @@ fn bench_cases(c: &mut Criterion) {
 
 criterion_group!(benches, bench_cases);
 criterion_main!(benches);
+
+fn noop_fold() -> impl Fold {
+    struct Noop;
+    impl Fold for Noop {}
+    Noop
+}

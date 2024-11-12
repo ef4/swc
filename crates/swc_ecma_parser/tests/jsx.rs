@@ -28,7 +28,7 @@ where
         .unwrap_or_else(|e| panic!("failed to load {}: {}", file_name.display(), e));
 
     let mut p = Parser::new(
-        ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+        ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
             jsx: true,
             ..Default::default()
         }),
@@ -123,25 +123,13 @@ impl Fold for Normalizer {
 
         if let Pat::Expr(expr) = node {
             match *expr {
-                Expr::Ident(i) => return Pat::Ident(i.into()),
+                Expr::Ident(i) => return i.into(),
                 _ => {
-                    node = Pat::Expr(expr);
+                    node = expr.into();
                 }
             }
         }
 
         node
-    }
-
-    fn fold_pat_or_expr(&mut self, node: PatOrExpr) -> PatOrExpr {
-        let node = node.fold_children_with(self);
-
-        match node {
-            PatOrExpr::Pat(pat) => match *pat {
-                Pat::Expr(expr) => PatOrExpr::Expr(expr),
-                _ => PatOrExpr::Pat(pat),
-            },
-            _ => node,
-        }
     }
 }

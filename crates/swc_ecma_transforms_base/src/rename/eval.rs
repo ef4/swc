@@ -1,5 +1,5 @@
-use swc_atoms::js_word;
 use swc_ecma_ast::*;
+use swc_ecma_utils::stack_size::maybe_grow_default;
 use swc_ecma_visit::{noop_visit_type, visit_obj_and_computed, Visit, VisitWith};
 
 pub(crate) fn contains_eval<N>(node: &N, include_with: bool) -> bool
@@ -25,24 +25,24 @@ impl Visit for EvalFinder {
 
     visit_obj_and_computed!();
 
+    fn visit_callee(&mut self, c: &Callee) {
+        c.visit_children_with(self);
+
+        if let Callee::Expr(e) = c {
+            if e.is_ident_ref_to("eval") {
+                self.found = true
+            }
+        }
+    }
+
     fn visit_export_default_specifier(&mut self, _: &ExportDefaultSpecifier) {}
 
     fn visit_export_named_specifier(&mut self, _: &ExportNamedSpecifier) {}
 
     fn visit_export_namespace_specifier(&mut self, _: &ExportNamespaceSpecifier) {}
 
-    fn visit_callee(&mut self, c: &Callee) {
-        c.visit_children_with(self);
-
-        if let Callee::Expr(e) = c {
-            if let Expr::Ident(Ident {
-                sym: js_word!("eval"),
-                ..
-            }) = &**e
-            {
-                self.found = true
-            }
-        }
+    fn visit_expr(&mut self, n: &Expr) {
+        maybe_grow_default(|| n.visit_children_with(self));
     }
 
     fn visit_named_export(&mut self, e: &NamedExport) {

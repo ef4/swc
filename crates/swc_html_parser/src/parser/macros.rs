@@ -1,7 +1,7 @@
 macro_rules! span {
     ($parser:expr, $start:expr) => {{
         let last_pos = $parser.input.last_pos()?;
-        swc_common::Span::new($start, last_pos, Default::default())
+        swc_common::Span::new($start, last_pos)
     }};
 }
 
@@ -14,7 +14,7 @@ macro_rules! bump {
 macro_rules! get_tag_name {
     ($node:expr) => {{
         match &$node.data {
-            crate::parser::Data::Element { tag_name, .. } => tag_name,
+            crate::parser::Data::Element { tag_name, .. } => &**tag_name,
             _ => {
                 unreachable!();
             }

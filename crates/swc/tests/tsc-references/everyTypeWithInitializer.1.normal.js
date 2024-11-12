@@ -11,7 +11,6 @@ var D = function D() {
 function F(x) {
     return 42;
 }
-var M;
 (function(M) {
     var A = function A() {
         "use strict";
@@ -24,7 +23,7 @@ var M;
     M.F2 = F2;
 })(M || (M = {}));
 var aNumber = 9.9;
-var aString = "this is a string";
+var aString = 'this is a string';
 var aDate = new Date(12);
 var anObject = new Object();
 var anAny = null;
@@ -44,3 +43,4 @@ var aClassInModule = new M.A();
 var aFunctionInModule = M.F2;
 // no initializer or annotation, so this is an 'any'
 var x;
+var M;

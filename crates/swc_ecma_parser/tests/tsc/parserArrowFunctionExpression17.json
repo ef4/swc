@@ -1,60 +1,57 @@
 {
   "type": "Script",
   "span": {
-    "start": 98,
-    "end": 218,
-    "ctxt": 0
+    "start": 94,
+    "end": 214
   },
   "body": [
     {
       "type": "ExpressionStatement",
       "span": {
-        "start": 98,
-        "end": 118,
-        "ctxt": 0
+        "start": 94,
+        "end": 114
       },
       "expression": {
         "type": "ConditionalExpression",
         "span": {
-          "start": 98,
-          "end": 118,
-          "ctxt": 0
+          "start": 94,
+          "end": 114
         },
         "test": {
           "type": "Identifier",
           "span": {
-            "start": 98,
-            "end": 99,
-            "ctxt": 0
+            "start": 94,
+            "end": 95
           },
+          "ctxt": 0,
           "value": "a",
           "optional": false
         },
         "consequent": {
           "type": "Identifier",
           "span": {
-            "start": 102,
-            "end": 103,
-            "ctxt": 0
+            "start": 98,
+            "end": 99
           },
+          "ctxt": 0,
           "value": "b",
           "optional": false
         },
         "alternate": {
           "type": "ArrowFunctionExpression",
           "span": {
-            "start": 106,
-            "end": 118,
-            "ctxt": 0
+            "start": 102,
+            "end": 114
           },
+          "ctxt": 0,
           "params": [
             {
               "type": "Identifier",
               "span": {
-                "start": 107,
-                "end": 108,
-                "ctxt": 0
+                "start": 103,
+                "end": 104
               },
+              "ctxt": 0,
               "value": "c",
               "optional": false,
               "typeAnnotation": null
@@ -63,10 +60,10 @@
           "body": {
             "type": "Identifier",
             "span": {
-              "start": 117,
-              "end": 118,
-              "ctxt": 0
+              "start": 113,
+              "end": 114
             },
+            "ctxt": 0,
             "value": "e",
             "optional": false
           },
@@ -76,24 +73,22 @@
           "returnType": {
             "type": "TsTypeAnnotation",
             "span": {
-              "start": 110,
-              "end": 113,
-              "ctxt": 0
+              "start": 106,
+              "end": 109
             },
             "typeAnnotation": {
               "type": "TsTypeReference",
               "span": {
-                "start": 112,
-                "end": 113,
-                "ctxt": 0
+                "start": 108,
+                "end": 109
               },
               "typeName": {
                 "type": "Identifier",
                 "span": {
-                  "start": 112,
-                  "end": 113,
-                  "ctxt": 0
+                  "start": 108,
+                  "end": 109
                 },
+                "ctxt": 0,
                 "value": "d",
                 "optional": false
               },
@@ -106,52 +101,50 @@
     {
       "type": "ExpressionStatement",
       "span": {
-        "start": 198,
-        "end": 218,
-        "ctxt": 0
+        "start": 194,
+        "end": 214
       },
       "expression": {
         "type": "ConditionalExpression",
         "span": {
-          "start": 198,
-          "end": 218,
-          "ctxt": 0
+          "start": 194,
+          "end": 214
         },
         "test": {
           "type": "Identifier",
           "span": {
-            "start": 198,
-            "end": 199,
-            "ctxt": 0
+            "start": 194,
+            "end": 195
           },
+          "ctxt": 0,
           "value": "a",
           "optional": false
         },
         "consequent": {
           "type": "Identifier",
           "span": {
-            "start": 202,
-            "end": 203,
-            "ctxt": 0
+            "start": 198,
+            "end": 199
           },
+          "ctxt": 0,
           "value": "b",
           "optional": false
         },
         "alternate": {
           "type": "ArrowFunctionExpression",
           "span": {
-            "start": 206,
-            "end": 218,
-            "ctxt": 0
+            "start": 202,
+            "end": 214
           },
+          "ctxt": 0,
           "params": [
             {
               "type": "Identifier",
               "span": {
-                "start": 207,
-                "end": 208,
-                "ctxt": 0
+                "start": 203,
+                "end": 204
               },
+              "ctxt": 0,
               "value": "c",
               "optional": false,
               "typeAnnotation": null
@@ -160,10 +153,10 @@
           "body": {
             "type": "Identifier",
             "span": {
-              "start": 217,
-              "end": 218,
-              "ctxt": 0
+              "start": 213,
+              "end": 214
             },
+            "ctxt": 0,
             "value": "e",
             "optional": false
           },
@@ -173,24 +166,22 @@
           "returnType": {
             "type": "TsTypeAnnotation",
             "span": {
-              "start": 210,
-              "end": 213,
-              "ctxt": 0
+              "start": 206,
+              "end": 209
             },
             "typeAnnotation": {
               "type": "TsTypeReference",
               "span": {
-                "start": 212,
-                "end": 213,
-                "ctxt": 0
+                "start": 208,
+                "end": 209
               },
               "typeName": {
                 "type": "Identifier",
                 "span": {
-                  "start": 212,
-                  "end": 213,
-                  "ctxt": 0
+                  "start": 208,
+                  "end": 209
                 },
+                "ctxt": 0,
                 "value": "d",
                 "optional": false
               },

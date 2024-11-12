@@ -1,14 +1,14 @@
-import { _ as _ts_decorate } from "@swc/helpers/_/_ts_decorate";
-var N;
+var _ts_decorate = require("@swc/helpers/_/_ts_decorate");
 (function(N) {
-    let C1 = class C1 {
-    };
-    C1 = _ts_decorate([
+    class C1 {
+    }
+    C1 = _ts_decorate._([
         foo
     ], C1);
 })(N || (N = {}));
-let C2 = class C2 {
-};
-C2 = _ts_decorate([
+class C2 {
+}
+C2 = _ts_decorate._([
     foo
 ], C2);
+var N;

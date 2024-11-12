@@ -1,9 +1,9 @@
 //// [compoundAdditionAssignmentLHSCanBeAssigned.ts]
-var E;
-(function(E) {
+var E = /*#__PURE__*/ function(E) {
     E[E["a"] = 0] = "a";
     E[E["b"] = 1] = "b";
-})(E || (E = {}));
+    return E;
+}(E || {});
 var a;
 var b;
 var x1;
@@ -11,7 +11,7 @@ x1 += a;
 x1 += b;
 x1 += true;
 x1 += 0;
-x1 += "";
+x1 += '';
 x1 += 0;
 x1 += {};
 x1 += null;
@@ -21,7 +21,7 @@ x2 += a;
 x2 += b;
 x2 += true;
 x2 += 0;
-x2 += "";
+x2 += '';
 x2 += 0;
 x2 += {};
 x2 += null;
@@ -42,6 +42,6 @@ var x5;
 x5 += a;
 var x6;
 x6 += a;
-x6 += "";
+x6 += '';
 var x7;
 x7 += a;

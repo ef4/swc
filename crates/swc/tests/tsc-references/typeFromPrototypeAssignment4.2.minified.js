@@ -3,11 +3,8 @@ function Multimap4() {
     this._map = {};
 }
 Multimap4.prototype = {
-    /**
-   * @param {string} key
-   * @returns {number} the value ok
-   */ get: function(key) {
-        return this._map[key + ""];
+    get: function(key) {
+        return this._map[key + ''];
     }
 }, Multimap4.prototype["add-on"] = function() {}, Multimap4.prototype.addon = function() {}, Multimap4.prototype.__underscores__ = function() {};
 var map4 = new Multimap4();

@@ -1,7 +1,5 @@
-use pmutil::{smart_quote, Quote};
 use swc_macros_common::prelude::*;
 use syn::{
-    self,
     parse::{Parse, ParseStream},
     *,
 };
@@ -18,26 +16,20 @@ impl Parse for Args {
 }
 
 pub fn expand_struct(args: Args, i: DeriveInput) -> Vec<ItemImpl> {
-    let mut items = vec![];
+    let mut items = Vec::new();
     let generics = i.generics.clone();
     // let item_ident = Ident::new("Item", i.ident.span());
 
-    items.push(
-        Quote::new_call_site()
-            .quote_with(smart_quote!(
-                Vars {
-                    Type: i.ident.clone(),
-                    type_str: args.ty
-                },
-                {
-                    impl ::swc_common::AstNode for Type {
-                        const TYPE: &'static str = type_str;
-                    }
-                }
-            ))
-            .parse::<ItemImpl>()
-            .with_generics(generics),
-    );
+    {
+        let ty = &i.ident;
+        let type_str = &args.ty;
+        let item: ItemImpl = parse_quote!(
+            impl ::swc_common::AstNode for #ty {
+                const TYPE: &'static str = #type_str;
+            }
+        );
+        items.push(item.with_generics(generics));
+    }
 
     // let ident = i.ident.clone();
     // let cloned = i.clone();
@@ -136,7 +128,7 @@ pub fn expand_struct(args: Args, i: DeriveInput) -> Vec<ItemImpl> {
     //     let item = DeriveInput {
     //         vis: Visibility::Inherited,
     //         ident: item_ident,
-    //         attrs: vec![],
+    //         attrs: Vec::new(),
     //         data: item_data,
     //         ..cloned
     //     };

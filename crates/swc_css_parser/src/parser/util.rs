@@ -1,7 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use swc_atoms::js_word;
-use swc_common::{Span, Spanned, SyntaxContext, DUMMY_SP};
+use swc_common::{Span, Spanned, DUMMY_SP};
 use swc_css_ast::*;
 
 use super::{
@@ -52,9 +51,7 @@ where
 
     pub(super) fn create_locv(&self, children: Vec<ComponentValue>) -> ListOfComponentValues {
         let span = match (children.first(), children.last()) {
-            (Some(first), Some(last)) => {
-                Span::new(first.span_lo(), last.span_hi(), SyntaxContext::empty())
-            }
+            (Some(first), Some(last)) => Span::new(first.span_lo(), last.span_hi()),
             _ => DUMMY_SP,
         };
 
@@ -112,9 +109,7 @@ where
                         list_of_component_values,
                     )))
                 }
-                None if *normalized_at_rule_name == js_word!("layer")
-                    && at_rule.block.is_none() =>
-                {
+                None if normalized_at_rule_name == "layer" && at_rule.block.is_none() => {
                     self.errors.push(Error::new(
                         at_rule.span,
                         ErrorKind::Expected("at least one name"),
@@ -291,8 +286,8 @@ where
     ) -> PResult<Declaration> {
         let locv = self.create_locv(declaration.value);
 
-        declaration.value = match self.parse_according_to_grammar(&locv, |parser| {
-            let mut values = vec![];
+        let value = self.parse_according_to_grammar(&locv, |parser| {
+            let mut values = Vec::new();
 
             loop {
                 if is!(parser, EOF) {
@@ -303,7 +298,8 @@ where
             }
 
             Ok(values)
-        }) {
+        });
+        declaration.value = match value {
             Ok(values) => values,
             Err(err) => {
                 if *err.kind() != ErrorKind::Ignore {
@@ -340,7 +336,7 @@ where
     pub(super) fn try_to_parse_declaration_in_parens(&mut self) -> Option<Declaration> {
         let mut temporary_list = ListOfComponentValues {
             span: Default::default(),
-            children: vec![],
+            children: Vec::new(),
         };
 
         while !is_one_of!(self, ")", EOF) {
@@ -376,74 +372,22 @@ where
         &mut self,
         component_value: &ComponentValue,
     ) -> PResult<()> {
-        match component_value {
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::BadString { .. },
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("bad string in declaration value"),
-                ));
-            }
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::BadUrl { .. },
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("bad url in declaration value"),
-                ));
-            }
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::RParen,
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("')' in declaration value"),
-                ));
-            }
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::RBracket,
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("']' in declaration value"),
-                ));
-            }
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::RBrace,
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("'}' in declaration value"),
-                ));
-            }
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::Semi,
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("';' in declaration value"),
-                ));
-            }
-            ComponentValue::PreservedToken(box TokenAndSpan {
-                span,
-                token: Token::Delim { value: '!' },
-            }) => {
-                return Err(Error::new(
-                    *span,
-                    ErrorKind::Unexpected("'!' in declaration value"),
-                ));
-            }
-            _ => {}
-        }
+        let ComponentValue::PreservedToken(preserved_token) = component_value else {
+            return Ok(());
+        };
 
-        Ok(())
+        let kind = match preserved_token.token {
+            Token::BadString { .. } => ErrorKind::Unexpected("bad string in declaration value"),
+            Token::BadUrl { .. } => ErrorKind::Unexpected("bad url in declaration value"),
+            Token::RParen => ErrorKind::Unexpected("')' in declaration value"),
+            Token::RBracket => ErrorKind::Unexpected("']' in declaration value"),
+            Token::RBrace => ErrorKind::Unexpected("'}' in declaration value"),
+            Token::Semi => ErrorKind::Unexpected("';' in declaration value"),
+            Token::Delim { value: '!' } => ErrorKind::Unexpected("'!' in declaration value"),
+            _ => return Ok(()),
+        };
+
+        Err(Error::new(preserved_token.span, kind))
     }
 }
 
@@ -452,20 +396,20 @@ pub(super) struct WithCtx<'w, I: 'w + ParserInput> {
     orig_ctx: Ctx,
 }
 
-impl<'w, I: ParserInput> Deref for WithCtx<'w, I> {
+impl<I: ParserInput> Deref for WithCtx<'_, I> {
     type Target = Parser<I>;
 
     fn deref(&self) -> &Parser<I> {
         self.inner
     }
 }
-impl<'w, I: ParserInput> DerefMut for WithCtx<'w, I> {
+impl<I: ParserInput> DerefMut for WithCtx<'_, I> {
     fn deref_mut(&mut self) -> &mut Parser<I> {
         self.inner
     }
 }
 
-impl<'w, I: ParserInput> Drop for WithCtx<'w, I> {
+impl<I: ParserInput> Drop for WithCtx<'_, I> {
     fn drop(&mut self) {
         self.inner.ctx = self.orig_ctx;
     }

@@ -35,8 +35,7 @@ define([
         get: function() {
             return foo;
         }
-    }), _a = /*#__PURE__*/ _interop_require_default._(_a), // https://github.com/microsoft/TypeScript/issues/37429
-    new Promise((resolve, reject)=>require([
+    }), _a = /*#__PURE__*/ _interop_require_default._(_a), new Promise((resolve, reject)=>require([
             "./a"
         ], (m)=>resolve(/*#__PURE__*/ _interop_require_wildcard._(m)), reject));
 });

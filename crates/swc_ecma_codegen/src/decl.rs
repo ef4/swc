@@ -5,7 +5,7 @@ use swc_ecma_codegen_macros::emitter;
 use super::{Emitter, Result};
 use crate::text_writer::WriteJs;
 
-impl<'a, W, S: SourceMapper> Emitter<'a, W, S>
+impl<W, S: SourceMapper> Emitter<'_, W, S>
 where
     W: WriteJs,
     S: SourceMapperExt,
@@ -71,6 +71,11 @@ where
             for dec in &node.class.decorators {
                 emit!(self, dec);
             }
+        }
+
+        if node.class.is_abstract {
+            keyword!(self, "abstract");
+            space!(self);
         }
 
         keyword!(self, "class");

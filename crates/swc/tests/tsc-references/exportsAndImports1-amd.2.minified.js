@@ -20,7 +20,7 @@ define([
             return C;
         },
         D: function() {
-            return D;
+            return D1;
         },
         E: function() {
             return E1;
@@ -38,12 +38,12 @@ define([
             return v;
         }
     });
-    var E, E1, D, M, v = 1;
+    var E, D, M, v = 1;
     function f() {}
     var C = function C() {
         _class_call_check._(this, C);
-    };
-    (E = E1 || (E1 = {}))[E.A = 0] = "A", E[E.B = 1] = "B", E[E.C = 2] = "C", M || (M = {});
+    }, E1 = ((E = E1 || {})[E.A = 0] = "A", E[E.B = 1] = "B", E[E.C = 2] = "C", E), D1 = ((D = D1 || {})[D.A = 0] = "A", D[D.B = 1] = "B", D[D.C = 2] = "C", D);
+    M || (M = {});
     var a = M.x;
 });
 //// [t2.ts]

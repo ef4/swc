@@ -71,9 +71,9 @@ impl Task for TransformTask {
                     Input::Source { src } => {
                         let fm = self.c.cm.new_source_file(
                             if options.filename.is_empty() {
-                                FileName::Anon
+                                FileName::Anon.into()
                             } else {
-                                FileName::Real(options.filename.clone().into())
+                                FileName::Real(options.filename.clone().into()).into()
                             },
                             src.to_string(),
                         );
@@ -150,9 +150,9 @@ pub fn transform_sync(s: String, is_module: bool, opts: Buffer) -> napi::Result<
                 } else {
                     let fm = c.cm.new_source_file(
                         if options.filename.is_empty() {
-                            FileName::Anon
+                            FileName::Anon.into()
                         } else {
-                            FileName::Real(options.filename.clone().into())
+                            FileName::Real(options.filename.clone().into()).into()
                         },
                         s,
                     );
@@ -179,7 +179,7 @@ pub fn transform_file(
     let path = clean(&src);
     let task = TransformTask {
         c,
-        input: Input::File(path.into()),
+        input: Input::File(path),
         options: options.into_ref()?,
     };
     Ok(AsyncTask::with_optional_signal(task, signal))

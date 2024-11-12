@@ -5,28 +5,18 @@ use swc_common::{BytePos, LineCol, Span};
 
 use super::HtmlWriter;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum IndentType {
     Tab,
+    #[default]
     Space,
 }
 
-impl Default for IndentType {
-    fn default() -> Self {
-        IndentType::Space
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum LineFeed {
+    #[default]
     LF,
     CRLF,
-}
-
-impl Default for LineFeed {
-    fn default() -> Self {
-        LineFeed::LF
-    }
 }
 
 pub struct BasicHtmlWriterConfig {
@@ -246,7 +236,7 @@ where
 }
 
 fn compute_line_starts(s: &str) -> Vec<usize> {
-    let mut res = vec![];
+    let mut res = Vec::new();
     let mut line_start = 0;
     let mut chars = s.char_indices().peekable();
 

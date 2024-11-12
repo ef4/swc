@@ -1,7 +1,7 @@
 #![allow(clippy::needless_update)]
 
 /// Use memory allocator
-extern crate swc_node_base;
+extern crate swc_malloc;
 
 use std::{
     collections::HashMap,
@@ -11,7 +11,6 @@ use std::{
 };
 
 use anyhow::Error;
-use swc_atoms::js_word;
 use swc_bundler::{Bundle, Bundler, Load, ModuleData, ModuleRecord};
 use swc_common::{
     errors::{ColorConfig, Handler},
@@ -37,7 +36,7 @@ use swc_ecma_visit::VisitMutWith;
 fn print_bundles(cm: Lrc<SourceMap>, modules: Vec<Bundle>, minify: bool) {
     for bundled in modules {
         let code = {
-            let mut buf = vec![];
+            let mut buf = Vec::new();
 
             {
                 let wr = JsWriter::new(cm.clone(), "\n", &mut buf, None);
@@ -133,6 +132,7 @@ fn do_test(_entry: &Path, entries: HashMap<String, FileName>, inline: bool, mini
                             &ExtraOptions {
                                 unresolved_mark: Mark::new(),
                                 top_level_mark: Mark::new(),
+                                mangle_name_cache: None,
                             },
                         )
                         .expect_module();
@@ -191,7 +191,7 @@ impl swc_bundler::Hook for Hook {
 
         Ok(vec![
             KeyValueProp {
-                key: PropName::Ident(Ident::new(js_word!("url"), span)),
+                key: PropName::Ident(IdentName::new("url".into(), span)),
                 value: Box::new(Expr::Lit(Lit::Str(Str {
                     span,
                     raw: None,
@@ -199,7 +199,7 @@ impl swc_bundler::Hook for Hook {
                 }))),
             },
             KeyValueProp {
-                key: PropName::Ident(Ident::new(js_word!("main"), span)),
+                key: PropName::Ident(IdentName::new("main".into(), span)),
                 value: Box::new(if module_record.is_entry {
                     Expr::Member(MemberExpr {
                         span,
@@ -207,7 +207,7 @@ impl swc_bundler::Hook for Hook {
                             span,
                             kind: MetaPropKind::ImportMeta,
                         })),
-                        prop: MemberProp::Ident(Ident::new(js_word!("main"), span)),
+                        prop: MemberProp::Ident(IdentName::new("main".into(), span)),
                     })
                 } else {
                     Expr::Lit(Lit::Bool(Bool { span, value: false }))
@@ -233,7 +233,7 @@ impl Load for Loader {
             Syntax::Es(Default::default()),
             EsVersion::Es2020,
             None,
-            &mut vec![],
+            &mut Vec::new(),
         )
         .unwrap_or_else(|err| {
             let handler =

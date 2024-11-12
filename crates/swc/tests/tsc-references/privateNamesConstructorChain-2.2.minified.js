@@ -23,10 +23,10 @@ class Child extends Parent {
     constructor(...args){
         super(...args), _class_private_field_init(this, _foo1, {
             writable: !0,
-            value: void 0 // OK (Child's #foo does not conflict, as `Parent`'s `#foo` is not accessible)
+            value: void 0
         }), _class_private_field_init(this, _bar1, {
             writable: !0,
-            value: void 0 // OK
+            value: void 0
         }), _class_private_field_set(this, _foo1, "foo"), _class_private_field_set(this, _bar1, "bar");
     }
 }

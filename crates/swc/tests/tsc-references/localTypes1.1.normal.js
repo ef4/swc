@@ -1,15 +1,15 @@
 //// [localTypes1.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _create_class } from "@swc/helpers/_/_create_class";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 function f1() {
-    var E;
-    (function(E) {
+    var E = /*#__PURE__*/ function(E) {
         E[E["A"] = 0] = "A";
         E[E["B"] = 1] = "B";
         E[E["C"] = 2] = "C";
-    })(E || (E = {}));
+        return E;
+    }({});
     var C = function C() {
         "use strict";
         _class_call_check(this, C);
@@ -22,12 +22,12 @@ function f1() {
 }
 function f2() {
     function g() {
-        var E;
-        (function(E) {
+        var E = /*#__PURE__*/ function(E) {
             E[E["A"] = 0] = "A";
             E[E["B"] = 1] = "B";
             E[E["C"] = 2] = "C";
-        })(E || (E = {}));
+            return E;
+        }({});
         var C = function C() {
             "use strict";
             _class_call_check(this, C);
@@ -42,12 +42,12 @@ function f2() {
 }
 function f3(b) {
     if (true) {
-        var E;
-        (function(E) {
+        var E = /*#__PURE__*/ function(E) {
             E[E["A"] = 0] = "A";
             E[E["B"] = 1] = "B";
             E[E["C"] = 2] = "C";
-        })(E || (E = {}));
+            return E;
+        }({});
         if (b) {
             var C = function C() {
                 "use strict";
@@ -73,12 +73,12 @@ function f3(b) {
 }
 function f5() {
     var z1 = function z1() {
-        var E;
-        (function(E) {
+        var E = /*#__PURE__*/ function(E) {
             E[E["A"] = 0] = "A";
             E[E["B"] = 1] = "B";
             E[E["C"] = 2] = "C";
-        })(E || (E = {}));
+            return E;
+        }({});
         var C = function C() {
             "use strict";
             _class_call_check(this, C);
@@ -86,12 +86,12 @@ function f5() {
         return new C();
     };
     var z2 = function() {
-        var E;
-        (function(E) {
+        var E = /*#__PURE__*/ function(E) {
             E[E["A"] = 0] = "A";
             E[E["B"] = 1] = "B";
             E[E["C"] = 2] = "C";
-        })(E || (E = {}));
+            return E;
+        }({});
         var C = function C() {
             "use strict";
             _class_call_check(this, C);
@@ -103,24 +103,24 @@ var A = /*#__PURE__*/ function() {
     "use strict";
     function A() {
         _class_call_check(this, A);
-        var E;
-        (function(E) {
+        var E = /*#__PURE__*/ function(E) {
             E[E["A"] = 0] = "A";
             E[E["B"] = 1] = "B";
             E[E["C"] = 2] = "C";
-        })(E || (E = {}));
+            return E;
+        }({});
         var C = function C() {
             _class_call_check(this, C);
         };
     }
     var _proto = A.prototype;
     _proto.m = function m() {
-        var E;
-        (function(E) {
+        var E = /*#__PURE__*/ function(E) {
             E[E["A"] = 0] = "A";
             E[E["B"] = 1] = "B";
             E[E["C"] = 2] = "C";
-        })(E || (E = {}));
+            return E;
+        }({});
         var C = function C() {
             _class_call_check(this, C);
         };
@@ -130,12 +130,12 @@ var A = /*#__PURE__*/ function() {
         {
             key: "p",
             get: function get() {
-                var E;
-                (function(E) {
+                var E = /*#__PURE__*/ function(E) {
                     E[E["A"] = 0] = "A";
                     E[E["B"] = 1] = "B";
                     E[E["C"] = 2] = "C";
-                })(E || (E = {}));
+                    return E;
+                }({});
                 var C = function C() {
                     _class_call_check(this, C);
                 };
@@ -154,10 +154,9 @@ function f6() {
         var B = /*#__PURE__*/ function(A) {
             "use strict";
             _inherits(B, A);
-            var _super = _create_super(B);
             function B() {
                 _class_call_check(this, B);
-                return _super.apply(this, arguments);
+                return _call_super(this, B, arguments);
             }
             return B;
         }(A);
@@ -165,10 +164,9 @@ function f6() {
             var C = /*#__PURE__*/ function(B) {
                 "use strict";
                 _inherits(C, B);
-                var _super = _create_super(C);
                 function C() {
                     _class_call_check(this, C);
-                    return _super.apply(this, arguments);
+                    return _call_super(this, C, arguments);
                 }
                 return C;
             }(B);

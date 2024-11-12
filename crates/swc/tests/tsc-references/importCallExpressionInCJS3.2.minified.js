@@ -13,7 +13,6 @@ class B {
     }
 }
 //// [2.ts]
-// We use Promise<any> for now as there is no way to specify shape of module object
 Object.defineProperty(exports, "__esModule", {
     value: !0
 });

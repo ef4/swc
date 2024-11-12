@@ -1,12 +1,17 @@
 {
+    const env = {
+        stack: [],
+        error: void 0,
+        hasError: false
+    };
     try {
-        var _stack = [];
-        var x = _using(_stack, obj);
+        const x = _ts_add_disposable_resource(env, obj, false);
+        ;
         doSomethingWith(x);
-    } catch (_) {
-        var _error = _;
-        var _hasError = true;
+    } catch (e) {
+        env.error = e;
+        env.hasError = true;
     } finally{
-        _dispose(_stack, _error, _hasError);
+        _ts_dispose_resources(env);
     }
 }

@@ -1,6 +1,5 @@
 use std::iter::repeat_with;
 
-use swc_atoms::js_word;
 use swc_common::{util::take::Take, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_utils::{find_pat_ids, is_valid_prop_ident, private_ident};
@@ -32,10 +31,9 @@ impl Optimizer<'_> {
 
                         self.changed = true;
                         report_change!("arguments: Optimizing computed access to arguments");
-                        *prop = MemberProp::Ident(Ident {
+                        *prop = MemberProp::Ident(IdentName {
                             span: s.span,
                             sym: s.take().value,
-                            optional: false,
                         })
                     }
                 }
@@ -54,10 +52,9 @@ impl Optimizer<'_> {
 
                         self.changed = true;
                         report_change!("arguments: Optimizing computed access to arguments");
-                        *prop = SuperProp::Ident(Ident {
+                        *prop = SuperProp::Ident(IdentName {
                             span: s.span,
                             sym: s.take().value,
-                            optional: false,
                         })
                     }
                 }
@@ -74,13 +71,9 @@ impl Optimizer<'_> {
 
         if f.params.iter().any(|param| match &param.pat {
             Pat::Ident(BindingIdent {
-                id:
-                    Ident {
-                        sym: js_word!("arguments"),
-                        ..
-                    },
+                id: Ident { sym, .. },
                 ..
-            }) => true,
+            }) if &**sym == "arguments" => true,
             Pat::Ident(i) => self
                 .data
                 .vars
@@ -96,7 +89,7 @@ impl Optimizer<'_> {
             // If a function has a variable named `arguments`, we abort.
             let data: Vec<Id> = find_pat_ids(&f.body);
             if data.iter().any(|id| {
-                if id.0 == js_word!("arguments") {
+                if id.0 == "arguments" {
                     return true;
                 }
                 false
@@ -142,7 +135,7 @@ impl ArgReplacer<'_> {
                 let p = Param {
                     span: DUMMY_SP,
                     decorators: Default::default(),
-                    pat: Pat::Ident(private_ident!(format!("argument_{}", start)).into()),
+                    pat: private_ident!(format!("argument_{}", start)).into(),
                 };
                 start += 1;
                 p
@@ -179,51 +172,55 @@ impl VisitMut for ArgReplacer<'_> {
             ..
         }) = n
         {
-            if let Expr::Ident(Ident {
-                sym: js_word!("arguments"),
-                ..
-            }) = &**obj
-            {
-                match &*c.expr {
-                    Expr::Lit(Lit::Str(Str { value, .. })) => {
-                        let idx = value.parse::<usize>();
-                        let idx = match idx {
-                            Ok(v) => v,
-                            _ => return,
-                        };
+            match &**obj {
+                Expr::Ident(Ident { sym, .. }) if &**sym == "arguments" => {
+                    match &*c.expr {
+                        Expr::Lit(Lit::Str(Str { value, .. })) => {
+                            let idx = value.parse::<usize>();
+                            let idx = match idx {
+                                Ok(v) => v,
+                                _ => return,
+                            };
 
-                        self.inject_params_if_required(idx);
+                            self.inject_params_if_required(idx);
 
-                        if let Some(param) = self.params.get(idx) {
-                            if let Pat::Ident(i) = &param.pat {
-                                self.changed = true;
-                                *n = Expr::Ident(i.id.clone());
+                            if let Some(param) = self.params.get(idx) {
+                                if let Pat::Ident(i) = &param.pat {
+                                    self.changed = true;
+                                    report_change!(
+                                        "arguments: Replacing access to arguments to normal \
+                                         reference"
+                                    );
+                                    *n = i.id.clone().into();
+                                }
                             }
                         }
-                    }
-                    Expr::Lit(Lit::Num(Number { value, .. })) => {
-                        if value.fract() != 0.0 {
-                            // We ignores non-integer values.
-                            return;
-                        }
+                        Expr::Lit(Lit::Num(Number { value, .. })) => {
+                            if value.fract() != 0.0 {
+                                // We ignores non-integer values.
+                                return;
+                            }
 
-                        let idx = value.round() as i64 as usize;
+                            let idx = value.round() as i64 as usize;
 
-                        self.inject_params_if_required(idx);
+                            self.inject_params_if_required(idx);
 
-                        //
-                        if let Some(param) = self.params.get(idx) {
-                            if let Pat::Ident(i) = &param.pat {
-                                report_change!(
-                                    "arguments: Replacing access to arguments to normal reference"
-                                );
-                                self.changed = true;
-                                *n = Expr::Ident(i.id.clone());
+                            //
+                            if let Some(param) = self.params.get(idx) {
+                                if let Pat::Ident(i) = &param.pat {
+                                    report_change!(
+                                        "arguments: Replacing access to arguments to normal \
+                                         reference"
+                                    );
+                                    self.changed = true;
+                                    *n = i.id.clone().into();
+                                }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
+                _ => (),
             }
         }
     }

@@ -42,7 +42,6 @@ pub(crate) fn info_marker<'a>(
 
 #[derive(Default)]
 struct State {
-    is_bundle: bool,
     is_in_export: bool,
 }
 
@@ -58,40 +57,71 @@ struct InfoMarker<'a> {
     state: State,
 }
 
+impl InfoMarker<'_> {
+    fn is_pure_callee(&self, callee: &Expr) -> bool {
+        match callee {
+            Expr::Ident(callee) => {
+                if self.pure_callee.contains(&callee.to_id()) {
+                    return true;
+                }
+            }
+
+            Expr::Seq(callee) => {
+                if has_pure(self.comments, callee.span) {
+                    return true;
+                }
+            }
+            _ => (),
+        }
+
+        if let Some(pure_fns) = &self.pure_funcs {
+            if let Expr::Ident(..) = callee {
+                // Check for pure_funcs
+                if Ident::within_ignored_ctxt(|| {
+                    //
+                    pure_fns.contains(&NodeIgnoringSpan::borrowed(callee))
+                }) {
+                    return true;
+                }
+            }
+        }
+
+        has_pure(self.comments, callee.span())
+    }
+}
+
 impl VisitMut for InfoMarker<'_> {
     noop_visit_mut_type!();
 
     fn visit_mut_call_expr(&mut self, n: &mut CallExpr) {
         n.visit_mut_children_with(self);
 
-        if has_noinline(self.comments, n.span) {
-            n.span = n.span.apply_mark(self.marks.noinline);
+        // TODO: remove after we figure out how to move comments properly
+        if has_noinline(self.comments, n.span)
+            || match &n.callee {
+                Callee::Expr(e) => has_noinline(self.comments, e.span()),
+                _ => false,
+            }
+        {
+            n.ctxt = n.ctxt.apply_mark(self.marks.noinline);
         }
 
         // We check callee in some cases because we move comments
         // See https://github.com/swc-project/swc/issues/7241
         if match &n.callee {
-            Callee::Expr(e) => match &**e {
-                Expr::Ident(callee) => self.pure_callee.contains(&callee.to_id()),
-                _ => false,
-            },
+            Callee::Expr(e) => self.is_pure_callee(e),
             _ => false,
         } || has_pure(self.comments, n.span)
-            || match &n.callee {
-                Callee::Expr(e) => match &**e {
-                    Expr::Seq(callee) => has_pure(self.comments, callee.span),
-                    _ => false,
-                },
-                _ => false,
-            }
         {
-            n.span = n.span.apply_mark(self.marks.pure);
+            if !n.span.is_dummy_ignoring_cmt() {
+                n.ctxt = n.ctxt.apply_mark(self.marks.pure);
+            }
         } else if let Some(pure_fns) = &self.pure_funcs {
             if let Callee::Expr(e) = &n.callee {
                 // Check for pure_funcs
                 Ident::within_ignored_ctxt(|| {
                     if pure_fns.contains(&NodeIgnoringSpan::borrowed(e)) {
-                        n.span = n.span.apply_mark(self.marks.pure);
+                        n.ctxt = n.ctxt.apply_mark(self.marks.pure);
                     };
                 })
             }
@@ -150,20 +180,13 @@ impl VisitMut for InfoMarker<'_> {
         });
 
         n.visit_mut_children_with(self);
-
-        if self.state.is_bundle {
-            tracing::info!("Running minifier in the bundle mode");
-            n.span = n.span.apply_mark(self.marks.bundle_of_standalone);
-        } else {
-            tracing::info!("Running minifier in the normal mode");
-        }
     }
 
     fn visit_mut_new_expr(&mut self, n: &mut NewExpr) {
         n.visit_mut_children_with(self);
 
         if has_pure(self.comments, n.span) {
-            n.span = n.span.apply_mark(self.marks.pure);
+            n.ctxt = n.ctxt.apply_mark(self.marks.pure);
         }
     }
 
@@ -174,12 +197,15 @@ impl VisitMut for InfoMarker<'_> {
         });
 
         n.visit_mut_children_with(self);
+    }
 
-        if self.state.is_bundle {
-            tracing::info!("Running minifier in the bundle mode");
-            n.span = n.span.apply_mark(self.marks.bundle_of_standalone);
-        } else {
-            tracing::info!("Running minifier in the normal mode");
+    fn visit_mut_tagged_tpl(&mut self, n: &mut TaggedTpl) {
+        n.visit_mut_children_with(self);
+
+        if has_pure(self.comments, n.span) || self.is_pure_callee(&n.tag) {
+            if !n.span.is_dummy_ignoring_cmt() {
+                n.ctxt = n.ctxt.apply_mark(self.marks.pure);
+            }
         }
     }
 
@@ -187,7 +213,7 @@ impl VisitMut for InfoMarker<'_> {
         n.visit_mut_children_with(self);
 
         if has_const_ann(self.comments, n.span) {
-            n.span = n.span.apply_mark(self.marks.const_ann);
+            n.ctxt = n.ctxt.apply_mark(self.marks.const_ann);
         }
     }
 }
@@ -281,7 +307,7 @@ pub(super) fn has_noinline(comments: Option<&dyn Comments>, span: Span) -> bool 
 
 /// Check for `/*#__PURE__*/`
 pub(super) fn has_pure(comments: Option<&dyn Comments>, span: Span) -> bool {
-    has_flag(comments, span, "PURE")
+    span.is_pure() || has_flag(comments, span, "PURE")
 }
 
 fn find_comment<F>(comments: Option<&dyn Comments>, span: Span, mut op: F) -> bool
@@ -305,24 +331,9 @@ where
 }
 
 fn has_flag(comments: Option<&dyn Comments>, span: Span, text: &'static str) -> bool {
-    find_comment(comments, span, |c| {
-        if c.kind == CommentKind::Block {
-            for line in c.text.lines() {
-                // jsdoc
-                let line = line.trim_start_matches(['*', ' ']);
-                let line = line.trim();
+    if span.is_dummy_ignoring_cmt() {
+        return false;
+    }
 
-                //
-                if line.len() == (text.len() + 5)
-                    && (line.starts_with("#__") || line.starts_with("@__"))
-                    && line.ends_with("__")
-                    && text == &line[3..line.len() - 2]
-                {
-                    return true;
-                }
-            }
-        }
-
-        false
-    })
+    comments.has_flag(span.lo, text)
 }

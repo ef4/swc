@@ -11,7 +11,6 @@ var D = function D() {
 function F(x) {
     return 42;
 }
-var M;
 (function(M) {
     var A = function A() {
         "use strict";
@@ -24,7 +23,7 @@ var M;
     M.F2 = F2;
 })(M || (M = {}));
 var aNumber = 9.9;
-var aString = "this is a string";
+var aString = 'this is a string';
 var aDate = new Date(12);
 var anObject = new Object();
 var anAny = null;
@@ -45,5 +44,6 @@ var aLambda = function(x) {
 var aModule = M;
 var aClassInModule = new M.A();
 var aFunctionInModule = function(x) {
-    return "this is a string";
+    return 'this is a string';
 };
+var M;

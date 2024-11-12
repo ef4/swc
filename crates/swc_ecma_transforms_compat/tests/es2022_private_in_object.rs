@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use swc_common::{chain, Mark};
-use swc_ecma_transforms_base::pass::noop;
+use swc_common::Mark;
+use swc_ecma_ast::Pass;
+use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_compat::{
     es2015::classes,
     es2022::{class_properties, private_in_object},
 };
 use swc_ecma_transforms_testing::{parse_options, test_fixture};
-use swc_ecma_visit::Fold;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,8 +32,12 @@ fn fixture(input: PathBuf) {
     let output = parent.join("output.js");
     test_fixture(
         Default::default(),
-        &|t| {
-            let mut pass: Box<dyn Fold> = Box::new(noop());
+        &|_| {
+            let unresolved_mark = Mark::new();
+            let top_level_mark = Mark::new();
+
+            let mut pass: Box<dyn Pass> =
+                Box::new(resolver(unresolved_mark, top_level_mark, false));
 
             let mut class_props = false;
 
@@ -51,18 +55,19 @@ fn fixture(input: PathBuf) {
                     "proposal-class-properties" => {
                         if !class_props {
                             class_props = true;
-                            pass = Box::new(chain!(
+                            pass = Box::new((
                                 pass,
                                 class_properties(
-                                    Some(t.comments.clone()),
                                     class_properties::Config {
                                         set_public_fields: loose,
                                         constant_super: loose,
                                         no_document_all: loose,
                                         private_as_properties: loose,
+                                        pure_getter: loose,
                                         static_blocks_mark: Mark::new(),
-                                    }
-                                )
+                                    },
+                                    unresolved_mark,
+                                ),
                             ));
                         }
                     }
@@ -70,27 +75,25 @@ fn fixture(input: PathBuf) {
                     "proposal-private-methods" => {
                         if !class_props {
                             class_props = true;
-                            pass = Box::new(chain!(
+                            pass = Box::new((
                                 pass,
                                 class_properties(
-                                    Some(t.comments.clone()),
                                     class_properties::Config {
                                         set_public_fields: loose,
                                         constant_super: loose,
                                         no_document_all: loose,
                                         private_as_properties: loose,
+                                        pure_getter: loose,
                                         static_blocks_mark: Mark::new(),
-                                    }
-                                )
+                                    },
+                                    unresolved_mark,
+                                ),
                             ));
                         }
                     }
 
                     "transform-classes" => {
-                        pass = Box::new(chain!(
-                            pass,
-                            classes(Some(t.comments.clone()), Default::default())
-                        ));
+                        pass = Box::new((pass, classes(Default::default())));
                     }
 
                     _ => {
@@ -99,7 +102,7 @@ fn fixture(input: PathBuf) {
                 }
             }
 
-            pass = Box::new(chain!(pass, private_in_object()));
+            pass = Box::new((pass, private_in_object()));
 
             pass
         },

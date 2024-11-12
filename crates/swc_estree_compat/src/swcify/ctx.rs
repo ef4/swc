@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
-use swc_common::{BytePos, FileName, SourceFile, SourceMap, Span, SyntaxContext, DUMMY_SP};
+use swc_common::{sync::Lrc, BytePos, FileName, SourceFile, SourceMap, Span, DUMMY_SP};
 use swc_estree_ast::{BaseNode, LineCol, Loc};
 use swc_node_comments::SwcComments;
 
 pub struct Context {
     #[allow(unused)]
-    pub(crate) cm: Arc<SourceMap>,
-    pub(crate) fm: Arc<SourceFile>,
+    pub(crate) cm: Lrc<SourceMap>,
+    pub(crate) fm: Lrc<SourceFile>,
     #[allow(unused)]
     pub(crate) comments: SwcComments,
 }
@@ -30,7 +28,7 @@ impl Context {
         let start = self.locate_line_col(loc.start);
         let end = self.locate_line_col(loc.end);
 
-        Span::new(start, end, SyntaxContext::empty())
+        Span::new(start, end)
     }
 
     pub(crate) fn span(&self, node: &BaseNode) -> Span {
@@ -50,22 +48,22 @@ impl Context {
             .map(|offset| self.fm.start_pos + BytePos(offset as _))
             .unwrap_or(BytePos::DUMMY);
 
-        Span::new(start, end, SyntaxContext::empty())
+        Span::new(start, end)
     }
 
     /// This accepts source string because the spans of an ast node of swc are
     /// stored as interned.
     ///
     /// This method allocate a new [SourceFile] in the given `cm`.
-    pub fn new(cm: Arc<SourceMap>, comments: SwcComments, filename: FileName, src: String) -> Self {
-        let fm = cm.new_source_file(filename, src);
+    pub fn new(cm: Lrc<SourceMap>, comments: SwcComments, filename: FileName, src: String) -> Self {
+        let fm = cm.new_source_file(filename.into(), src);
         Self::new_without_alloc(cm, comments, fm)
     }
 
     pub fn new_without_alloc(
-        cm: Arc<SourceMap>,
+        cm: Lrc<SourceMap>,
         comments: SwcComments,
-        fm: Arc<SourceFile>,
+        fm: Lrc<SourceFile>,
     ) -> Self {
         Self { cm, comments, fm }
     }

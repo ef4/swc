@@ -5,14 +5,14 @@ describe("transform", () => {
         const output = swc.transformSync("class Foo {}", {});
 
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "function _class_call_check(instance, Constructor) {
                 if (!(instance instanceof Constructor)) {
-                    throw new TypeError(\\"Cannot call a class as a function\\");
+                    throw new TypeError("Cannot call a class as a function");
                 }
             }
             var Foo = function Foo() {
-                \\"use strict\\";
+                "use strict";
                 _class_call_check(this, Foo);
             };
             ",
@@ -24,14 +24,14 @@ describe("transform", () => {
         const output = await swc.transform("class Foo {}", {});
 
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "function _class_call_check(instance, Constructor) {
                 if (!(instance instanceof Constructor)) {
-                    throw new TypeError(\\"Cannot call a class as a function\\");
+                    throw new TypeError("Cannot call a class as a function");
                 }
             }
             var Foo = function Foo() {
-                \\"use strict\\";
+                "use strict";
                 _class_call_check(this, Foo);
             };
             ",
@@ -47,14 +47,14 @@ describe("transform", () => {
 
         const output = await swc.transform(input, {});
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "function _class_call_check(instance, Constructor) {
                 if (!(instance instanceof Constructor)) {
-                    throw new TypeError(\\"Cannot call a class as a function\\");
+                    throw new TypeError("Cannot call a class as a function");
                 }
             }
             var Foo = function Foo() {
-                \\"use strict\\";
+                "use strict";
                 _class_call_check(this, Foo);
             };
             ",
@@ -99,26 +99,26 @@ describe("parse", () => {
         });
 
         expect(output).toMatchInlineSnapshot(`
-            Object {
-              "body": Array [
-                Object {
-                  "body": Array [],
+            {
+              "body": [
+                {
+                  "body": [],
+                  "ctxt": 0,
                   "declare": false,
-                  "decorators": Array [],
-                  "identifier": Object {
+                  "decorators": [],
+                  "identifier": {
+                    "ctxt": 2,
                     "optional": false,
-                    "span": Object {
-                      "ctxt": 2,
+                    "span": {
                       "end": 289,
                       "start": 286,
                     },
                     "type": "Identifier",
                     "value": "Foo",
                   },
-                  "implements": Array [],
+                  "implements": [],
                   "isAbstract": false,
-                  "span": Object {
-                    "ctxt": 0,
+                  "span": {
                     "end": 292,
                     "start": 280,
                   },
@@ -129,8 +129,7 @@ describe("parse", () => {
                 },
               ],
               "interpreter": null,
-              "span": Object {
-                "ctxt": 0,
+              "span": {
                 "end": 292,
                 "start": 280,
               },
@@ -146,26 +145,26 @@ describe("parse", () => {
         });
 
         expect(output).toMatchInlineSnapshot(`
-            Object {
-              "body": Array [
-                Object {
-                  "body": Array [],
+            {
+              "body": [
+                {
+                  "body": [],
+                  "ctxt": 0,
                   "declare": false,
-                  "decorators": Array [],
-                  "identifier": Object {
+                  "decorators": [],
+                  "identifier": {
+                    "ctxt": 2,
                     "optional": false,
-                    "span": Object {
-                      "ctxt": 2,
+                    "span": {
                       "end": 302,
                       "start": 299,
                     },
                     "type": "Identifier",
                     "value": "Foo",
                   },
-                  "implements": Array [],
+                  "implements": [],
                   "isAbstract": false,
-                  "span": Object {
-                    "ctxt": 0,
+                  "span": {
                     "end": 305,
                     "start": 293,
                   },
@@ -176,8 +175,7 @@ describe("parse", () => {
                 },
               ],
               "interpreter": null,
-              "span": Object {
-                "ctxt": 0,
+              "span": {
                 "end": 305,
                 "start": 293,
               },
@@ -190,11 +188,12 @@ describe("parse", () => {
 describe("minify", () => {
     it("should work", () => {
         const output = swc.minifySync(
-            "const somename = 1; console.log(somename);"
+            "const somename = 1; console.log(somename);",
+            { module: false }
         );
 
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "let somename=1;console.log(1);",
             }
         `);
@@ -202,11 +201,12 @@ describe("minify", () => {
 
     it("should work with async facade", async () => {
         const output = await swc.minify(
-            "const somename = 1; console.log(somename);"
+            "const somename = 1; console.log(somename);",
+            { module: false }
         );
 
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "let somename=1;console.log(1);",
             }
         `);
@@ -222,7 +222,7 @@ describe("print", () => {
 
         const output = swc.printSync(input);
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "class Foo {
             }
             ",
@@ -238,7 +238,7 @@ describe("print", () => {
 
         const output = await swc.print(input);
         expect(output).toMatchInlineSnapshot(`
-            Object {
+            {
               "code": "class Foo {
             }
             ",

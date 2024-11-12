@@ -1,6 +1,5 @@
 use std::iter;
 
-use swc_atoms::js_word;
 use swc_common::{util::take::Take, Span, Spanned, DUMMY_SP};
 use swc_ecma_ast::*;
 
@@ -16,7 +15,7 @@ use swc_ecma_ast::*;
 ///
 /// to create literals. Almost all rust core types implements `Into<Expr>`.
 #[allow(clippy::wrong_self_convention)]
-pub trait ExprFactory: Into<Expr> {
+pub trait ExprFactory: Into<Box<Expr>> {
     /// Creates an [ExprOrSpread] using the given [Expr].
     ///
     /// This is recommended way to create [ExprOrSpread].
@@ -38,23 +37,19 @@ pub trait ExprFactory: Into<Expr> {
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn as_arg(self) -> ExprOrSpread {
         ExprOrSpread {
-            expr: Box::new(self.into()),
+            expr: self.into(),
             spread: None,
         }
-    }
-
-    #[cfg_attr(not(debug_assertions), inline(always))]
-    fn as_pat_or_expr(self) -> PatOrExpr {
-        PatOrExpr::Expr(Box::new(self.into()))
     }
 
     /// Creates an expression statement with `self`.
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn into_stmt(self) -> Stmt {
-        Stmt::Expr(ExprStmt {
+        ExprStmt {
             span: DUMMY_SP,
-            expr: Box::new(self.into()),
-        })
+            expr: self.into(),
+        }
+        .into()
     }
 
     /// Creates a statement whcih return `self`.
@@ -62,13 +57,13 @@ pub trait ExprFactory: Into<Expr> {
     fn into_return_stmt(self) -> ReturnStmt {
         ReturnStmt {
             span: DUMMY_SP,
-            arg: Some(Box::new(self.into())),
+            arg: Some(self.into()),
         }
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn as_callee(self) -> Callee {
-        Callee::Expr(Box::new(self.into()))
+        Callee::Expr(self.into())
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
@@ -76,8 +71,7 @@ pub trait ExprFactory: Into<Expr> {
         CallExpr {
             span: DUMMY_SP,
             callee: self.as_callee(),
-            args: Default::default(),
-            type_args: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -86,13 +80,9 @@ pub trait ExprFactory: Into<Expr> {
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn into_lazy_arrow(self, params: Vec<Pat>) -> ArrowExpr {
         ArrowExpr {
-            span: DUMMY_SP,
             params,
-            body: Box::new(BlockStmtOrExpr::from(self)),
-            is_async: false,
-            is_generator: false,
-            type_params: None,
-            return_type: None,
+            body: Box::new(BlockStmtOrExpr::Expr(self.into())),
+            ..Default::default()
         }
     }
 
@@ -107,11 +97,9 @@ pub trait ExprFactory: Into<Expr> {
             body: Some(BlockStmt {
                 span: DUMMY_SP,
                 stmts: vec![self.into_return_stmt().into()],
+                ..Default::default()
             }),
-            is_generator: false,
-            is_async: false,
-            type_params: None,
-            return_type: None,
+            ..Default::default()
         }
     }
 
@@ -133,15 +121,14 @@ pub trait ExprFactory: Into<Expr> {
         let var_declarator = VarDeclarator {
             span: DUMMY_SP,
             name,
-            init: Some(Box::new(self.into())),
+            init: Some(self.into()),
             definite: false,
         };
 
         VarDecl {
-            span: DUMMY_SP,
             kind,
-            declare: false,
             decls: vec![var_declarator],
+            ..Default::default()
         }
     }
 
@@ -149,49 +136,53 @@ pub trait ExprFactory: Into<Expr> {
     fn into_new_expr(self, span: Span, args: Option<Vec<ExprOrSpread>>) -> NewExpr {
         NewExpr {
             span,
-            callee: Box::new(self.into()),
+            callee: self.into(),
             args,
-            type_args: None,
+            ..Default::default()
         }
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn apply(self, span: Span, this: Box<Expr>, args: Vec<ExprOrSpread>) -> Expr {
-        let apply = self.make_member(Ident::new(js_word!("apply"), span));
+        let apply = self.make_member(IdentName::new("apply".into(), span));
 
-        Expr::Call(CallExpr {
+        CallExpr {
             span,
             callee: apply.as_callee(),
             args: iter::once(this.as_arg()).chain(args).collect(),
-            type_args: None,
-        })
+
+            ..Default::default()
+        }
+        .into()
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn call_fn(self, span: Span, args: Vec<ExprOrSpread>) -> Expr {
-        Expr::Call(CallExpr {
+        CallExpr {
             span,
             args,
             callee: self
-                .make_member(Ident::new(js_word!("call"), span))
+                .make_member(IdentName::new("call".into(), span))
                 .as_callee(),
-            type_args: None,
-        })
+            ..Default::default()
+        }
+        .into()
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn as_call(self, span: Span, args: Vec<ExprOrSpread>) -> Expr {
-        Expr::Call(CallExpr {
+        CallExpr {
             span,
             args,
             callee: self.as_callee(),
-            type_args: None,
-        })
+            ..Default::default()
+        }
+        .into()
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn as_fn_decl(self) -> Option<FnDecl> {
-        match self.into() {
+        match *self.into() {
             Expr::Fn(FnExpr {
                 ident: Some(ident),
                 function,
@@ -206,7 +197,7 @@ pub trait ExprFactory: Into<Expr> {
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn as_class_decl(self) -> Option<ClassDecl> {
-        match self.into() {
+        match *self.into() {
             Expr::Class(ClassExpr {
                 ident: Some(ident),
                 class,
@@ -221,9 +212,9 @@ pub trait ExprFactory: Into<Expr> {
 
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn wrap_with_paren(self) -> Expr {
-        let expr = Box::new(self.into());
+        let expr = self.into();
         let span = expr.span();
-        Expr::Paren(ParenExpr { expr, span })
+        ParenExpr { expr, span }.into()
     }
 
     /// Creates a binary expr `$self === `
@@ -243,56 +234,55 @@ pub trait ExprFactory: Into<Expr> {
     {
         let right = Box::new(right.into());
 
-        Expr::Bin(BinExpr {
+        BinExpr {
             span: DUMMY_SP,
-            left: Box::new(self.into()),
+            left: self.into(),
             op,
             right,
-        })
+        }
+        .into()
     }
 
     /// Creates a assign expr `$lhs $op $self`
     #[cfg_attr(not(debug_assertions), inline(always))]
-    fn make_assign_to(self, op: AssignOp, left: PatOrExpr) -> Expr {
-        let right = Box::new(self.into());
+    fn make_assign_to(self, op: AssignOp, left: AssignTarget) -> Expr {
+        let right = self.into();
 
-        Expr::Assign(AssignExpr {
+        AssignExpr {
             span: DUMMY_SP,
             left,
             op,
             right,
-        })
+        }
+        .into()
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
-    fn make_member<T>(self, prop: T) -> Expr
-    where
-        T: Into<Ident>,
-    {
-        Expr::Member(MemberExpr {
-            obj: Box::new(self.into()),
+    fn make_member(self, prop: IdentName) -> MemberExpr {
+        MemberExpr {
+            obj: self.into(),
             span: DUMMY_SP,
-            prop: MemberProp::Ident(prop.into()),
-        })
+            prop: MemberProp::Ident(prop),
+        }
     }
 
     #[cfg_attr(not(debug_assertions), inline(always))]
-    fn computed_member<T>(self, prop: T) -> Expr
+    fn computed_member<T>(self, prop: T) -> MemberExpr
     where
-        T: Into<Expr>,
+        T: Into<Box<Expr>>,
     {
-        Expr::Member(MemberExpr {
-            obj: Box::new(self.into()),
+        MemberExpr {
+            obj: self.into(),
             span: DUMMY_SP,
             prop: MemberProp::Computed(ComputedPropName {
                 span: DUMMY_SP,
-                expr: Box::new(prop.into()),
+                expr: prop.into(),
             }),
-        })
+        }
     }
 }
 
-impl<T: Into<Expr>> ExprFactory for T {}
+impl<T: Into<Box<Expr>>> ExprFactory for T {}
 
 pub trait IntoIndirectCall
 where
@@ -344,12 +334,12 @@ impl IntoIndirectCall for TaggedTpl {
     }
 }
 
-pub trait FunctionFactory: Into<Function> {
+pub trait FunctionFactory: Into<Box<Function>> {
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn into_fn_expr(self, ident: Option<Ident>) -> FnExpr {
         FnExpr {
             ident,
-            function: Box::new(self.into()),
+            function: self.into(),
         }
     }
 
@@ -358,7 +348,7 @@ pub trait FunctionFactory: Into<Function> {
         FnDecl {
             ident,
             declare: false,
-            function: Box::new(self.into()),
+            function: self.into(),
         }
     }
 
@@ -366,9 +356,9 @@ pub trait FunctionFactory: Into<Function> {
     fn into_method_prop(self, key: PropName) -> MethodProp {
         MethodProp {
             key,
-            function: Box::new(self.into()),
+            function: self.into(),
         }
     }
 }
 
-impl<T: Into<Function>> FunctionFactory for T {}
+impl<T: Into<Box<Function>>> FunctionFactory for T {}

@@ -1,19 +1,8 @@
 (function(global, factory) {
-    if (typeof module === "object" && typeof module.exports === "object") factory(exports, require("foo"));
-    else if (typeof define === "function" && define.amd) define([
-        "exports",
-        "foo"
-    ], factory);
-    else if (global = typeof globalThis !== "undefined" ? globalThis : global || self) factory(global.input = {}, global.foo);
-})(this, function(exports, _foo) {
+    if (typeof module === "object" && typeof module.exports === "object") factory();
+    else if (typeof define === "function" && define.amd) define([], factory);
+    else if (global = typeof globalThis !== "undefined" ? globalThis : global || self) factory();
+})(this, function() {
     "use strict";
-    Object.defineProperty(exports, "__esModule", {
-        value: true
-    });
-    Object.defineProperty(exports, "foo", {
-        enumerable: true,
-        get: function() {
-            return _foo;
-        }
-    });
+    const foo = exports.foo = require("foo");
 });

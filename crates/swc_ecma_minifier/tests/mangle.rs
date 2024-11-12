@@ -15,15 +15,15 @@ use swc_ecma_minifier::{
     optimize,
     option::{ExtraOptions, MangleOptions, ManglePropertiesOptions, MinifyOptions},
 };
-use swc_ecma_parser::parse_file_as_module;
+use swc_ecma_parser::parse_file_as_program;
 use swc_ecma_transforms_base::{fixer::paren_remover, resolver};
 use swc_ecma_utils::drop_span;
 use swc_ecma_visit::VisitMutWith;
 use testing::{assert_eq, NormalizedOutput};
 use tracing::warn;
 
-fn print(cm: Lrc<SourceMap>, m: &Module, minify: bool) -> String {
-    let mut buf = vec![];
+fn print(cm: Lrc<SourceMap>, p: &Program, minify: bool) -> String {
+    let mut buf = Vec::new();
 
     {
         let mut wr = Box::new(JsWriter::new(cm.clone(), "\n", &mut buf, None)) as Box<dyn WriteJs>;
@@ -39,24 +39,24 @@ fn print(cm: Lrc<SourceMap>, m: &Module, minify: bool) -> String {
             wr,
         };
 
-        emitter.emit_module(m).unwrap();
+        emitter.emit_program(p).unwrap();
     }
 
     String::from_utf8(buf).unwrap()
 }
 
-fn parse(handler: &Handler, cm: Lrc<SourceMap>, path: &Path) -> Result<Module, ()> {
+fn parse(handler: &Handler, cm: Lrc<SourceMap>, path: &Path) -> Result<Program, ()> {
     let fm = cm.load_file(path).unwrap();
     parse_fm(handler, fm)
 }
 
-fn parse_fm(handler: &Handler, fm: Lrc<SourceFile>) -> Result<Module, ()> {
-    parse_file_as_module(
+fn parse_fm(handler: &Handler, fm: Lrc<SourceFile>) -> Result<Program, ()> {
+    parse_file_as_program(
         &fm,
         Default::default(),
         EsVersion::latest(),
         None,
-        &mut vec![],
+        &mut Vec::new(),
     )
     .map_err(|err| {
         err.into_diagnostic(handler).emit();
@@ -88,8 +88,8 @@ fn snapshot_compress_fixture(input: PathBuf) {
 
         m.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, false));
 
-        let m = optimize(
-            m.into(),
+        let p = optimize(
+            m,
             cm.clone(),
             None,
             None,
@@ -104,14 +104,14 @@ fn snapshot_compress_fixture(input: PathBuf) {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
-        )
-        .expect_module();
+        );
 
         if output_path.exists() {
             // Compare AST, and mark test as a success if ast is identical.
 
-            let mut actual = m.clone();
+            let mut actual = p.clone();
             actual.visit_mut_with(&mut paren_remover(None));
             actual = drop_span(actual);
 
@@ -131,7 +131,7 @@ fn snapshot_compress_fixture(input: PathBuf) {
             }
         }
 
-        let mangled = print(cm, &m, false);
+        let mangled = print(cm, &p, false);
 
         NormalizedOutput::from(mangled)
             .compare_to_file(output_path)
@@ -144,15 +144,15 @@ fn snapshot_compress_fixture(input: PathBuf) {
 #[testing::fixture("tests/mangle/**/input.js")]
 fn fixture(input: PathBuf) {
     testing::run_test2(false, |cm, handler| {
-        let mut m = parse(&handler, cm.clone(), &input)?;
+        let mut p = parse(&handler, cm.clone(), &input)?;
 
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        m.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, false));
+        p.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, false));
 
-        let m = optimize(
-            m.into(),
+        let p = optimize(
+            p,
             cm.clone(),
             None,
             None,
@@ -167,11 +167,11 @@ fn fixture(input: PathBuf) {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
-        )
-        .expect_module();
+        );
 
-        let mangled = print(cm, &m, false);
+        let mangled = print(cm, &p, false);
 
         NormalizedOutput::from(mangled)
             .compare_to_file(input.parent().unwrap().join("output.js"))
@@ -182,17 +182,18 @@ fn fixture(input: PathBuf) {
     .unwrap();
 }
 
+#[track_caller]
 fn assert_mangled(src: &str, expected: &str, opts: MangleOptions) {
     testing::run_test2(false, |cm, handler| {
-        let fm = cm.new_source_file(FileName::Anon, src.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), src.into());
 
-        let m = parse_fm(&handler, fm)?;
+        let p = parse_fm(&handler, fm)?;
 
         let unresolved_mark = Mark::fresh(Mark::root());
         let top_level_mark = Mark::fresh(Mark::root());
 
         let m = optimize(
-            m.into(),
+            p,
             cm.clone(),
             None,
             None,
@@ -204,9 +205,9 @@ fn assert_mangled(src: &str, expected: &str, opts: MangleOptions) {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
-        )
-        .expect_module();
+        );
 
         let mangled = print(cm, &m, false);
 
@@ -314,11 +315,11 @@ class Class2 {
     #hello2 = 2;
 }";
 
-    let expected = "class s {
-    #s = 1;
+    let expected = "class l {
+    #l = 1;
 }
-class a {
-    #a = 2;
+class s {
+    #s = 2;
 }";
 
     assert_mangled(
@@ -341,10 +342,10 @@ class Class2 {
     #hello2 = 2;
 }";
 
-    let expected = "class s {
+    let expected = "class l {
     #hello1 = 1;
 }
-class a {
+class s {
     #hello2 = 2;
 }";
 

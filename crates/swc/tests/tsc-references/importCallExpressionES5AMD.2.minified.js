@@ -57,7 +57,7 @@ define([
         ], function(m) {
             return resolve(/*#__PURE__*/ _interop_require_wildcard._(m));
         }, reject);
-    }), D = function() {
+    }), D = /*#__PURE__*/ function() {
         function D() {
             _class_call_check._(this, D);
         }

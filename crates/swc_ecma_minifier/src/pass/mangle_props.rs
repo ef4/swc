@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
 use once_cell::sync::Lazy;
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::collections::{AHashMap, AHashSet};
 use swc_ecma_ast::{
-    CallExpr, Callee, Expr, Ident, KeyValueProp, Lit, MemberExpr, MemberProp, Program, Prop,
+    CallExpr, Callee, Expr, IdentName, KeyValueProp, Lit, MemberExpr, MemberProp, Program, Prop,
     PropName, Str, SuperProp, SuperPropExpr,
 };
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
@@ -188,14 +188,10 @@ fn is_object_property_call(call: &CallExpr) -> bool {
         match &**callee {
             Expr::Member(MemberExpr {
                 obj,
-                prop: MemberProp::Ident(Ident { sym, .. }),
+                prop: MemberProp::Ident(IdentName { sym, .. }),
                 ..
             }) if *sym == *"defineProperty" => {
-                if let Expr::Ident(Ident {
-                    sym: js_word!("Object"),
-                    ..
-                }) = &**obj
-                {
+                if obj.is_ident_ref_to("Object") {
                     return true;
                 }
             }
@@ -227,7 +223,7 @@ struct Mangler<'a> {
 }
 
 impl Mangler<'_> {
-    fn mangle_ident(&mut self, ident: &mut Ident) {
+    fn mangle_ident(&mut self, ident: &mut IdentName) {
         if let Some(mangled) = self.state.gen_name(&ident.sym) {
             ident.sym = mangled;
         }
@@ -264,13 +260,13 @@ impl VisitMut for Mangler<'_> {
         prop.visit_mut_children_with(self);
 
         if let Prop::Shorthand(ident) = prop {
-            let mut new_ident = ident.clone();
+            let mut new_ident = IdentName::from(ident.clone());
 
             self.mangle_ident(&mut new_ident);
 
             *prop = Prop::KeyValue(KeyValueProp {
                 key: PropName::Ident(new_ident),
-                value: Box::new(Expr::Ident(ident.clone())),
+                value: ident.clone().into(),
             });
         }
     }

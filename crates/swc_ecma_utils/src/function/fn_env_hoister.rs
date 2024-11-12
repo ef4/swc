@@ -1,7 +1,7 @@
 use std::mem;
 
 use indexmap::IndexMap;
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::{util::take::Take, Span, Spanned, SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
@@ -87,7 +87,7 @@ impl FnEnvHoister {
             decls.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: this_id.into(),
-                init: Some(Box::new(Expr::This(ThisExpr { span: DUMMY_SP }))),
+                init: Some(ThisExpr { span: DUMMY_SP }.into()),
                 definite: false,
             });
         }
@@ -95,10 +95,7 @@ impl FnEnvHoister {
             decls.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: id.into(),
-                init: Some(Box::new(Expr::Ident(Ident::new(
-                    js_word!("arguments"),
-                    DUMMY_SP,
-                )))),
+                init: Some(Ident::new_no_ctxt("arguments".into(), DUMMY_SP).into()),
                 definite: false,
             });
         }
@@ -106,10 +103,13 @@ impl FnEnvHoister {
             decls.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: id.into(),
-                init: Some(Box::new(Expr::MetaProp(MetaPropExpr {
-                    span: DUMMY_SP,
-                    kind: MetaPropKind::NewTarget,
-                }))),
+                init: Some(
+                    MetaPropExpr {
+                        span: DUMMY_SP,
+                        kind: MetaPropKind::NewTarget,
+                    }
+                    .into(),
+                ),
                 definite: false,
             });
         }
@@ -123,12 +123,14 @@ impl FnEnvHoister {
         if decls.is_empty() {
             None
         } else {
-            Some(Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                span: DUMMY_SP,
-                kind: VarDeclKind::Var,
-                declare: false,
-                decls,
-            }))))
+            Some(
+                VarDecl {
+                    kind: VarDeclKind::Var,
+                    decls,
+                    ..Default::default()
+                }
+                .into(),
+            )
         }
     }
 
@@ -156,10 +158,7 @@ impl FnEnvHoister {
             decls.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: id.into(),
-                init: Some(Box::new(Expr::Ident(Ident::new(
-                    js_word!("arguments"),
-                    DUMMY_SP,
-                )))),
+                init: Some(Ident::new_no_ctxt("arguments".into(), DUMMY_SP).into()),
                 definite: false,
             });
         }
@@ -167,10 +166,13 @@ impl FnEnvHoister {
             decls.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: id.into(),
-                init: Some(Box::new(Expr::MetaProp(MetaPropExpr {
-                    span: DUMMY_SP,
-                    kind: MetaPropKind::NewTarget,
-                }))),
+                init: Some(
+                    MetaPropExpr {
+                        span: DUMMY_SP,
+                        kind: MetaPropKind::NewTarget,
+                    }
+                    .into(),
+                ),
                 definite: false,
             });
         }
@@ -181,12 +183,14 @@ impl FnEnvHoister {
             (None, None)
         } else {
             (
-                Some(Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                    span: DUMMY_SP,
-                    kind: VarDeclKind::Var,
-                    declare: false,
-                    decls,
-                })))),
+                Some(
+                    VarDecl {
+                        kind: VarDeclKind::Var,
+                        decls,
+                        ..Default::default()
+                    }
+                    .into(),
+                ),
                 this,
             )
         }
@@ -277,31 +281,94 @@ impl FnEnvHoister {
 }
 
 impl VisitMut for FnEnvHoister {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
-    fn visit_mut_pat(&mut self, n: &mut Pat) {
+    fn visit_mut_assign_target_pat(&mut self, n: &mut AssignTargetPat) {
         let in_pat = self.in_pat;
         self.in_pat = true;
         n.visit_mut_children_with(self);
         self.in_pat = in_pat;
     }
 
+    fn visit_mut_block_stmt(&mut self, b: &mut BlockStmt) {
+        b.visit_mut_children_with(self);
+
+        // we will not vist into fn/class so it's fine
+        if !self.extra_ident.is_empty() {
+            b.stmts.insert(
+                0,
+                VarDecl {
+                    kind: VarDeclKind::Var,
+                    decls: self
+                        .extra_ident
+                        .take()
+                        .into_iter()
+                        .map(|ident| VarDeclarator {
+                            span: DUMMY_SP,
+                            name: ident.into(),
+                            init: None,
+                            definite: false,
+                        })
+                        .collect(),
+                    ..Default::default()
+                }
+                .into(),
+            )
+        }
+    }
+
+    fn visit_mut_block_stmt_or_expr(&mut self, b: &mut BlockStmtOrExpr) {
+        b.visit_mut_children_with(self);
+
+        // we will not vist into fn/class so it's fine
+        if !self.extra_ident.is_empty() {
+            if let BlockStmtOrExpr::Expr(e) = b {
+                *b = BlockStmtOrExpr::BlockStmt(BlockStmt {
+                    stmts: vec![
+                        Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                            kind: VarDeclKind::Var,
+                            decls: self
+                                .extra_ident
+                                .take()
+                                .into_iter()
+                                .map(|ident| VarDeclarator {
+                                    span: DUMMY_SP,
+                                    name: ident.into(),
+                                    init: None,
+                                    definite: false,
+                                })
+                                .collect(),
+                            ..Default::default()
+                        }))),
+                        Stmt::Return(ReturnStmt {
+                            span: e.span(),
+                            arg: Some(e.take()),
+                        }),
+                    ],
+                    ..Default::default()
+                })
+            }
+        }
+    }
+
+    /// Don't recurse into constructor
+    fn visit_mut_class(&mut self, _: &mut Class) {}
+
     fn visit_mut_expr(&mut self, e: &mut Expr) {
         match e {
-            Expr::Ident(Ident { span, sym, .. })
+            Expr::Ident(Ident { ctxt, sym, .. })
                 if !self.arguments_disabled
-                    && *sym == js_word!("arguments")
-                    && (span.ctxt == self.unresolved_ctxt
-                        || span.ctxt == SyntaxContext::empty()) =>
+                    && *sym == "arguments"
+                    && (*ctxt == self.unresolved_ctxt || *ctxt == SyntaxContext::empty()) =>
             {
                 let arguments = self
                     .args
                     .get_or_insert_with(|| private_ident!("_arguments"));
-                *e = Expr::Ident(arguments.clone());
+                *e = arguments.clone().into();
             }
             Expr::This(..) if !self.this_disabled => {
                 let this = self.get_this();
-                *e = Expr::Ident(this);
+                *e = this.into();
             }
             Expr::MetaProp(MetaPropExpr {
                 kind: MetaPropKind::NewTarget,
@@ -310,7 +377,7 @@ impl VisitMut for FnEnvHoister {
                 let target = self
                     .new_target
                     .get_or_insert_with(|| private_ident!("_newtarget"));
-                *e = Expr::Ident(target.clone());
+                *e = target.clone().into();
             }
             // super.foo = 123 => super_get_foo = (value) => super.foo = value
             Expr::Assign(AssignExpr {
@@ -320,18 +387,14 @@ impl VisitMut for FnEnvHoister {
                 op,
             }) => {
                 let expr = match left {
-                    PatOrExpr::Expr(e) => e,
-                    PatOrExpr::Pat(p) => {
-                        if let Pat::Expr(e) = &mut **p {
-                            e
-                        } else {
-                            e.visit_mut_children_with(self);
-                            return;
-                        }
+                    AssignTarget::Simple(e) => e,
+                    AssignTarget::Pat(..) => {
+                        e.visit_mut_children_with(self);
+                        return;
                     }
                 };
                 if !self.super_disabled {
-                    if let Expr::SuperProp(super_prop) = &mut **expr {
+                    if let SimpleAssignTarget::SuperProp(super_prop) = &mut *expr {
                         let left_span = super_prop.span;
                         match &mut super_prop.prop {
                             SuperProp::Computed(c) => {
@@ -345,7 +408,7 @@ impl VisitMut for FnEnvHoister {
                                     vec![
                                         Expr::Assign(AssignExpr {
                                             span: DUMMY_SP,
-                                            left: PatOrExpr::Pat(tmp.clone().into()),
+                                            left: tmp.clone().into(),
                                             op: op!("="),
                                             right: c.expr.take(),
                                         })
@@ -358,7 +421,7 @@ impl VisitMut for FnEnvHoister {
                                                     .super_get_computed(DUMMY_SP)
                                                     .as_callee(),
                                                 args: vec![tmp.as_arg()],
-                                                type_args: None,
+                                                ..Default::default()
                                             })),
                                             op,
                                             right: right.take(),
@@ -368,16 +431,17 @@ impl VisitMut for FnEnvHoister {
                                 } else {
                                     vec![c.expr.take().as_arg(), right.take().as_arg()]
                                 };
-                                *e = Expr::Call(CallExpr {
+                                *e = CallExpr {
                                     span: *span,
                                     args,
                                     callee: callee.as_callee(),
-                                    type_args: None,
-                                });
+                                    ..Default::default()
+                                }
+                                .into();
                             }
                             SuperProp::Ident(id) => {
                                 let callee = self.super_set(&id.sym, left_span);
-                                *e = Expr::Call(CallExpr {
+                                *e = CallExpr {
                                     span: *span,
                                     args: vec![(if let Some(op) = op.to_update() {
                                         Box::new(Expr::Bin(BinExpr {
@@ -394,8 +458,9 @@ impl VisitMut for FnEnvHoister {
                                     })
                                     .as_arg()],
                                     callee: callee.as_callee(),
-                                    type_args: None,
-                                });
+                                    ..Default::default()
+                                }
+                                .into();
                             }
                         }
                     }
@@ -414,12 +479,13 @@ impl VisitMut for FnEnvHoister {
                         match &mut super_prop.prop {
                             SuperProp::Computed(c) => {
                                 let callee = self.super_get_computed(super_prop.span);
-                                let call = Expr::Call(CallExpr {
+                                let call: Expr = CallExpr {
                                     span: *span,
                                     args: vec![c.expr.take().as_arg()],
                                     callee: callee.as_callee(),
-                                    type_args: None,
-                                });
+                                    ..Default::default()
+                                }
+                                .into();
                                 let mut new_args = args.take();
 
                                 new_args.insert(0, self.get_this().as_arg());
@@ -428,12 +494,13 @@ impl VisitMut for FnEnvHoister {
                             }
                             SuperProp::Ident(id) => {
                                 let callee = self.super_get(&id.sym, super_prop.span);
-                                let call = Expr::Call(CallExpr {
+                                let call: Expr = CallExpr {
                                     span: *span,
                                     args: Vec::new(),
                                     callee: callee.as_callee(),
-                                    type_args: None,
-                                });
+                                    ..Default::default()
+                                }
+                                .into();
                                 let mut new_args = args.take();
 
                                 new_args.insert(0, self.get_this().as_arg());
@@ -458,104 +525,43 @@ impl VisitMut for FnEnvHoister {
                 SuperProp::Computed(c) => {
                     c.expr.visit_mut_children_with(self);
                     *e = if self.in_pat {
-                        Expr::Call(CallExpr {
+                        Expr::from(CallExpr {
                             span: *span,
                             args: vec![c.expr.take().as_arg()],
                             callee: self.super_update_computed(*span).as_callee(),
-                            type_args: None,
+                            ..Default::default()
                         })
-                        .make_member(quote_ident!("_"))
+                        .make_member("_".into())
+                        .into()
                     } else {
-                        Expr::Call(CallExpr {
+                        CallExpr {
                             span: *span,
                             args: vec![c.expr.take().as_arg()],
                             callee: self.super_get_computed(*span).as_callee(),
-                            type_args: None,
-                        })
+                            ..Default::default()
+                        }
+                        .into()
                     };
                 }
                 SuperProp::Ident(id) => {
                     *e = if self.in_pat {
                         self.super_update(&id.sym, *span)
                             .make_member(quote_ident!("_"))
+                            .into()
                     } else {
-                        Expr::Call(CallExpr {
+                        CallExpr {
                             span: *span,
                             args: Vec::new(),
                             callee: self.super_get(&id.sym, *span).as_callee(),
-                            type_args: None,
-                        })
+                            ..Default::default()
+                        }
+                        .into()
                     };
                 }
             },
             _ => e.visit_mut_children_with(self),
         }
     }
-
-    fn visit_mut_block_stmt(&mut self, b: &mut BlockStmt) {
-        b.visit_mut_children_with(self);
-
-        // we will not vist into fn/class so it's fine
-        if !self.extra_ident.is_empty() {
-            b.stmts.insert(
-                0,
-                Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                    kind: VarDeclKind::Var,
-                    span: DUMMY_SP,
-                    decls: self
-                        .extra_ident
-                        .take()
-                        .into_iter()
-                        .map(|ident| VarDeclarator {
-                            span: DUMMY_SP,
-                            name: ident.into(),
-                            init: None,
-                            definite: false,
-                        })
-                        .collect(),
-                    declare: false,
-                }))),
-            )
-        }
-    }
-
-    fn visit_mut_block_stmt_or_expr(&mut self, b: &mut BlockStmtOrExpr) {
-        b.visit_mut_children_with(self);
-
-        // we will not vist into fn/class so it's fine
-        if !self.extra_ident.is_empty() {
-            if let BlockStmtOrExpr::Expr(e) = b {
-                *b = BlockStmtOrExpr::BlockStmt(BlockStmt {
-                    span: DUMMY_SP,
-                    stmts: vec![
-                        Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                            kind: VarDeclKind::Var,
-                            span: DUMMY_SP,
-                            decls: self
-                                .extra_ident
-                                .take()
-                                .into_iter()
-                                .map(|ident| VarDeclarator {
-                                    span: DUMMY_SP,
-                                    name: ident.into(),
-                                    init: None,
-                                    definite: false,
-                                })
-                                .collect(),
-                            declare: false,
-                        }))),
-                        Stmt::Return(ReturnStmt {
-                            span: e.span(),
-                            arg: Some(e.take()),
-                        }),
-                    ],
-                })
-            }
-        }
-    }
-
-    /// Don't recurse into constructor
-    fn visit_mut_class(&mut self, _: &mut Class) {}
 
     /// Don't recurse into fn
     fn visit_mut_function(&mut self, _: &mut Function) {}
@@ -567,13 +573,20 @@ impl VisitMut for FnEnvHoister {
         }
     }
 
-    fn visit_mut_setter_prop(&mut self, p: &mut SetterProp) {
+    fn visit_mut_method_prop(&mut self, p: &mut MethodProp) {
         if p.key.is_computed() {
             p.key.visit_mut_with(self);
         }
     }
 
-    fn visit_mut_method_prop(&mut self, p: &mut MethodProp) {
+    fn visit_mut_pat(&mut self, n: &mut Pat) {
+        let in_pat = self.in_pat;
+        self.in_pat = true;
+        n.visit_mut_children_with(self);
+        self.in_pat = in_pat;
+    }
+
+    fn visit_mut_setter_prop(&mut self, p: &mut SetterProp) {
         if p.key.is_computed() {
             p.key.visit_mut_with(self);
         }
@@ -589,8 +602,8 @@ struct InitThis<'a> {
 }
 
 // babel is skip function and class property
-impl<'a> VisitMut for InitThis<'a> {
-    noop_visit_mut_type!();
+impl VisitMut for InitThis<'_> {
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_class(&mut self, _: &mut Class) {}
 
@@ -609,21 +622,23 @@ impl<'a> VisitMut for InitThis<'a> {
         ) = expr
         {
             let span = call_expr.span;
-            *expr = Expr::Paren(ParenExpr {
+            *expr = ParenExpr {
                 span,
-                expr: Box::new(Expr::Seq(SeqExpr {
+                expr: SeqExpr {
                     span,
                     exprs: vec![
                         Box::new(Expr::Call(call_expr.take())),
                         Box::new(Expr::Assign(AssignExpr {
                             span: DUMMY_SP,
-                            left: PatOrExpr::Pat(self.this_id.clone().into()),
+                            left: self.this_id.clone().into(),
                             op: AssignOp::Assign,
                             right: Box::new(Expr::This(ThisExpr { span: DUMMY_SP })),
                         })),
                     ],
-                })),
-            })
+                }
+                .into(),
+            }
+            .into()
         }
     }
 }
@@ -639,50 +654,54 @@ fn extend_super(
         VarDeclarator {
             span: DUMMY_SP,
             name: ident.into(),
-            init: Some(Box::new(Expr::Object(ObjectLit {
-                span: DUMMY_SP,
-                props: vec![
-                    Prop::Getter(GetterProp {
-                        span: DUMMY_SP,
-                        key: PropName::Ident(quote_ident!("_")),
-                        type_ann: None,
-                        body: Some(BlockStmt {
+            init: Some(
+                ObjectLit {
+                    span: DUMMY_SP,
+                    props: vec![
+                        Prop::Getter(GetterProp {
                             span: DUMMY_SP,
-                            stmts: vec![Expr::Ident(
-                                get.ident
-                                    .get(&key)
-                                    .cloned()
-                                    .expect("getter not found")
-                                    .without_loc(),
-                            )
-                            .as_call(DUMMY_SP, Default::default())
-                            .into_return_stmt()
-                            .into()],
+                            key: PropName::Ident("_".into()),
+                            type_ann: None,
+                            body: Some(BlockStmt {
+                                stmts: vec![Expr::Ident(
+                                    get.ident
+                                        .get(&key)
+                                        .cloned()
+                                        .expect("getter not found")
+                                        .without_loc(),
+                                )
+                                .as_call(DUMMY_SP, Default::default())
+                                .into_return_stmt()
+                                .into()],
+                                ..Default::default()
+                            }),
                         }),
-                    }),
-                    Prop::Setter(SetterProp {
-                        span: DUMMY_SP,
-                        key: PropName::Ident(quote_ident!("_")),
-                        param: value.clone().into(),
-                        body: Some(BlockStmt {
+                        Prop::Setter(SetterProp {
                             span: DUMMY_SP,
-                            stmts: vec![Expr::Ident(
-                                set.ident
-                                    .get(&key)
-                                    .cloned()
-                                    .expect("setter not found")
-                                    .without_loc(),
-                            )
-                            .as_call(DUMMY_SP, vec![value.as_arg()])
-                            .into_stmt()],
+                            key: PropName::Ident("_".into()),
+                            this_param: None,
+                            param: value.clone().into(),
+                            body: Some(BlockStmt {
+                                stmts: vec![Expr::Ident(
+                                    set.ident
+                                        .get(&key)
+                                        .cloned()
+                                        .expect("setter not found")
+                                        .without_loc(),
+                                )
+                                .as_call(DUMMY_SP, vec![value.as_arg()])
+                                .into_stmt()],
+                                ..Default::default()
+                            }),
                         }),
-                    }),
-                ]
-                .into_iter()
-                .map(Box::new)
-                .map(From::from)
-                .collect(),
-            }))),
+                    ]
+                    .into_iter()
+                    .map(Box::new)
+                    .map(From::from)
+                    .collect(),
+                }
+                .into(),
+            ),
             definite: false,
         }
     }));
@@ -693,103 +712,111 @@ fn extend_super(
         decls.push(VarDeclarator {
             span: DUMMY_SP,
             name: id.into(),
-            init: Some(Box::new(Expr::Arrow(ArrowExpr {
-                span: DUMMY_SP,
-                params: vec![prop.clone().into()],
-                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Object(ObjectLit {
+            init: Some(
+                ArrowExpr {
                     span: DUMMY_SP,
-                    props: vec![
-                        Prop::Getter(GetterProp {
+                    params: vec![prop.clone().into()],
+                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                        ObjectLit {
                             span: DUMMY_SP,
-                            key: PropName::Ident(quote_ident!("_")),
-                            type_ann: None,
-                            body: Some(BlockStmt {
-                                span: DUMMY_SP,
-                                stmts: vec![Expr::Ident(
-                                    get.computed
-                                        .clone()
-                                        .expect("getter computed not found")
-                                        .without_loc(),
-                                )
-                                .as_call(DUMMY_SP, vec![prop.clone().as_arg()])
-                                .into_return_stmt()
-                                .into()],
-                            }),
-                        }),
-                        Prop::Setter(SetterProp {
-                            span: DUMMY_SP,
-                            key: PropName::Ident(quote_ident!("_")),
-                            param: value.clone().into(),
-                            body: Some(BlockStmt {
-                                span: DUMMY_SP,
-                                stmts: vec![Expr::Ident(
-                                    set.computed
-                                        .clone()
-                                        .expect("setter computed not found")
-                                        .without_loc(),
-                                )
-                                .as_call(DUMMY_SP, vec![prop.as_arg(), value.as_arg()])
-                                .into_return_stmt()
-                                .into()],
-                            }),
-                        }),
-                    ]
-                    .into_iter()
-                    .map(Box::new)
-                    .map(From::from)
-                    .collect(),
-                })))),
-                is_async: false,
-                is_generator: false,
-                return_type: None,
-                type_params: None,
-            }))),
+                            props: vec![
+                                Prop::Getter(GetterProp {
+                                    span: DUMMY_SP,
+                                    key: PropName::Ident("_".into()),
+                                    type_ann: None,
+                                    body: Some(BlockStmt {
+                                        stmts: vec![Expr::Ident(
+                                            get.computed
+                                                .clone()
+                                                .expect("getter computed not found")
+                                                .without_loc(),
+                                        )
+                                        .as_call(DUMMY_SP, vec![prop.clone().as_arg()])
+                                        .into_return_stmt()
+                                        .into()],
+                                        ..Default::default()
+                                    }),
+                                }),
+                                Prop::Setter(SetterProp {
+                                    span: DUMMY_SP,
+                                    key: PropName::Ident("_".into()),
+                                    this_param: None,
+                                    param: value.clone().into(),
+                                    body: Some(BlockStmt {
+                                        stmts: vec![Expr::Ident(
+                                            set.computed
+                                                .clone()
+                                                .expect("setter computed not found")
+                                                .without_loc(),
+                                        )
+                                        .as_call(DUMMY_SP, vec![prop.as_arg(), value.as_arg()])
+                                        .into_return_stmt()
+                                        .into()],
+                                        ..Default::default()
+                                    }),
+                                }),
+                            ]
+                            .into_iter()
+                            .map(Box::new)
+                            .map(From::from)
+                            .collect(),
+                        }
+                        .into(),
+                    ))),
+                    ..Default::default()
+                }
+                .into(),
+            ),
             definite: false,
         });
     }
-    decls.extend(get.ident.into_iter().map(|(key, ident)| VarDeclarator {
-        span: DUMMY_SP,
-        name: ident.without_loc().into(),
-        init: Some(Box::new(Expr::Arrow(ArrowExpr {
+    decls.extend(get.ident.into_iter().map(|(key, ident)| {
+        VarDeclarator {
             span: DUMMY_SP,
-            params: Vec::new(),
-            body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::SuperProp(
-                SuperPropExpr {
-                    obj: Super { span: DUMMY_SP },
-                    prop: SuperProp::Ident(quote_ident!(key)),
+            name: ident.without_loc().into(),
+            init: Some(
+                ArrowExpr {
                     span: DUMMY_SP,
-                },
-            )))),
-            is_async: false,
-            is_generator: false,
-            return_type: None,
-            type_params: None,
-        }))),
-        definite: false,
+                    params: Vec::new(),
+                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                        SuperPropExpr {
+                            obj: Super { span: DUMMY_SP },
+                            prop: SuperProp::Ident(key.into()),
+                            span: DUMMY_SP,
+                        }
+                        .into(),
+                    ))),
+                    ..Default::default()
+                }
+                .into(),
+            ),
+            definite: false,
+        }
     }));
     if let Some(id) = get.computed {
         let param = private_ident!("_prop");
         decls.push(VarDeclarator {
             span: DUMMY_SP,
             name: id.without_loc().into(),
-            init: Some(Box::new(Expr::Arrow(ArrowExpr {
-                span: DUMMY_SP,
-                params: vec![param.clone().into()],
-                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::SuperProp(
-                    SuperPropExpr {
-                        obj: Super { span: DUMMY_SP },
-                        prop: SuperProp::Computed(ComputedPropName {
+            init: Some(
+                ArrowExpr {
+                    span: DUMMY_SP,
+                    params: vec![param.clone().into()],
+                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                        SuperPropExpr {
+                            obj: Super { span: DUMMY_SP },
+                            prop: SuperProp::Computed(ComputedPropName {
+                                span: DUMMY_SP,
+                                expr: Box::new(Expr::Ident(param)),
+                            }),
                             span: DUMMY_SP,
-                            expr: Box::new(Expr::Ident(param)),
-                        }),
-                        span: DUMMY_SP,
-                    },
-                )))),
-                is_async: false,
-                is_generator: false,
-                return_type: None,
-                type_params: None,
-            }))),
+                        }
+                        .into(),
+                    ))),
+                    ..Default::default()
+                }
+                .into(),
+            ),
             definite: false,
         });
     }
@@ -798,24 +825,28 @@ fn extend_super(
         VarDeclarator {
             span: DUMMY_SP,
             name: ident.without_loc().into(),
-            init: Some(Box::new(Expr::Arrow(ArrowExpr {
-                span: DUMMY_SP,
-                params: vec![value.clone().into()],
-                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Assign(AssignExpr {
+            init: Some(
+                ArrowExpr {
                     span: DUMMY_SP,
-                    left: PatOrExpr::Expr(Box::new(Expr::SuperProp(SuperPropExpr {
-                        obj: Super { span: DUMMY_SP },
-                        prop: SuperProp::Ident(quote_ident!(key)),
-                        span: DUMMY_SP,
-                    }))),
-                    op: op!("="),
-                    right: Box::new(Expr::Ident(value)),
-                })))),
-                is_async: false,
-                is_generator: false,
-                return_type: None,
-                type_params: None,
-            }))),
+                    params: vec![value.clone().into()],
+                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                        AssignExpr {
+                            span: DUMMY_SP,
+                            left: SuperPropExpr {
+                                obj: Super { span: DUMMY_SP },
+                                prop: SuperProp::Ident(key.into()),
+                                span: DUMMY_SP,
+                            }
+                            .into(),
+                            op: op!("="),
+                            right: Box::new(Expr::Ident(value)),
+                        }
+                        .into(),
+                    ))),
+                    ..Default::default()
+                }
+                .into(),
+            ),
             definite: false,
         }
     }));
@@ -825,27 +856,31 @@ fn extend_super(
         decls.push(VarDeclarator {
             span: DUMMY_SP,
             name: id.without_loc().into(),
-            init: Some(Box::new(Expr::Arrow(ArrowExpr {
-                span: DUMMY_SP,
-                params: vec![prop.clone().into(), value.clone().into()],
-                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Assign(AssignExpr {
+            init: Some(
+                ArrowExpr {
                     span: DUMMY_SP,
-                    left: PatOrExpr::Expr(Box::new(Expr::SuperProp(SuperPropExpr {
-                        obj: Super { span: DUMMY_SP },
-                        prop: SuperProp::Computed(ComputedPropName {
+                    params: vec![prop.clone().into(), value.clone().into()],
+                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(
+                        AssignExpr {
                             span: DUMMY_SP,
-                            expr: Box::new(Expr::Ident(prop)),
-                        }),
-                        span: DUMMY_SP,
-                    }))),
-                    op: op!("="),
-                    right: Box::new(Expr::Ident(value)),
-                })))),
-                is_async: false,
-                is_generator: false,
-                return_type: None,
-                type_params: None,
-            }))),
+                            left: SuperPropExpr {
+                                obj: Super { span: DUMMY_SP },
+                                prop: SuperProp::Computed(ComputedPropName {
+                                    span: DUMMY_SP,
+                                    expr: Box::new(Expr::Ident(prop)),
+                                }),
+                                span: DUMMY_SP,
+                            }
+                            .into(),
+                            op: op!("="),
+                            right: Box::new(Expr::Ident(value)),
+                        }
+                        .into(),
+                    ))),
+                    ..Default::default()
+                }
+                .into(),
+            ),
             definite: false,
         });
     }

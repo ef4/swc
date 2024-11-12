@@ -1,8 +1,8 @@
-extern crate swc_node_base;
+extern crate swc_malloc;
 
 use std::{fs::read_to_string, path::Path};
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Criterion};
 use swc_common::{errors::HANDLER, FileName};
 use swc_css_ast::Stylesheet;
 use swc_css_codegen::{writer::basic::BasicCssWriter, Emit};
@@ -36,10 +36,11 @@ criterion_main!(files);
 fn run(src: &str) {
     testing::run_test2(false, |cm, handler| {
         HANDLER.set(&handler, || {
-            let fm = cm.new_source_file(FileName::Anon, src.into());
+            let fm = cm.new_source_file(FileName::Anon.into(), src.into());
 
-            let mut errors = vec![];
-            let mut ss: Stylesheet = parse_file(&fm, Default::default(), &mut errors).unwrap();
+            let mut errors = Vec::new();
+            let mut ss: Stylesheet =
+                parse_file(&fm, None, Default::default(), &mut errors).unwrap();
 
             minify(&mut ss, Default::default());
 

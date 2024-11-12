@@ -8,4 +8,4 @@ new class {
             value: void 0
         });
     }
-}(); // Error: Property #foo is missing
+}();

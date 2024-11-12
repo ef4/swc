@@ -45,7 +45,7 @@ where
 
 impl<T> Take for Vec<T> {
     fn dummy() -> Self {
-        vec![]
+        Vec::new()
     }
 }
 
@@ -54,3 +54,20 @@ impl Take for Span {
         DUMMY_SP
     }
 }
+
+swc_allocator::nightly_only!(
+    impl<T> Take for swc_allocator::boxed::Box<T>
+    where
+        T: Take,
+    {
+        fn dummy() -> Self {
+            swc_allocator::boxed::Box::new(T::dummy())
+        }
+    }
+
+    impl<T> Take for swc_allocator::vec::Vec<T> {
+        fn dummy() -> Self {
+            Default::default()
+        }
+    }
+);

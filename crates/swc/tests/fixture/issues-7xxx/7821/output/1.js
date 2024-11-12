@@ -6,9 +6,8 @@ var Blocks = {
         return /*#__PURE__*/ React.createElement(React.Fragment, null, "'Block2xx'");
     },
     Layout1: function() {
-        // In the final code, Blocks does not have a 'Block1' key
         return [
-            "Block1"
+            'Block1'
         ].map(function(e) {
             return Blocks[e];
         });

@@ -23,7 +23,7 @@ let a = new class {
 }(41);
 new class {
     constructor(a){
-        let x = friendA.getX(a); // ok
-        friendA.setX(a, x + 1); // ok
+        let x = friendA.getX(a);
+        friendA.setX(a, x + 1);
     }
 }(a), a.getX();

@@ -1,35 +1,50 @@
 {
+    const env = {
+        stack: [],
+        error: void 0,
+        hasError: false
+    };
     try {
-        var _stack = [];
-        var x = _using(_stack, obj);
+        const x = _ts_add_disposable_resource(env, obj, false);
+        ;
         {
+            const env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack1 = [];
-                var y = _using(_stack1, call(()=>{
+                const y = _ts_add_disposable_resource(env, call(()=>{
+                    const env = {
+                        stack: [],
+                        error: void 0,
+                        hasError: false
+                    };
                     try {
-                        var _stack = [];
-                        var z = _using(_stack, obj);
+                        const z = _ts_add_disposable_resource(env, obj, false);
+                        ;
                         return z;
-                    } catch (_) {
-                        var _error = _;
-                        var _hasError = true;
+                    } catch (e) {
+                        env.error = e;
+                        env.hasError = true;
                     } finally{
-                        _dispose(_stack, _error, _hasError);
+                        _ts_dispose_resources(env);
                     }
-                }));
+                }), false);
+                ;
                 stmt;
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack1, _error, _hasError);
+                _ts_dispose_resources(env);
             }
         }
         stmt;
-    } catch (_) {
-        var _error1 = _;
-        var _hasError1 = true;
+    } catch (e) {
+        env.error = e;
+        env.hasError = true;
     } finally{
-        _dispose(_stack, _error1, _hasError1);
+        _ts_dispose_resources(env);
     }
 }

@@ -1,7 +1,6 @@
 use std::{
-    borrow::Cow,
     fs::{self, File},
-    io::{self, Read, Write},
+    io::{self, IsTerminal, Read, Write},
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
@@ -147,6 +146,7 @@ fn get_files_list(
             .into_iter()
             .filter_map(|e| e.ok())
             .map(|e| e.into_path())
+            .filter(|e| e.is_file())
             .filter(|e| {
                 extensions
                     .iter()
@@ -213,22 +213,10 @@ fn resolve_output_file_path(
 
 fn emit_output(
     mut output: TransformOutput,
-    source_file_name: &Option<String>,
-    source_root: &Option<String>,
     out_dir: &Option<PathBuf>,
     file_path: &Path,
     file_extension: PathBuf,
 ) -> anyhow::Result<()> {
-    let source_map = if let Some(ref source_map) = &output.map {
-        Some(extend_source_map(
-            source_map.to_owned(),
-            source_file_name,
-            source_root,
-        )?)
-    } else {
-        None
-    };
-
     if let Some(out_dir) = out_dir {
         let output_file_path = resolve_output_file_path(out_dir, file_path, file_extension)?;
         let output_dir = output_file_path
@@ -239,7 +227,7 @@ fn emit_output(
             fs::create_dir_all(output_dir)?;
         }
 
-        if let Some(ref source_map) = source_map {
+        if let Some(ref source_map) = output.map {
             let source_map_path = output_file_path.with_extension("js.map");
 
             output.code.push_str("\n//# sourceMappingURL=");
@@ -250,12 +238,22 @@ fn emit_output(
             fs::write(source_map_path, source_map)?;
         }
 
-        fs::write(output_file_path, &output.code)?;
+        fs::write(&output_file_path, &output.code)?;
+
+        if let Some(extra) = &output.output {
+            let mut extra: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_str(extra).context("failed to parse extra output")?;
+
+            if let Some(dts_code) = extra.remove("__swc_isolated_declarations__") {
+                let dts_file_path = output_file_path.with_extension("d.ts");
+                fs::write(dts_file_path, dts_code.as_str().unwrap())?;
+            }
+        }
     } else {
-        let source_map = if let Some(ref source_map) = source_map {
-            String::from_utf8_lossy(source_map)
+        let source_map = if let Some(ref source_map) = output.map {
+            &**source_map
         } else {
-            Cow::Borrowed("")
+            ""
         };
 
         println!("{}\n{}\n{}", file_path.display(), output.code, source_map,);
@@ -264,12 +262,13 @@ fn emit_output(
 }
 
 fn collect_stdin_input() -> Option<String> {
-    if atty::is(atty::Stream::Stdin) {
+    let stdin = io::stdin();
+    if stdin.is_terminal() {
         return None;
     }
 
     let mut buffer = String::new();
-    let result = io::stdin().lock().read_to_string(&mut buffer);
+    let result = stdin.lock().read_to_string(&mut buffer);
 
     if result.is_ok() && !buffer.is_empty() {
         Some(buffer)
@@ -321,7 +320,10 @@ impl CompileOptions {
             });
 
         if let Some(file_path) = *file_path {
-            options.filename = file_path.to_str().unwrap_or_default().to_owned();
+            file_path
+                .to_str()
+                .unwrap_or_default()
+                .clone_into(&mut options.filename);
         }
 
         if let Some(env_name) = &self.env_name {
@@ -335,8 +337,9 @@ impl CompileOptions {
                 value => SourceMapsConfig::Str(value.to_string()),
             });
 
-            options.source_file_name = self.source_file_name.to_owned();
-            options.source_root = self.source_root.to_owned();
+            self.source_file_name
+                .clone_into(&mut options.source_file_name);
+            self.source_root.clone_into(&mut options.source_root);
         }
 
         Ok(options)
@@ -390,9 +393,9 @@ impl CompileOptions {
 
             let fm = compiler.cm.new_source_file(
                 if options.filename.is_empty() {
-                    FileName::Anon
+                    FileName::Anon.into()
                 } else {
-                    FileName::Real(options.filename.clone().into())
+                    FileName::Real(options.filename.clone().into()).into()
                 },
                 stdin_input,
             );
@@ -450,10 +453,11 @@ impl CompileOptions {
             )?;
             let mut buf = File::create(single_out_file)?;
             let mut buf_srcmap = None;
+            let mut buf_dts = None;
             let mut source_map_path = None;
 
             // write all transformed files to single output buf
-            result?.iter().try_for_each(|r| {
+            for r in result?.iter() {
                 if let Some(src_map) = r.map.as_ref() {
                     if buf_srcmap.is_none() {
                         let map_out_file = if let Some(source_map_target) = &self.source_map_target
@@ -484,22 +488,34 @@ impl CompileOptions {
                         buf_srcmap = Some(File::create(map_out_file)?);
                     }
 
-                    let source_map = extend_source_map(
-                        src_map.to_owned(),
-                        &self.source_file_name,
-                        &self.source_root,
-                    )
-                    .unwrap();
-
                     buf_srcmap
                         .as_ref()
                         .expect("Srcmap buffer should be available")
-                        .write(&source_map)
+                        .write(src_map.as_bytes())
                         .and(Ok(()))?;
                 }
 
-                buf.write(r.code.as_bytes()).and(Ok(()))
-            })?;
+                if let Some(extra) = &r.output {
+                    let mut extra: serde_json::Map<String, serde_json::Value> =
+                        serde_json::from_str(extra).context("failed to parse extra output")?;
+
+                    if let Some(dts_code) = extra.remove("__swc_isolated_declarations__") {
+                        if buf_dts.is_none() {
+                            let dts_file_path = single_out_file.with_extension("d.ts");
+                            buf_dts = Some(File::create(dts_file_path)?);
+                        }
+
+                        let dts_code = dts_code.as_str().expect("dts code should be string");
+                        buf_dts
+                            .as_ref()
+                            .expect("dts buffer should be available")
+                            .write(dts_code.as_bytes())
+                            .and(Ok(()))?;
+                    }
+                }
+
+                buf.write(r.code.as_bytes()).and(Ok(()))?;
+            }
 
             if let Some(source_map_path) = source_map_path {
                 buf.write_all(b"\n//# sourceMappingURL=")?;
@@ -520,47 +536,15 @@ impl CompileOptions {
                     let result = execute(compiler, fm, options);
 
                     match result {
-                        Ok(output) => emit_output(
-                            output,
-                            &self.source_file_name,
-                            &self.source_root,
-                            &self.out_dir,
-                            &file_path,
-                            file_extension,
-                        ),
+                        Ok(output) => {
+                            emit_output(output, &self.out_dir, &file_path, file_extension)
+                        }
                         Err(e) => Err(e),
                     }
                 },
             )
         }
     }
-}
-
-// TODO: remove once fixed in core https://github.com/swc-project/swc/issues/1388
-fn extend_source_map(
-    source_map: String,
-    source_file_name: &Option<String>,
-    source_root: &Option<String>,
-) -> anyhow::Result<Vec<u8>> {
-    let mut source_map = sourcemap::SourceMap::from_reader(source_map.as_bytes())
-        .context("failed to encode source map")?;
-
-    if !source_map.get_token_count() != 0 {
-        if let Some(ref source_file_name) = source_file_name {
-            source_map.set_source(0u32, source_file_name);
-        }
-    }
-
-    if source_root.is_some() {
-        source_map.set_source_root(source_root.clone());
-    }
-
-    let mut buf = vec![];
-    source_map
-        .to_writer(&mut buf)
-        .context("failed to decode source map")?;
-
-    Ok(buf)
 }
 
 #[swc_trace]

@@ -1,4 +1,3 @@
-use swc_atoms::js_word;
 use swc_common::{BytePos, Span, Spanned};
 use swc_css_ast::*;
 
@@ -30,7 +29,7 @@ where
 
         // Return the stylesheet.
         Ok(Stylesheet {
-            span: Span::new(start.lo, last, Default::default()),
+            span: Span::new(start.lo, last),
             rules,
         })
     }
@@ -44,7 +43,7 @@ where
         // To consume a list of rules, given a top-level flag:
 
         // Create an initially empty list of rules.
-        let mut rules = vec![];
+        let mut rules = Vec::new();
 
         // Repeatedly consume the next input token:
 
@@ -108,7 +107,7 @@ where
                             let span = self.input.cur_span();
                             let mut list_of_component_values = ListOfComponentValues {
                                 span: Default::default(),
-                                children: vec![],
+                                children: Vec::new(),
                             };
 
                             while !is_one_of!(self, EOF) {
@@ -151,18 +150,18 @@ where
         let is_dashed_ident = at_keyword_name.0.starts_with("--");
         let name = if is_dashed_ident {
             AtRuleName::DashedIdent(DashedIdent {
-                span: Span::new(span.lo + BytePos(1), span.hi, Default::default()),
-                value: at_keyword_name.0[2..].into(),
+                span: Span::new(span.lo + BytePos(1), span.hi),
+                value: self.input.atom(&at_keyword_name.0[2..]),
                 raw: Some(at_keyword_name.1),
             })
         } else {
             AtRuleName::Ident(Ident {
-                span: Span::new(span.lo + BytePos(1), span.hi, Default::default()),
-                value: at_keyword_name.0.to_ascii_lowercase(),
+                span: Span::new(span.lo + BytePos(1), span.hi),
+                value: at_keyword_name.0,
                 raw: Some(at_keyword_name.1),
             })
         };
-        let mut prelude = vec![];
+        let mut prelude = Vec::new();
         let mut at_rule = AtRule {
             span: Default::default(),
             name,
@@ -174,12 +173,26 @@ where
             // <EOF-token>
             // This is a parse error. Return the at-rule.
             if is!(self, EOF) {
-                self.errors.push(Error::new(
-                    span!(self, span.lo),
-                    ErrorKind::EofButExpected("';' or '{'"),
-                ));
+                if prelude.is_empty() {
+                    self.errors.push(Error::new(
+                        span!(self, span.lo),
+                        ErrorKind::EofButExpected("';' or '{'"),
+                    ));
 
+                    at_rule.span = span!(self, span.lo);
+
+                    return Ok(at_rule);
+                }
+
+                at_rule.prelude = Some(Box::new(AtRulePrelude::ListOfComponentValues(
+                    self.create_locv(prelude),
+                )));
                 at_rule.span = span!(self, span.lo);
+
+                // Canonicalization against a grammar
+                if !is_dashed_ident && self.ctx.need_canonicalize {
+                    at_rule = self.canonicalize_at_rule_prelude(at_rule)?;
+                }
 
                 return Ok(at_rule);
             }
@@ -226,7 +239,6 @@ where
                 // value to the at-rule’s prelude.
                 _ => {
                     let component_value = self.parse_as::<ComponentValue>()?;
-
                     prelude.push(component_value);
                 }
             }
@@ -244,7 +256,7 @@ where
         // Create a new qualified rule with its prelude initially set to an empty list,
         // and its value initially set to nothing.
         let span = self.input.cur_span();
-        let mut prelude = vec![];
+        let mut prelude = Vec::new();
 
         // Repeatedly consume the next input token:
         loop {
@@ -311,8 +323,8 @@ where
     I: ParserInput,
 {
     fn parse(&mut self) -> PResult<Vec<StyleBlock>> {
-        let mut declarations = vec![];
-        let mut rules = vec![];
+        let mut declarations = Vec::new();
+        let mut rules = Vec::new();
 
         loop {
             // <EOF-token>
@@ -338,11 +350,8 @@ where
                     if let Some(StyleBlock::ListOfComponentValues(list_of_component_values)) =
                         declarations.last_mut()
                     {
-                        list_of_component_values.span = Span::new(
-                            list_of_component_values.span_lo(),
-                            token_and_span.span_hi(),
-                            Default::default(),
-                        );
+                        list_of_component_values.span =
+                            Span::new(list_of_component_values.span_lo(), token_and_span.span_hi());
                         list_of_component_values
                             .children
                             .push(ComponentValue::PreservedToken(Box::new(token_and_span)));
@@ -384,7 +393,7 @@ where
                     let span = self.input.cur_span();
                     let mut temporary_list = ListOfComponentValues {
                         span: Default::default(),
-                        children: vec![],
+                        children: Vec::new(),
                     };
 
                     while !is_one_of!(self, ";", EOF) {
@@ -434,7 +443,7 @@ where
                             // For recovery mode
                             let mut list_of_component_values = ListOfComponentValues {
                                 span: Default::default(),
-                                children: vec![],
+                                children: Vec::new(),
                             };
 
                             while !is_one_of!(self, ";", EOF) {
@@ -462,7 +471,7 @@ where
 {
     fn parse(&mut self) -> PResult<Vec<DeclarationOrAtRule>> {
         // Create an initially empty list of declarations.
-        let mut declarations = vec![];
+        let mut declarations = Vec::new();
 
         // Repeatedly consume the next input token:
         loop {
@@ -488,11 +497,8 @@ where
                         list_of_component_values,
                     )) = declarations.last_mut()
                     {
-                        list_of_component_values.span = Span::new(
-                            list_of_component_values.span_lo(),
-                            token_and_span.span_hi(),
-                            Default::default(),
-                        );
+                        list_of_component_values.span =
+                            Span::new(list_of_component_values.span_lo(), token_and_span.span_hi());
                         list_of_component_values
                             .children
                             .push(ComponentValue::PreservedToken(Box::new(token_and_span)));
@@ -521,7 +527,7 @@ where
                     let span = self.input.cur_span();
                     let mut temporary_list = ListOfComponentValues {
                         span: Default::default(),
-                        children: vec![],
+                        children: Vec::new(),
                     };
 
                     while !is_one_of!(self, ";", EOF) {
@@ -562,7 +568,7 @@ where
                     // For recovery mode
                     let mut list_of_component_values = ListOfComponentValues {
                         span: Default::default(),
-                        children: vec![],
+                        children: Vec::new(),
                     };
 
                     while !is_one_of!(self, ";", EOF) {
@@ -617,16 +623,14 @@ where
 
             DeclarationName::DashedIdent(ident)
         } else {
-            let mut ident: Ident = self.parse()?;
-
-            ident.value = ident.value.to_ascii_lowercase();
+            let ident: Ident = self.parse()?;
 
             DeclarationName::Ident(ident)
         };
         let mut declaration = Declaration {
             span: Default::default(),
             name,
-            value: vec![],
+            value: Vec::new(),
             important: None,
         };
 
@@ -658,11 +662,10 @@ where
 
             match &component_value {
                 // Optimization for step 6
-                ComponentValue::PreservedToken(box TokenAndSpan {
-                    span,
-                    token: Token::Delim { value: '!', .. },
-                    ..
-                }) if is!(self, " ") || is_case_insensitive_ident!(self, "important") => {
+                ComponentValue::PreservedToken(token_and_span)
+                    if matches!(token_and_span.token, Token::Delim { value: '!', .. })
+                        && (is!(self, " ") || is_case_insensitive_ident!(self, "important")) =>
+                {
                     if let Some(span) = &exclamation_point_span {
                         is_valid_to_canonicalize = false;
 
@@ -675,32 +678,32 @@ where
                         last_whitespaces = (last_whitespaces.2, 0, 0);
                     }
 
-                    exclamation_point_span = Some(*span);
+                    exclamation_point_span = Some(token_and_span.span);
                 }
-                ComponentValue::PreservedToken(box TokenAndSpan {
-                    token: Token::WhiteSpace { .. },
-                    ..
-                }) => match (&exclamation_point_span, &important_ident) {
-                    (Some(_), Some(_)) => {
-                        last_whitespaces.2 += 1;
+                ComponentValue::PreservedToken(token_and_span)
+                    if matches!(token_and_span.token, Token::WhiteSpace { .. }) =>
+                {
+                    match (&exclamation_point_span, &important_ident) {
+                        (Some(_), Some(_)) => {
+                            last_whitespaces.2 += 1;
+                        }
+                        (Some(_), None) => {
+                            last_whitespaces.1 += 1;
+                        }
+                        (None, None) => {
+                            last_whitespaces.0 += 1;
+                        }
+                        _ => {
+                            unreachable!();
+                        }
                     }
-                    (Some(_), None) => {
-                        last_whitespaces.1 += 1;
-                    }
-                    (None, None) => {
-                        last_whitespaces.0 += 1;
-                    }
-                    _ => {
-                        unreachable!();
-                    }
-                },
-                ComponentValue::PreservedToken(
-                    token_and_span @ box TokenAndSpan {
-                        token: Token::Ident { value, .. },
-                        ..
-                    },
-                ) if exclamation_point_span.is_some()
-                    && matches_eq_ignore_ascii_case!(value, js_word!("important")) =>
+                }
+                ComponentValue::PreservedToken(token_and_span)
+                    if exclamation_point_span.is_some()
+                        && matches!(
+                            &token_and_span.token,
+                            Token::Ident { value, .. } if matches_eq_ignore_ascii_case!(value, "important")
+                        ) =>
                 {
                     important_ident = Some(token_and_span.clone());
                 }
@@ -737,11 +740,7 @@ where
         if let (Some(exclamation_point_span), Some(important_ident)) =
             (exclamation_point_span, important_ident)
         {
-            let span = Span::new(
-                exclamation_point_span.lo,
-                important_ident.span_hi(),
-                Default::default(),
-            );
+            let span = Span::new(exclamation_point_span.lo, important_ident.span_hi());
             let value = match important_ident.token {
                 Token::Ident { value, raw, .. } => (value, raw),
                 _ => {
@@ -853,7 +852,7 @@ where
         let mut simple_block = SimpleBlock {
             span: Default::default(),
             name,
-            value: vec![],
+            value: Vec::new(),
         };
 
         // Repeatedly consume the next input token and process it as follows:
@@ -935,21 +934,21 @@ where
         let is_dashed_ident = function_name.0.starts_with("--");
         let name = if is_dashed_ident {
             FunctionName::DashedIdent(DashedIdent {
-                span: Span::new(span.lo, span.hi - BytePos(1), Default::default()),
-                value: function_name.0[2..].into(),
+                span: Span::new(span.lo, span.hi - BytePos(1)),
+                value: self.input.atom(&function_name.0[2..]),
                 raw: Some(function_name.1),
             })
         } else {
             FunctionName::Ident(Ident {
-                span: Span::new(span.lo, span.hi - BytePos(1), Default::default()),
-                value: function_name.0.to_ascii_lowercase(),
+                span: Span::new(span.lo, span.hi - BytePos(1)),
+                value: function_name.0,
                 raw: Some(function_name.1),
             })
         };
         let mut function = Function {
             span: Default::default(),
             name,
-            value: vec![],
+            value: Vec::new(),
         };
 
         // Repeatedly consume the next input token and process it as follows:
@@ -1001,7 +1000,7 @@ where
 {
     fn parse(&mut self) -> PResult<ListOfComponentValues> {
         let span = self.input.cur_span();
-        let mut children = vec![];
+        let mut children = Vec::new();
 
         // Repeatedly consume a component value from input until an <EOF-token> is
         // returned, appending the returned values (except the final <EOF-token>) into a

@@ -5,7 +5,7 @@ use swc_ecma_codegen_macros::emitter;
 use super::{Emitter, Result};
 use crate::text_writer::WriteJs;
 
-impl<'a, W, S: SourceMapper + SourceMapperExt> Emitter<'a, W, S>
+impl<W, S: SourceMapper + SourceMapperExt> Emitter<'_, W, S>
 where
     W: WriteJs,
 {
@@ -482,12 +482,14 @@ where
         }
 
         punct!("[");
+
         emit!(n.type_param.name);
 
-        if n.type_param.constraint.is_some() {
+        if let Some(constraints) = &n.type_param.constraint {
             space!();
             keyword!("in");
             space!();
+            emit!(constraints);
         }
 
         if let Some(default) = &n.type_param.default {
@@ -497,7 +499,12 @@ where
             emit!(default);
         }
 
-        emit!(n.type_param.constraint);
+        if let Some(name_type) = &n.name_type {
+            space!();
+            keyword!("as");
+            space!();
+            emit!(name_type);
+        }
 
         punct!("]");
 
@@ -518,9 +525,12 @@ where
             },
         }
 
-        punct!(":");
-        space!();
-        emit!(n.type_ann);
+        if let Some(type_ann) = &n.type_ann {
+            punct!(":");
+            space!();
+            emit!(type_ann);
+        }
+
         formatting_semi!();
 
         self.wr.write_line()?;
@@ -531,10 +541,6 @@ where
     #[emitter]
     fn emit_ts_method_signature(&mut self, n: &TsMethodSignature) -> Result {
         self.emit_leading_comments_of_span(n.span(), false)?;
-
-        if n.readonly {
-            keyword!("readonly");
-        }
 
         if n.computed {
             punct!("[");
@@ -581,7 +587,12 @@ where
         if n.global {
             keyword!("global");
         } else {
-            keyword!("module");
+            match &n.id {
+                // prefer namespace keyword because TS might
+                // deprecate the module keyword in this context
+                TsModuleName::Ident(_) => keyword!("namespace"),
+                TsModuleName::Str(_) => keyword!("module"),
+            }
             space!();
             emit!(n.id);
         }
@@ -677,11 +688,9 @@ where
     fn emit_ts_param_prop(&mut self, n: &TsParamProp) -> Result {
         self.emit_leading_comments_of_span(n.span(), false)?;
 
-        self.emit_accessibility(n.accessibility)?;
+        self.emit_list(n.span, Some(&n.decorators), ListFormat::Decorators)?;
 
-        for dec in &n.decorators {
-            emit!(dec);
-        }
+        self.emit_accessibility(n.accessibility)?;
 
         if n.is_override {
             keyword!("override");
@@ -736,8 +745,6 @@ where
             punct!("?");
         }
 
-        emit!(n.type_params);
-
         // punct!("(");
         // self.emit_list(n.span, Some(&n.params), ListFormat::Parameters)?;
         // punct!(")");
@@ -746,13 +753,6 @@ where
             punct!(":");
             formatting_space!();
             emit!(type_ann);
-        }
-
-        if let Some(init) = &n.init {
-            formatting_space!();
-            punct!("=");
-            formatting_space!();
-            emit!(init);
         }
     }
 
@@ -852,11 +852,7 @@ where
             emit!(n);
         }
 
-        if let Some(type_args) = &n.type_args {
-            punct!("<");
-            emit!(type_args);
-            punct!(">");
-        }
+        emit!(n.type_args);
     }
 
     #[emitter]
@@ -939,7 +935,13 @@ where
         keyword!("get");
         space!();
 
-        emit!(n.key);
+        if n.computed {
+            punct!("[");
+            emit!(n.key);
+            punct!("]");
+        } else {
+            emit!(n.key)
+        }
 
         punct!("(");
         punct!(")");
@@ -957,7 +959,13 @@ where
         keyword!("set");
         space!();
 
-        emit!(n.key);
+        if n.computed {
+            punct!("[");
+            emit!(n.key);
+            punct!("]");
+        } else {
+            emit!(n.key)
+        }
 
         punct!("(");
         emit!(n.param);
@@ -1073,6 +1081,7 @@ where
         keyword!("typeof");
         space!();
         emit!(n.expr_name);
+        emit!(n.type_args);
     }
 
     #[emitter]

@@ -27,17 +27,19 @@
 //! `SWC_RUN` to `1`, the minifier will validate the code using node before each
 //! step.
 #![deny(clippy::all)]
-#![allow(clippy::blocks_in_if_conditions)]
+#![allow(clippy::blocks_in_conditions)]
 #![allow(clippy::collapsible_else_if)]
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::vec_box)]
 #![allow(clippy::overly_complex_bool_expr)]
+#![allow(clippy::mutable_key_type)]
 #![allow(clippy::only_used_in_recursion)]
 #![allow(unstable_name_collisions)]
 #![allow(clippy::match_like_matches_macro)]
 
 use once_cell::sync::Lazy;
+use pass::mangle_names::mangle_names;
 use swc_common::{comments::Comments, pass::Repeated, sync::Lrc, SourceMap, SyntaxContext};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_optimization::debug_assert_valid;
@@ -52,12 +54,8 @@ use crate::{
     mode::{Minification, Mode},
     option::{CompressOptions, ExtraOptions, MinifyOptions},
     pass::{
-        expand_names::name_expander,
-        global_defs,
-        mangle_names::{idents_to_preserve, name_mangler},
-        mangle_props::mangle_properties,
-        merge_exports::merge_exports,
-        postcompress::postcompress_optimizer,
+        global_defs, mangle_names::idents_to_preserve, mangle_props::mangle_properties,
+        merge_exports::merge_exports, postcompress::postcompress_optimizer,
         precompress::precompress_optimizer,
     },
     // program_data::ModuleInfo,
@@ -77,6 +75,7 @@ mod mode;
 pub mod option;
 mod pass;
 mod program_data;
+mod size_hint;
 pub mod timing;
 mod util;
 
@@ -171,32 +170,36 @@ pub fn optimize(
     if options.rename && DISABLE_BUGGY_PASSES {
         // toplevel.figure_out_scope(options.mangle);
         // TODO: Pass `options.mangle` to name expander.
-        n.visit_mut_with(&mut name_expander());
+        // n.visit_mut_with(&mut name_expander());
     }
 
     if let Some(ref mut t) = timings {
         t.section("compress");
     }
-    if let Some(options) = &options.compress {
+    if let Some(c) = &options.compress {
         {
             let _timer = timer!("compress ast");
 
-            n.visit_mut_with(&mut compressor(marks, options, &Minification))
+            n.visit_mut_with(&mut compressor(
+                marks,
+                c,
+                options.mangle.as_ref(),
+                &Minification,
+            ))
         }
 
         // Again, we don't need to validate ast
 
         let _timer = timer!("postcompress");
 
-        n.visit_mut_with(&mut postcompress_optimizer(options));
+        n.visit_mut_with(&mut postcompress_optimizer(c));
 
         let mut pass = 0;
         loop {
             pass += 1;
 
             let mut v = pure_optimizer(
-                options,
-                None,
+                c,
                 marks,
                 PureOptimizerConfig {
                     force_str_for_tpl: Minification.force_str_for_tpl(),
@@ -206,7 +209,7 @@ pub fn optimize(
                 },
             );
             n.visit_mut_with(&mut v);
-            if !v.changed() || options.passes <= pass {
+            if !v.changed() || c.passes <= pass {
                 break;
             }
         }
@@ -227,7 +230,7 @@ pub fn optimize(
         let _timer = timer!("mangle names");
         // TODO: base54.reset();
 
-        let preserved = idents_to_preserve(mangle.clone(), &n);
+        let preserved = idents_to_preserve(mangle, marks, &n);
 
         let chars = CharFreq::compute(
             &n,
@@ -236,12 +239,14 @@ pub fn optimize(
         )
         .compile();
 
-        n.visit_mut_with(&mut name_mangler(
-            mangle.clone(),
+        mangle_names(
+            &mut n,
+            mangle,
             preserved,
             chars,
             extra.top_level_mark,
-        ));
+            extra.mangle_name_cache.clone(),
+        );
 
         if let Some(property_mangle_options) = &mangle.props {
             mangle_properties(&mut n, property_mangle_options.clone(), chars);

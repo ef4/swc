@@ -1,13 +1,8 @@
-use std::f64;
+use std::{cmp::Ordering, f64};
 
-use swc_atoms::js_word;
 use swc_common::{util::take::Take, DUMMY_SP};
 use swc_ecma_ast::*;
-#[cfg(feature = "debug")]
-use swc_ecma_transforms_base::fixer::fixer;
-use swc_ecma_utils::{ExprCtx, ExprExt, IdentUsageFinder, Value};
-#[cfg(feature = "debug")]
-use swc_ecma_visit::{as_folder, FoldWith};
+use swc_ecma_utils::{number::JsNumber, ExprCtx, ExprExt, IdentUsageFinder, Value};
 use swc_ecma_visit::{
     noop_visit_mut_type, noop_visit_type, Visit, VisitMut, VisitMutWith, VisitWith,
 };
@@ -166,11 +161,12 @@ fn negate_inner(
     } else {
         report_change!("negate: e => !e");
 
-        *e = Expr::Unary(UnaryExpr {
+        *e = UnaryExpr {
             span: DUMMY_SP,
             op: op!("!"),
             arg,
-        });
+        }
+        .into();
 
         dump_change_detail!("Negated `{}` as `{}`", start_str, dump(&*e, false));
 
@@ -351,46 +347,23 @@ pub(crate) fn negate_cost(
             }
         })();
 
-        // Print more info while testing negate_cost
-        #[cfg(test)]
-        {
-            trace_op!(
-                "negation cost of `{}` = {}",
-                dump(&e.clone().fold_with(&mut as_folder(fixer(None))), true),
-                cost,
-            );
-        }
-
         cost
     }
 
     let cost = cost(expr_ctx, e, in_bool_ctx, None, is_ret_val_ignored);
-
-    trace_op!(
-        "negation cost of `{}` = {}\nin_book_ctx={:?}\nis_ret_val_ignored={:?}",
-        dump(&e.clone().fold_with(&mut as_folder(fixer(None))), false),
-        cost,
-        in_bool_ctx,
-        is_ret_val_ignored
-    );
 
     cost
 }
 
 pub(crate) fn is_pure_undefined(expr_ctx: &ExprCtx, e: &Expr) -> bool {
     match e {
-        Expr::Ident(Ident {
-            sym: js_word!("undefined"),
-            ..
-        }) => true,
-
         Expr::Unary(UnaryExpr {
             op: UnaryOp::Void,
             arg,
             ..
         }) if !arg.may_have_side_effects(expr_ctx) => true,
 
-        _ => false,
+        _ => e.is_undefined(expr_ctx),
     }
 }
 
@@ -407,14 +380,11 @@ pub(crate) fn is_primitive<'a>(expr_ctx: &ExprCtx, e: &'a Expr) -> Option<&'a Ex
 }
 
 pub(crate) fn is_valid_identifier(s: &str, ascii_only: bool) -> bool {
-    if ascii_only {
-        if s.chars().any(|c| !c.is_ascii()) {
-            return false;
-        }
+    if ascii_only && !s.is_ascii() {
+        return false;
     }
     s.starts_with(Ident::is_valid_start)
         && s.chars().skip(1).all(Ident::is_valid_continue)
-        && !s.contains('𝒶')
         && !s.is_reserved()
 }
 
@@ -481,7 +451,7 @@ pub(crate) fn eval_as_number(expr_ctx: &ExprCtx, e: &Expr) -> Option<f64> {
                         }
 
                         "max" => {
-                            let mut numbers = vec![];
+                            let mut numbers = Vec::new();
                             for arg in args {
                                 let v = eval_as_number(expr_ctx, &arg.expr)?;
                                 if v.is_infinite() || v.is_nan() {
@@ -493,13 +463,13 @@ pub(crate) fn eval_as_number(expr_ctx: &ExprCtx, e: &Expr) -> Option<f64> {
                             return Some(
                                 numbers
                                     .into_iter()
-                                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                                    .max_by(|&a, &b| cmp_num(a, b))
                                     .unwrap_or(f64::NEG_INFINITY),
                             );
                         }
 
                         "min" => {
-                            let mut numbers = vec![];
+                            let mut numbers = Vec::new();
                             for arg in args {
                                 let v = eval_as_number(expr_ctx, &arg.expr)?;
                                 if v.is_infinite() || v.is_nan() {
@@ -511,7 +481,7 @@ pub(crate) fn eval_as_number(expr_ctx: &ExprCtx, e: &Expr) -> Option<f64> {
                             return Some(
                                 numbers
                                     .into_iter()
-                                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                                    .min_by(|&a, &b| cmp_num(a, b))
                                     .unwrap_or(f64::INFINITY),
                             );
                         }
@@ -520,10 +490,11 @@ pub(crate) fn eval_as_number(expr_ctx: &ExprCtx, e: &Expr) -> Option<f64> {
                             if args.len() != 2 {
                                 return None;
                             }
-                            let first = eval_as_number(expr_ctx, &args[0].expr)?;
-                            let second = eval_as_number(expr_ctx, &args[1].expr)?;
+                            let base: JsNumber = eval_as_number(expr_ctx, &args[0].expr)?.into();
+                            let exponent: JsNumber =
+                                eval_as_number(expr_ctx, &args[1].expr)?.into();
 
-                            return Some(first.powf(second));
+                            return Some(base.pow(exponent).into());
                         }
 
                         _ => {}
@@ -595,13 +566,9 @@ where
 pub(super) fn is_fine_for_if_cons(s: &Stmt) -> bool {
     match s {
         Stmt::Decl(Decl::Fn(FnDecl {
-            ident:
-                Ident {
-                    sym: js_word!("undefined"),
-                    ..
-                },
+            ident: Ident { sym, .. },
             ..
-        })) => false,
+        })) if &**sym == "undefined" => false,
 
         Stmt::Decl(Decl::Var(v))
             if matches!(
@@ -670,7 +637,7 @@ impl UnreachableHandler {
         let mut v = Self::default();
         s.visit_mut_with(&mut v);
         if v.vars.is_empty() {
-            *s = Stmt::Empty(EmptyStmt { span: DUMMY_SP });
+            *s = EmptyStmt { span: DUMMY_SP }.into();
         } else {
             *s = VarDecl {
                 span: DUMMY_SP,
@@ -688,6 +655,7 @@ impl UnreachableHandler {
                         definite: false,
                     })
                     .collect(),
+                ..Default::default()
             }
             .into()
         }
@@ -758,16 +726,26 @@ impl Visit for SuperFinder {
     fn visit_prop(&mut self, n: &Prop) {
         n.visit_children_with(self);
 
-        if let Prop::Shorthand(Ident {
-            sym: js_word!("arguments"),
-            ..
-        }) = n
-        {
-            self.found = true;
+        if let Prop::Shorthand(Ident { sym, .. }) = n {
+            if &**sym == "arguments" {
+                self.found = true;
+            }
         }
     }
 
     fn visit_super(&mut self, _: &Super) {
         self.found = true;
     }
+}
+
+fn cmp_num(a: f64, b: f64) -> Ordering {
+    if a == 0.0 && a.is_sign_negative() && b == 0.0 && b.is_sign_positive() {
+        return Ordering::Less;
+    }
+
+    if a == 0.0 && a.is_sign_positive() && b == 0.0 && b.is_sign_negative() {
+        return Ordering::Greater;
+    }
+
+    a.partial_cmp(&b).unwrap()
 }

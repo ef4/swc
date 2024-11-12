@@ -1,5 +1,4 @@
 use swc_common::{
-    self,
     errors::{ColorConfig, Handler},
     sync::Lrc,
     FileName, SourceMap,
@@ -16,7 +15,7 @@ fn main() {
     //     .expect("failed to load test.js");
 
     let fm = cm.new_source_file(
-        FileName::Custom("test.js".into()),
+        FileName::Custom("test.js".into()).into(),
         "function foo() {}".into(),
     );
 

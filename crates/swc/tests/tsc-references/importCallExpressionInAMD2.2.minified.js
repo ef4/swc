@@ -18,7 +18,6 @@ define([
     }
 });
 //// [2.ts]
-// We use Promise<any> for now as there is no way to specify shape of module object
 define([
     "require",
     "exports",

@@ -1,6 +1,6 @@
 use copyless::BoxHelper;
 use serde::{Deserialize, Serialize};
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::Spanned;
 use swc_ecma_ast::{
     Accessibility, Expr, MemberProp, Pat, TruePlusMinus, TsArrayType, TsAsExpr,
@@ -261,7 +261,6 @@ impl Babelify for TsPropertySignature {
             type_annotation: self
                 .type_ann
                 .map(|ann| Box::alloc().init(ann.babelify(ctx))),
-            initializer: self.init.map(|i| Box::alloc().init(i.babelify(ctx).into())),
             computed: Some(self.computed),
             optional: Some(self.optional),
             readonly: Some(self.readonly),
@@ -730,9 +729,9 @@ impl Babelify for TsTypeOperatorOp {
 
     fn babelify(self, _ctx: &Context) -> Self::Output {
         match self {
-            TsTypeOperatorOp::KeyOf => js_word!("keyof"),
-            TsTypeOperatorOp::Unique => js_word!("unique"),
-            TsTypeOperatorOp::ReadOnly => js_word!("readonly"),
+            TsTypeOperatorOp::KeyOf => "keyof".into(),
+            TsTypeOperatorOp::Unique => "unique".into(),
+            TsTypeOperatorOp::ReadOnly => "readonly".into(),
         }
     }
 }

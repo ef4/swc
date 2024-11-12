@@ -1,5 +1,5 @@
 /// Use memory allocator
-extern crate swc_node_base;
+extern crate swc_malloc;
 
 use std::{env, fs, path::Path, time::Instant};
 
@@ -24,7 +24,7 @@ fn parse_and_gen(entry: &Path) {
             .expect("failed to parse input as a module");
 
         let code = {
-            let mut buf = vec![];
+            let mut buf = Vec::new();
 
             {
                 let mut emitter = Emitter {

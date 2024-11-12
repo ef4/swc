@@ -1,6 +1,6 @@
 use std::{env, sync::Arc};
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Context, Error};
 use parking_lot::Mutex;
 #[cfg(feature = "__rkyv")]
 use swc_common::plugin::serialized::{PluginError, PluginSerializedBytes};
@@ -124,7 +124,7 @@ impl PluginTransformState {
         // https://github.com/wasmerio/wasmer/discussions/3966
         // [NOTE]: this is not a critical as plugin does not have things to clean up
         // in most cases
-        if let Some(wasi_env) = &self.wasi_env {
+        if let Some(_wasi_env) = &self.wasi_env {
             //wasi_env.cleanup(&mut self.store, None);
         }
 
@@ -221,7 +221,7 @@ impl TransformExecutor {
         // corresponding store
         let (mut store, module) = self.module_bytes.compile_module()?;
 
-        let context_key_buffer = Arc::new(Mutex::new(vec![]));
+        let context_key_buffer = Arc::new(Mutex::new(Vec::new()));
         let metadata_env = FunctionEnv::new(
             &mut store,
             MetadataContextHostEnvironment::new(
@@ -231,7 +231,7 @@ impl TransformExecutor {
             ),
         );
 
-        let transform_result: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(vec![]));
+        let transform_result: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
         let transform_env = FunctionEnv::new(
             &mut store,
             TransformResultHostEnvironment::new(&transform_result),
@@ -239,12 +239,12 @@ impl TransformExecutor {
 
         let base_env = FunctionEnv::new(&mut store, BaseHostEnvironment::new());
 
-        let comment_buffer = Arc::new(Mutex::new(vec![]));
+        let comment_buffer = Arc::new(Mutex::new(Vec::new()));
 
         let comments_env =
             FunctionEnv::new(&mut store, CommentHostEnvironment::new(&comment_buffer));
 
-        let source_map_buffer = Arc::new(Mutex::new(vec![]));
+        let source_map_buffer = Arc::new(Mutex::new(Vec::new()));
         let source_map = Arc::new(Mutex::new(self.source_map.clone()));
 
         let source_map_host_env = FunctionEnv::new(
@@ -252,7 +252,7 @@ impl TransformExecutor {
             SourceMapHostEnvironment::new(&source_map, &source_map_buffer),
         );
 
-        let diagnostics_buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(vec![]));
+        let diagnostics_buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
         let diagnostics_env = FunctionEnv::new(
             &mut store,
             DiagnosticContextHostEnvironment::new(&diagnostics_buffer),
@@ -389,6 +389,36 @@ impl TransformExecutor {
     ) -> Result<PluginSerializedBytes, Error> {
         let mut transform_state = self.setup_plugin_env_exports()?;
         transform_state.is_transform_schema_compatible()?;
-        transform_state.run(program, self.unresolved_mark, should_enable_comments_proxy)
+        transform_state
+            .run(program, self.unresolved_mark, should_enable_comments_proxy)
+            .with_context(|| {
+                format!(
+                    "failed to run Wasm plugin transform. Please ensure the version of `swc_core` \
+                     used by the plugin is compatible with the host runtime. See the \
+                     documentation for compatibility information. If you are an author of the \
+                     plugin, please update `swc_core` to the compatible version.
+                 
+                Note that if you want to use the os features like filesystem, you need to use \
+                     `wasi`. Wasm itself does not have concept of filesystem.
+                 
+                https://swc.rs/docs/plugin/selecting-swc-core
+
+                See https://plugins.swc.rs/versions/from-plugin-runner/{PKG_VERSION} for the list of the compatible versions.
+                 
+                Build info: 
+                    Date: {BUILD_DATE}
+                    Timestamp: {BUILD_TIMESTAMP}
+                    
+                Version info: 
+                    swc_plugin_runner: {PKG_VERSION}
+                    Dependencies: {PKG_DEPS}
+                "
+                )
+            })
     }
 }
+
+const BUILD_DATE: &str = env!("VERGEN_BUILD_DATE");
+const BUILD_TIMESTAMP: &str = env!("VERGEN_BUILD_TIMESTAMP");
+const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+const PKG_DEPS: &str = env!("VERGEN_CARGO_DEPENDENCIES");

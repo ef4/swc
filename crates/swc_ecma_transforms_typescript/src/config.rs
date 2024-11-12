@@ -1,10 +1,17 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Config {
+    /// https://www.typescriptlang.org/tsconfig#verbatimModuleSyntax
     #[serde(default)]
     pub verbatim_module_syntax: bool,
 
+    /// Native class properties support
+    #[serde(default)]
+    pub native_class_properties: bool,
+
+    /// https://www.typescriptlang.org/tsconfig/#importsNotUsedAsValues
     #[serde(default)]
     pub import_not_used_as_values: ImportsNotUsedAsValues,
 
@@ -18,6 +25,14 @@ pub struct Config {
 
     #[serde(default)]
     pub import_export_assign_config: TsImportExportAssignConfig,
+
+    /// Disables an optimization that inlines TS enum member values
+    /// within the same module that assumes the enum member values
+    /// are never modified.
+    ///
+    /// Defaults to false.
+    #[serde(default)]
+    pub ts_enum_is_mutable: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -33,8 +48,9 @@ pub struct TsxConfig {
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TsImportExportAssignConfig {
-    /// - Rewrite `import foo = require("foo")` to `var foo = require("foo")`
-    /// - Rewrite `export =` to `module.exports = `
+    ///  - Rewrite `import foo = require("foo")` to `var foo = require("foo")`
+    ///  - Rewrite `export =` to `module.exports = `
+    ///
     /// Note: This option is deprecated as all CJS/AMD/UMD can handle it
     /// themselves.
     #[default]

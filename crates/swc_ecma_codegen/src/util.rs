@@ -52,17 +52,36 @@ impl EndsWithAlphaNum for UsingDecl {
 
 impl EndsWithAlphaNum for Expr {
     fn ends_with_alpha_num(&self) -> bool {
-        !matches!(
-            self,
+        match self {
             Expr::Array(..)
-                | Expr::Object(..)
-                | Expr::Lit(Lit::Str(..))
-                | Expr::Paren(..)
-                | Expr::Member(MemberExpr {
-                    prop: MemberProp::Computed(..),
-                    ..
-                })
-        )
+            | Expr::Object(..)
+            | Expr::Lit(Lit::Str(..))
+            | Expr::Paren(..)
+            | Expr::Member(MemberExpr {
+                prop: MemberProp::Computed(..),
+                ..
+            })
+            | Expr::Tpl(..)
+            | Expr::TaggedTpl(..)
+            | Expr::Call(..) => false,
+
+            Expr::Unary(n) => n.arg.ends_with_alpha_num(),
+
+            Expr::Update(n) => n.prefix && n.arg.ends_with_alpha_num(),
+
+            Expr::OptChain(n) => match n.base.as_ref() {
+                OptChainBase::Member(base) => !base.prop.is_computed(),
+                OptChainBase::Call(_) => false,
+            },
+
+            Expr::Bin(n) => n.right.ends_with_alpha_num(),
+
+            Expr::New(NewExpr {
+                args: Some(args), ..
+            }) => args.is_empty(),
+
+            _ => true,
+        }
     }
 }
 
@@ -71,7 +90,74 @@ pub trait StartsWithAlphaNum {
     fn starts_with_alpha_num(&self) -> bool;
 }
 
+macro_rules! alpha_num_enum {
+    ($T:ty, [$($name:ident),*]) => {
+        impl StartsWithAlphaNum for $T {
+            #[inline]
+            fn starts_with_alpha_num(&self) -> bool {
+                match *self {
+                    $(
+                        Self::$name(ref n) => n.starts_with_alpha_num(),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+macro_rules! alpha_num_const {
+    ($value:tt, $($ty:ident),*) => {
+        $(
+            impl StartsWithAlphaNum for $ty {
+                #[inline]
+                fn starts_with_alpha_num(&self) -> bool {
+                    $value
+                }
+            }
+        )*
+    };
+}
+
+alpha_num_const!(true, BindingIdent, Ident, SuperPropExpr, TsTypeAssertion);
+alpha_num_const!(false, ArrayPat, ObjectPat, Invalid, ParenExpr);
+
+impl StartsWithAlphaNum for MemberExpr {
+    #[inline]
+    fn starts_with_alpha_num(&self) -> bool {
+        self.obj.starts_with_alpha_num()
+    }
+}
+
+impl StartsWithAlphaNum for TsAsExpr {
+    #[inline]
+    fn starts_with_alpha_num(&self) -> bool {
+        self.expr.starts_with_alpha_num()
+    }
+}
+
+impl StartsWithAlphaNum for TsSatisfiesExpr {
+    #[inline]
+    fn starts_with_alpha_num(&self) -> bool {
+        self.expr.starts_with_alpha_num()
+    }
+}
+
+impl StartsWithAlphaNum for TsNonNullExpr {
+    #[inline]
+    fn starts_with_alpha_num(&self) -> bool {
+        self.expr.starts_with_alpha_num()
+    }
+}
+
+impl StartsWithAlphaNum for TsInstantiation {
+    #[inline]
+    fn starts_with_alpha_num(&self) -> bool {
+        self.expr.starts_with_alpha_num()
+    }
+}
+
 impl StartsWithAlphaNum for PropName {
+    #[inline]
     fn starts_with_alpha_num(&self) -> bool {
         match self {
             PropName::Str(_) | PropName::Computed(_) => false,
@@ -157,12 +243,18 @@ impl StartsWithAlphaNum for Expr {
             | Expr::TsInstantiation(TsInstantiation { ref expr, .. })
             | Expr::TsSatisfies(TsSatisfiesExpr { ref expr, .. }) => expr.starts_with_alpha_num(),
 
-            Expr::OptChain(OptChainExpr { base, .. }) => match &**base {
-                OptChainBase::Member(base) => base.obj.starts_with_alpha_num(),
-                OptChainBase::Call(base) => base.callee.starts_with_alpha_num(),
-            },
+            Expr::OptChain(e) => e.starts_with_alpha_num(),
 
             Expr::Invalid(..) => true,
+        }
+    }
+}
+
+impl StartsWithAlphaNum for OptChainExpr {
+    fn starts_with_alpha_num(&self) -> bool {
+        match &*self.base {
+            OptChainBase::Member(base) => base.obj.starts_with_alpha_num(),
+            OptChainBase::Call(base) => base.callee.starts_with_alpha_num(),
         }
     }
 }
@@ -179,14 +271,24 @@ impl StartsWithAlphaNum for Pat {
     }
 }
 
-impl StartsWithAlphaNum for PatOrExpr {
-    fn starts_with_alpha_num(&self) -> bool {
-        match *self {
-            PatOrExpr::Pat(ref p) => p.starts_with_alpha_num(),
-            PatOrExpr::Expr(ref e) => e.starts_with_alpha_num(),
-        }
-    }
-}
+alpha_num_enum!(AssignTarget, [Pat, Simple]);
+alpha_num_enum!(
+    SimpleAssignTarget,
+    [
+        Ident,
+        Member,
+        SuperProp,
+        OptChain,
+        Paren,
+        TsAs,
+        TsSatisfies,
+        TsNonNull,
+        TsTypeAssertion,
+        TsInstantiation,
+        Invalid
+    ]
+);
+alpha_num_enum!(AssignTargetPat, [Array, Object, Invalid]);
 
 impl StartsWithAlphaNum for ExprOrSpread {
     fn starts_with_alpha_num(&self) -> bool {

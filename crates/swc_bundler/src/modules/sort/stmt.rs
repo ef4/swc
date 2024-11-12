@@ -2,19 +2,18 @@ use std::{collections::VecDeque, iter::from_fn, ops::Range};
 
 use indexmap::IndexSet;
 use petgraph::EdgeDirection::{Incoming as Dependants, Outgoing as Dependencies};
-use swc_atoms::js_word;
 use swc_common::{
     collections::{AHashMap, AHashSet, ARandomState},
     sync::Lrc,
     util::take::Take,
-    SourceMap, Spanned, SyntaxContext,
+    SourceMap, SyntaxContext,
 };
 use swc_ecma_ast::*;
 use swc_ecma_utils::find_pat_ids;
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 
 use super::graph::Required;
-use crate::{id::Id, modules::sort::graph::StmtDepGraph};
+use crate::{id::Id, modules::sort::graph::StmtDepGraph, util::is_injected};
 
 pub(super) fn sort_stmts(
     injected_ctxt: SyntaxContext,
@@ -23,10 +22,10 @@ pub(super) fn sort_stmts(
 ) -> Vec<ModuleItem> {
     let total_len: usize = modules.iter().map(|v| v.len()).sum();
 
-    let mut stmts = vec![];
-    let mut free = vec![];
-    let mut same_module_ranges = vec![];
-    let mut module_starts = vec![];
+    let mut stmts = Vec::new();
+    let mut free = Vec::new();
+    let mut same_module_ranges = Vec::new();
+    let mut module_starts = Vec::new();
 
     for module in modules {
         let start = stmts.len();
@@ -34,7 +33,7 @@ pub(super) fn sort_stmts(
         let mut module_item_count = 0;
 
         for stmt in module {
-            if stmt.span().ctxt == injected_ctxt {
+            if is_injected_module_item(&stmt, injected_ctxt) {
                 free.push(stmt)
             } else {
                 module_item_count += 1;
@@ -81,6 +80,26 @@ pub(super) fn sort_stmts(
     }
 
     new
+}
+
+fn is_injected_module_item(stmt: &ModuleItem, injected_ctxt: SyntaxContext) -> bool {
+    match stmt {
+        ModuleItem::ModuleDecl(
+            ModuleDecl::Import(ImportDecl {
+                with: Some(with), ..
+            })
+            | ModuleDecl::ExportAll(ExportAll {
+                with: Some(with), ..
+            })
+            | ModuleDecl::ExportNamed(NamedExport {
+                with: Some(with), ..
+            }),
+        ) => is_injected(with),
+
+        ModuleItem::Stmt(Stmt::Decl(Decl::Var(v))) => v.ctxt == injected_ctxt,
+
+        _ => false,
+    }
 }
 
 fn iter<'a>(
@@ -207,7 +226,7 @@ fn iter<'a>(
                 // dbg!(&deps);
 
                 if !deps.is_empty() {
-                    let mut deps_to_push = vec![];
+                    let mut deps_to_push = Vec::new();
                     for dep in deps.iter().rev().copied() {
                         if deps_to_push.contains(&dep) {
                             continue;
@@ -338,15 +357,14 @@ struct FieldInitFinder {
 }
 
 impl FieldInitFinder {
-    fn check_lhs_of_assign(&mut self, lhs: &PatOrExpr) {
-        match lhs {
-            PatOrExpr::Expr(e) => {
-                self.check_lhs_expr_of_assign(e);
-            }
-            PatOrExpr::Pat(pat) => {
-                if let Pat::Expr(e) = &**pat {
-                    self.check_lhs_expr_of_assign(e);
+    fn check_lhs_of_assign(&mut self, lhs: &AssignTarget) {
+        if let AssignTarget::Simple(SimpleAssignTarget::Member(m)) = lhs {
+            match &*m.obj {
+                Expr::Ident(i) => {
+                    self.accessed.insert(i.into());
                 }
+                Expr::Member(..) => self.check_lhs_expr_of_assign(&m.obj),
+                _ => {}
             }
         }
     }
@@ -369,6 +387,7 @@ impl Visit for FieldInitFinder {
 
     fn visit_assign_expr(&mut self, e: &AssignExpr) {
         let old = self.in_rhs;
+        self.in_rhs = false;
         e.left.visit_with(self);
         self.check_lhs_of_assign(&e.left);
 
@@ -389,13 +408,9 @@ impl Visit for FieldInitFinder {
             Callee::Super(_) | Callee::Import(_) => {}
             Callee::Expr(callee) => {
                 if let Expr::Member(callee) = &**callee {
-                    if let Expr::Ident(Ident {
-                        sym: js_word!("Object"),
-                        ..
-                    }) = &*callee.obj
-                    {
+                    if callee.obj.is_ident_ref_to("Object") {
                         match &callee.prop {
-                            MemberProp::Ident(Ident { sym: prop_sym, .. })
+                            MemberProp::Ident(IdentName { sym: prop_sym, .. })
                                 if *prop_sym == *"assign" =>
                             {
                                 let old = self.in_object_assign;
@@ -426,7 +441,9 @@ impl Visit for FieldInitFinder {
         if !self.in_rhs || self.in_object_assign {
             if let Expr::Ident(obj) = &*e.obj {
                 match &e.prop {
-                    MemberProp::Ident(Ident { sym: prop_sym, .. }) if *prop_sym == *"prototype" => {
+                    MemberProp::Ident(IdentName { sym: prop_sym, .. })
+                        if *prop_sym == *"prototype" =>
+                    {
                         self.accessed.insert(obj.into());
                     }
                     _ => {}
@@ -695,10 +712,10 @@ fn calc_deps(new: &[ModuleItem]) -> StmtDepGraph {
                     //         format!("`{:?}`", ids)
                     //     }
                     //     ModuleItem::Stmt(Stmt::Decl(Decl::Class(c))) => {
-                    //         format!("{}{:?}", c.ident.sym, c.ident.span.ctxt)
+                    //         format!("{}{:?}", c.ident.sym, c.ident.ctxt)
                     //     }
                     //     ModuleItem::Stmt(Stmt::Decl(Decl::Fn(f))) => {
-                    //         format!("{}{:?}", f.ident.sym, f.ident.span.ctxt)
+                    //         format!("{}{:?}", f.ident.sym, f.ident.ctxt)
                     //     }
                     //     _ => String::from(""),
                     // };
@@ -765,10 +782,10 @@ fn calc_deps(new: &[ModuleItem]) -> StmtDepGraph {
                         //         format!("`{:?}`", ids)
                         //     }
                         //     ModuleItem::Stmt(Stmt::Decl(Decl::Class(c))) => {
-                        //         format!("{}{:?}", c.ident.sym, c.ident.span.ctxt)
+                        //         format!("{}{:?}", c.ident.sym, c.ident.ctxt)
                         //     }
                         //     ModuleItem::Stmt(Stmt::Decl(Decl::Fn(f))) => {
-                        //         format!("{}{:?}", f.ident.sym, f.ident.span.ctxt)
+                        //         format!("{}{:?}", f.ident.sym, f.ident.ctxt)
                         //     }
                         //     _ => String::from(""),
                         // };

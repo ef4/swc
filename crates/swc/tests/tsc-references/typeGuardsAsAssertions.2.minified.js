@@ -1,11 +1,10 @@
 //// [typeGuardsAsAssertions.ts]
-// Repro from #8513
 var cond;
 export var none = {
-    none: ""
+    none: ''
 };
 export function isSome(value) {
-    return "some" in value;
+    return 'some' in value;
 }
 export function fn(makeSome) {
     for(var result = none; cond;)result = {

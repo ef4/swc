@@ -1,5 +1,4 @@
 //// [genericCallWithObjectTypeArgsAndConstraints4.ts]
-// Generic call with constraints infering type parameter from object member properties
 var c, d;
 import "@swc/helpers/_/_class_call_check";
 function foo(t, t2) {
@@ -8,7 +7,7 @@ function foo(t, t2) {
     };
 }
 foo(c, d), foo(d, c), foo(c, {
-    x: "",
+    x: '',
     foo: c
 }), foo(null, null), foo({}, null), foo(null, {}), foo({}, {}), foo(function() {}, function() {}), foo(function() {}, function() {
     return 1;

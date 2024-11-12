@@ -2,7 +2,7 @@ use std::{cmp::Reverse, io, ops::AddAssign};
 
 use arrayvec::ArrayVec;
 use rustc_hash::FxHashSet;
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::{
     sync::Lrc, BytePos, FileLines, FileName, Loc, SourceMapper, Span, SpanLinesError, SyntaxContext,
 };
@@ -40,8 +40,8 @@ impl SourceMapper for DummySourceMap {
         String::new()
     }
 
-    fn span_to_filename(&self, _: Span) -> FileName {
-        FileName::Anon
+    fn span_to_filename(&self, _: Span) -> Lrc<FileName> {
+        FileName::Anon.into()
     }
 
     fn merge_spans(&self, _: Span, _: Span) -> Option<Span> {
@@ -178,6 +178,11 @@ impl WriteJs for CharFreq {
     fn commit_pending_semi(&mut self) -> io::Result<()> {
         Ok(())
     }
+
+    #[inline(always)]
+    fn can_ignore_invalid_unicodes(&mut self) -> bool {
+        true
+    }
 }
 
 impl CharFreq {
@@ -296,7 +301,7 @@ impl Visit for CharFreqAnalyzer<'_> {
     visit_obj_and_computed!();
 
     fn visit_ident(&mut self, i: &Ident) {
-        if i.sym != js_word!("arguments") && i.span.ctxt == self.unresolved_ctxt {
+        if i.sym != "arguments" && i.ctxt == self.unresolved_ctxt {
             return;
         }
 

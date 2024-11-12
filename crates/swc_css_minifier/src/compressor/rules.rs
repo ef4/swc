@@ -1,9 +1,7 @@
 use std::mem::take;
 
-use swc_atoms::{js_word, JsWord};
-use swc_common::{
-    collections::AHashMap, util::take::Take, EqIgnoreSpan, Span, Spanned, SyntaxContext,
-};
+use swc_atoms::JsWord;
+use swc_common::{collections::AHashMap, util::take::Take, EqIgnoreSpan, Span, Spanned};
 use swc_css_ast::*;
 use swc_css_visit::{Visit, VisitMutWith, VisitWith};
 
@@ -81,20 +79,26 @@ impl Compressor {
     }
 
     fn collect_names(&self, at_rule: &AtRule, names: &mut AHashMap<Name, isize>) {
-        match &at_rule.prelude {
-            Some(box AtRulePrelude::CounterStylePrelude(CustomIdent { value: name, .. })) => {
+        let Some(prelude) = &at_rule.prelude else {
+            return;
+        };
+
+        match &**prelude {
+            AtRulePrelude::CounterStylePrelude(CustomIdent { value: name, .. }) => {
                 names
                     .entry(Name::CounterStyle(name.clone()))
                     .and_modify(|mana| *mana += 1)
                     .or_insert(1);
             }
-            Some(box AtRulePrelude::KeyframesPrelude(KeyframesName::CustomIdent(
-                box CustomIdent { value: name, .. },
-            )))
-            | Some(box AtRulePrelude::KeyframesPrelude(KeyframesName::Str(box Str {
-                value: name,
-                ..
-            }))) => {
+            prelude => {
+                let name = match prelude {
+                    AtRulePrelude::KeyframesPrelude(KeyframesName::CustomIdent(custom_ident)) => {
+                        &custom_ident.value
+                    }
+                    AtRulePrelude::KeyframesPrelude(KeyframesName::Str(s)) => &s.value,
+                    _ => return,
+                };
+
                 names
                     .entry(Name::Keyframes(
                         self.get_at_rule_name(at_rule),
@@ -103,7 +107,6 @@ impl Compressor {
                     .and_modify(|mana| *mana += 1)
                     .or_insert(1);
             }
-            _ => {}
         }
     }
 
@@ -113,45 +116,52 @@ impl Compressor {
         names: &mut AHashMap<Name, isize>,
         remove_rules_list: &mut Vec<usize>,
     ) {
-        let mut discarder = |at_rule: &AtRule| match &at_rule.prelude {
-            Some(box AtRulePrelude::CounterStylePrelude(CustomIdent { value: name, .. })) => {
-                if let Some(counter) = names.get_mut(&Name::CounterStyle(name.clone())) {
-                    if *counter > 1 {
-                        *counter -= 1;
+        let mut discarder = |at_rule: &AtRule| {
+            let Some(prelude) = &at_rule.prelude else {
+                return true;
+            };
 
-                        false
+            match &**prelude {
+                AtRulePrelude::CounterStylePrelude(CustomIdent { value: name, .. }) => {
+                    if let Some(counter) = names.get_mut(&Name::CounterStyle(name.clone())) {
+                        if *counter > 1 {
+                            *counter -= 1;
+
+                            false
+                        } else {
+                            true
+                        }
                     } else {
-                        true
+                        false
                     }
-                } else {
-                    false
+                }
+                prelude => {
+                    let name = match prelude {
+                        AtRulePrelude::KeyframesPrelude(KeyframesName::CustomIdent(
+                            custom_ident,
+                        )) => &custom_ident.value,
+                        AtRulePrelude::KeyframesPrelude(KeyframesName::Str(s)) => &s.value,
+                        _ => return true,
+                    };
+
+                    let counter = names.get_mut(&Name::Keyframes(
+                        self.get_at_rule_name(at_rule),
+                        name.clone(),
+                    ));
+
+                    if let Some(counter) = counter {
+                        if *counter > 1 {
+                            *counter -= 1;
+
+                            false
+                        } else {
+                            true
+                        }
+                    } else {
+                        false
+                    }
                 }
             }
-            Some(box AtRulePrelude::KeyframesPrelude(KeyframesName::CustomIdent(
-                box CustomIdent { value: name, .. },
-            )))
-            | Some(box AtRulePrelude::KeyframesPrelude(KeyframesName::Str(box Str {
-                value: name,
-                ..
-            }))) => {
-                let counter = names.get_mut(&Name::Keyframes(
-                    self.get_at_rule_name(at_rule),
-                    name.clone(),
-                ));
-
-                if let Some(counter) = counter {
-                    if *counter > 1 {
-                        *counter -= 1;
-
-                        false
-                    } else {
-                        true
-                    }
-                } else {
-                    false
-                }
-            }
-            _ => true,
         };
 
         match parent_node {
@@ -159,7 +169,7 @@ impl Compressor {
                 for index in 0..stylesheet.rules.len() {
                     let node = stylesheet.rules.get(index);
 
-                    if let Some(Rule::AtRule(box at_rule)) = node {
+                    if let Some(Rule::AtRule(at_rule)) = node {
                         if !discarder(at_rule) {
                             remove_rules_list.push(index);
                         }
@@ -170,7 +180,7 @@ impl Compressor {
                 for index in 0..simple_block.value.len() {
                     let node = simple_block.value.get(index);
 
-                    if let Some(ComponentValue::AtRule(box at_rule)) = node {
+                    if let Some(ComponentValue::AtRule(at_rule)) = node {
                         if !discarder(at_rule) {
                             remove_rules_list.push(index);
                         }
@@ -190,7 +200,7 @@ impl Compressor {
         children.extend(right.children.take());
 
         SelectorList {
-            span: Span::new(left.span_lo(), right.span_hi(), SyntaxContext::empty()),
+            span: Span::new(left.span_lo(), right.span_hi()),
             children,
         }
     }
@@ -205,7 +215,7 @@ impl Compressor {
         children.extend(right.children.take());
 
         RelativeSelectorList {
-            span: Span::new(left.span_lo(), right.span_hi(), SyntaxContext::empty()),
+            span: Span::new(left.span_lo(), right.span_hi()),
             children,
         }
     }
@@ -216,7 +226,7 @@ impl Compressor {
         value.extend(right.value.take());
 
         SimpleBlock {
-            span: Span::new(left.span_lo(), right.span_hi(), SyntaxContext::empty()),
+            span: Span::new(left.span_lo(), right.span_hi()),
             name: left.name.clone(),
             value,
         }
@@ -270,7 +280,7 @@ impl Compressor {
                     let selector_list =
                         self.merge_selector_list(prev_selector_list, current_selector_list);
                     let mut qualified_rule = QualifiedRule {
-                        span: Span::new(left.span_lo(), right.span_hi(), SyntaxContext::empty()),
+                        span: Span::new(left.span_lo(), right.span_hi()),
                         prelude: QualifiedRulePrelude::SelectorList(selector_list),
                         block: left.block.take(),
                     };
@@ -288,7 +298,7 @@ impl Compressor {
                         current_relative_selector_list,
                     );
                     let mut qualified_rule = QualifiedRule {
-                        span: Span::new(left.span_lo(), right.span_hi(), SyntaxContext::empty()),
+                        span: Span::new(left.span_lo(), right.span_hi()),
                         prelude: QualifiedRulePrelude::RelativeSelectorList(relative_selector_list),
                         block: left.block.take(),
                     };
@@ -306,7 +316,7 @@ impl Compressor {
         if left.prelude.eq_ignore_span(&right.prelude) {
             let block = self.merge_simple_block(&mut left.block, &mut right.block);
             let mut qualified_rule = QualifiedRule {
-                span: Span::new(left.span_lo(), right.span_hi(), SyntaxContext::empty()),
+                span: Span::new(left.span_lo(), right.span_hi()),
                 prelude: left.prelude.take(),
                 block,
             };
@@ -330,12 +340,8 @@ impl Compressor {
         };
 
         matches!(
-            *name,
-            js_word!("media")
-                | js_word!("supports")
-                | js_word!("container")
-                | js_word!("layer")
-                | js_word!("nest")
+            &**name,
+            "media" | "supports" | "container" | "layer" | "nest"
         )
     }
 
@@ -349,11 +355,7 @@ impl Compressor {
                 if let Some(right_block) = &mut right.block {
                     let block = self.merge_simple_block(left_block, right_block);
                     let mut at_rule = AtRule {
-                        span: Span::new(
-                            left.span.span_lo(),
-                            right.span.span_lo(),
-                            SyntaxContext::empty(),
-                        ),
+                        span: Span::new(left.span.span_lo(), right.span.span_lo()),
                         name: left.name.clone(),
                         prelude: left.prelude.take(),
                         block: Some(block),
@@ -372,7 +374,7 @@ impl Compressor {
     pub(super) fn compress_stylesheet(&mut self, stylesheet: &mut Stylesheet) {
         let mut names: AHashMap<Name, isize> = Default::default();
         let mut prev_rule_idx = None;
-        let mut remove_rules_list = vec![];
+        let mut remove_rules_list = Vec::new();
         let mut prev_index = 0;
 
         for index in 0..stylesheet.rules.len() {
@@ -389,19 +391,28 @@ impl Compressor {
             };
 
             let result = match rule {
-                Rule::AtRule(box AtRule {
-                    name: AtRuleName::Ident(Ident { value, .. }),
-                    block: Some(block),
-                    ..
-                }) if !need_keep_by_name(value) && block.value.is_empty() => false,
-                Rule::QualifiedRule(box QualifiedRule { block, .. }) if block.value.is_empty() => {
+                Rule::AtRule(at_rule)
+                    if at_rule
+                        .name
+                        .as_ident()
+                        .map(|ident| !need_keep_by_name(&ident.value))
+                        .unwrap_or_default()
+                        && at_rule
+                            .block
+                            .as_ref()
+                            .map(|block| block.value.is_empty())
+                            .unwrap_or_default() =>
+                {
                     false
                 }
-                Rule::AtRule(box at_rule @ AtRule { .. })
+                Rule::QualifiedRule(qualified_rule) if qualified_rule.block.value.is_empty() => {
+                    false
+                }
+                Rule::AtRule(at_rule)
                     if self.is_mergeable_at_rule(at_rule)
                         && matches!(prev_rule, Some(Rule::AtRule(_))) =>
                 {
-                    if let Some(Rule::AtRule(box prev_rule)) = &mut prev_rule {
+                    if let Some(Rule::AtRule(prev_rule)) = &mut prev_rule {
                         if let Some(at_rule) = self.try_merge_at_rule(prev_rule, at_rule) {
                             *rule = Rule::AtRule(Box::new(at_rule));
 
@@ -411,10 +422,10 @@ impl Compressor {
 
                     true
                 }
-                Rule::QualifiedRule(box qualified_rule @ QualifiedRule { .. })
+                Rule::QualifiedRule(qualified_rule)
                     if matches!(prev_rule, Some(Rule::QualifiedRule(_))) =>
                 {
-                    if let Some(Rule::QualifiedRule(box prev_rule)) = &mut prev_rule {
+                    if let Some(Rule::QualifiedRule(prev_rule)) = &mut prev_rule {
                         if let Some(qualified_rule) =
                             self.try_merge_qualified_rules(prev_rule, qualified_rule)
                         {
@@ -437,9 +448,7 @@ impl Compressor {
 
             if result {
                 match rule {
-                    Rule::AtRule(box at_rule @ AtRule { .. })
-                        if self.is_mergeable_at_rule(at_rule) =>
-                    {
+                    Rule::AtRule(at_rule) if self.is_mergeable_at_rule(at_rule) => {
                         prev_index = index;
                         prev_rule_idx = Some(index);
                     }
@@ -502,7 +511,7 @@ impl Compressor {
     pub(super) fn compress_simple_block(&mut self, simple_block: &mut SimpleBlock) {
         let mut names: AHashMap<Name, isize> = Default::default();
         let mut prev_rule_idx = None;
-        let mut remove_rules_list = vec![];
+        let mut remove_rules_list = Vec::new();
         let mut prev_index = 0;
 
         for index in 0..simple_block.value.len() {
@@ -519,12 +528,22 @@ impl Compressor {
             };
 
             let result = match rule {
-                ComponentValue::AtRule(box AtRule {
-                    block: Some(block), ..
-                })
-                | ComponentValue::QualifiedRule(box QualifiedRule { block, .. })
-                | ComponentValue::KeyframeBlock(box KeyframeBlock { block, .. })
-                    if block.value.is_empty() =>
+                ComponentValue::AtRule(at_rule)
+                    if at_rule
+                        .block
+                        .as_ref()
+                        .map(|block| block.value.is_empty())
+                        .unwrap_or_default() =>
+                {
+                    false
+                }
+                ComponentValue::QualifiedRule(qualified_rule)
+                    if qualified_rule.block.value.is_empty() =>
+                {
+                    false
+                }
+                ComponentValue::KeyframeBlock(keyframe_block)
+                    if keyframe_block.block.value.is_empty() =>
                 {
                     false
                 }
@@ -541,8 +560,8 @@ impl Compressor {
 
                     true
                 }
-                ComponentValue::QualifiedRule(box qualified_rule) if prev_rule.is_some() => {
-                    if let Some(ComponentValue::QualifiedRule(box prev_rule)) = &mut prev_rule {
+                ComponentValue::QualifiedRule(qualified_rule) if prev_rule.is_some() => {
+                    if let Some(ComponentValue::QualifiedRule(prev_rule)) = &mut prev_rule {
                         if let Some(qualified_rule) =
                             self.try_merge_qualified_rules(prev_rule, qualified_rule)
                         {
@@ -554,8 +573,8 @@ impl Compressor {
 
                     true
                 }
-                ComponentValue::Declaration(box declaration) if prev_rule.is_some() => {
-                    if let Some(ComponentValue::Declaration(box prev_rule)) = &mut prev_rule {
+                ComponentValue::Declaration(declaration) if prev_rule.is_some() => {
+                    if let Some(ComponentValue::Declaration(prev_rule)) = &mut prev_rule {
                         if self.is_same_declaration_name(prev_rule, declaration)
                             && prev_rule.value.eq_ignore_span(&declaration.value)
                         {
@@ -576,7 +595,7 @@ impl Compressor {
 
             if result {
                 match rule {
-                    ComponentValue::AtRule(box at_rule) if self.is_mergeable_at_rule(at_rule) => {
+                    ComponentValue::AtRule(at_rule) if self.is_mergeable_at_rule(at_rule) => {
                         prev_index = index;
                         prev_rule_idx = Some(index);
                     }
@@ -645,5 +664,5 @@ impl Compressor {
 
 #[inline]
 fn need_keep_by_name(name: &JsWord) -> bool {
-    *name == js_word!("color-profile")
+    *name == "color-profile"
 }

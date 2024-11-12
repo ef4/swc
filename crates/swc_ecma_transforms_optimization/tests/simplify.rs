@@ -2,8 +2,8 @@
 
 #![deny(warnings)]
 
-use swc_common::{chain, pass::Repeat, Mark};
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_common::{pass::Repeat, Mark};
+use swc_ecma_parser::{Syntax, TsSyntax};
 use swc_ecma_transforms_base::{helpers::inject_helpers, resolver};
 use swc_ecma_transforms_compat::{es2015, es2016, es2017, es2018, es2022::class_properties, es3};
 use swc_ecma_transforms_module::{common_js::common_js, import_analysis::import_analyzer};
@@ -19,23 +19,23 @@ use swc_ecma_transforms_typescript::strip;
 fn test(src: &str, expected: &str) {
     test_transform(
         ::swc_ecma_parser::Syntax::default(),
+        None,
         |_| {
             let unresolved_mark = Mark::new();
             let top_level_mark = Mark::new();
 
-            chain!(
+            (
                 resolver(unresolved_mark, top_level_mark, false),
-                Repeat::new(chain!(
+                Repeat::new((
                     expr_simplifier(unresolved_mark, Default::default()),
                     inlining::inlining(Default::default()),
                     dead_branch_remover(unresolved_mark),
-                    dce::dce(Default::default(), unresolved_mark)
+                    dce::dce(Default::default(), unresolved_mark),
                 )),
             )
         },
         src,
         expected,
-        true,
     )
 }
 
@@ -44,33 +44,32 @@ fn test_same(src: &str) {
 }
 
 macro_rules! to {
-    ($name:ident, $src:expr, $expected:expr) => {
+    ($name:ident, $src:expr) => {
         test!(
             Default::default(),
             |_| {
                 let unresolved_mark = Mark::new();
                 let top_level_mark = Mark::new();
 
-                chain!(
+                (
                     resolver(unresolved_mark, top_level_mark, false),
-                    Repeat::new(chain!(
+                    Repeat::new((
                         expr_simplifier(unresolved_mark, Default::default()),
                         inlining::inlining(Default::default()),
                         dead_branch_remover(unresolved_mark),
-                        dce::dce(Default::default(), unresolved_mark)
+                        dce::dce(Default::default(), unresolved_mark),
                     )),
                 )
             },
             $name,
-            $src,
-            $expected
+            $src
         );
     };
 }
 
 macro_rules! optimized_out {
     ($name:ident, $src:expr) => {
-        to!($name, $src, "");
+        to!($name, $src);
     };
 }
 
@@ -82,10 +81,6 @@ to!(
     if (a) {
         const b = 2;
     }
-    ",
-    "
-    const a = 1;
-    a
     "
 );
 
@@ -106,8 +101,7 @@ if (a) { // Removed by second run of remove_dead_branch
     c = 3; // It becomes `flat assignment` to c on third run of inlining.
 }
 console.log(c); // Prevent optimizing out.
-",
-    "console.log(3)"
+"
 );
 
 #[test]
@@ -496,26 +490,26 @@ fn test_template_strings_known_methods() {
 }
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
-    |t| {
+    |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
+            strip(unresolved_mark, top_level_mark),
             class_properties(
-                Some(t.comments.clone()),
                 class_properties::Config {
                     set_public_fields: true,
                     ..Default::default()
-                }
+                },
+                unresolved_mark,
             ),
             dce(Default::default(), unresolved_mark),
-            inlining(Default::default())
+            inlining(Default::default()),
         )
     },
     issue_1156_1,
@@ -546,30 +540,6 @@ test!(
     }
 
     new A();
-    ",
-    "
-    function d() {
-        let methods;
-        const promise = new Promise((resolve, reject)=>{
-            methods = {
-                resolve,
-                reject
-            };
-        });
-        return Object.assign(promise, methods);
-    }
-    class A {
-        a() {
-            this.s.resolve();
-        }
-        b() {
-            this.s = d();
-        }
-        constructor(){
-            this.s = d();
-        }
-    }
-    new A();
     "
 );
 
@@ -579,37 +549,33 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             decorators(Default::default()),
             resolver(unresolved_mark, top_level_mark, false),
-            strip(top_level_mark),
-            class_properties(Some(t.comments.clone()), Default::default()),
-            Repeat::new(chain!(
+            strip(unresolved_mark, top_level_mark),
+            class_properties(Default::default(), unresolved_mark),
+            Repeat::new((
                 expr_simplifier(unresolved_mark, Default::default()),
                 inlining::inlining(Default::default()),
                 dead_branch_remover(unresolved_mark),
-                dce::dce(Default::default(), unresolved_mark)
+                dce::dce(Default::default(), unresolved_mark),
             )),
             es2018(Default::default()),
-            es2017(
-                Default::default(),
-                Some(t.comments.clone()),
-                unresolved_mark
-            ),
+            es2017(Default::default(), unresolved_mark),
             es2016(),
             es2015(
                 unresolved_mark,
                 Some(t.comments.clone()),
-                Default::default()
+                Default::default(),
             ),
             es3(true),
             import_analyzer(false.into(), false),
             inject_helpers(unresolved_mark),
             common_js(
+                Default::default(),
                 Mark::fresh(Mark::root()),
                 Default::default(),
                 Default::default(),
-                Some(t.comments.clone())
             ),
         )
     },
@@ -617,19 +583,6 @@ test!(
     "
 import Foo from 'foo';
 Foo.bar = true;
-",
-    "
-\"use strict\";
-Object.defineProperty(exports, \"__esModule\", {
-    value: true
-});
-var _foo = _interop_require_default(require(\"foo\"));
-function _interop_require_default(obj) {
-    return obj && obj.__esModule ? obj : {
-        default: obj
-    };
-}
-_foo.default.bar = true;
 "
 );
 
@@ -646,12 +599,7 @@ test!(
 
     console.log("\x00" + "\x31");
 
-    "#,
-    r#"
-    "use strict";
-    console.log("\x001");
-    "#,
-    ok_if_code_eq
+    "#
 );
 
 test!(
@@ -662,16 +610,6 @@ test!(
         dead_branch_remover(top_level_mark)
     },
     issue_2466_1,
-    "
-    const X = {
-        run() {
-            console.log(this === globalThis);
-        },
-    };
-
-    X.run();
-    (0, X.run)();
-    ",
     "
     const X = {
         run() {
@@ -697,12 +635,6 @@ test!(
         var e, t;
         return t !== i && (e, t = t), e = t;
     }
-    ",
-    "
-    function oe() {
-        var e, t;
-        return t !== i && (e, t), e = t;
-    }
     "
 );
 
@@ -712,12 +644,12 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            Repeat::new(chain!(
+            Repeat::new((
                 inlining(Default::default()),
-                dead_branch_remover(unresolved_mark)
-            ))
+                dead_branch_remover(unresolved_mark),
+            )),
         )
     },
     issue_4173,
@@ -729,12 +661,6 @@ function emit(type) {
             e[i].apply(this);
         }
     }
-}
-",
-    "
-function emit(type) {
-    const e = events[type];
-    if (Array.isArray(e)) for(let i = 0; i < e.length; i += 1)e[i].apply(this);
 }
 "
 );

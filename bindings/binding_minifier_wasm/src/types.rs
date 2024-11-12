@@ -696,7 +696,8 @@ export type JscTarget =
   | "es2019"
   | "es2020"
   | "es2021"
-  | "es2022";
+  | "es2022"
+  | "esnext";
 
 export type ParserConfig = TsParserConfig | EsParserConfig;
 export interface TsParserConfig {
@@ -905,7 +906,7 @@ export interface GlobalPassOption {
    *
    * Defaults to `["NODE_ENV", "SWC_ENV"]`
    */
-  envs?: string[];
+  envs?: string[] | Record<string, string>;
 }
 
 export type ModuleConfig = Es6Config | CommonJsConfig | UmdConfig | AmdConfig | NodeNextConfig | SystemjsConfig;

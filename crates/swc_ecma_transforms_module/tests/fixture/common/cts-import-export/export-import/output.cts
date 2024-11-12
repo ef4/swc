@@ -1,5 +1,2 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", {
-    value: true
-});
-exports.foo = require("foo");
+const foo = exports.foo = require("foo");

@@ -1,4 +1,5 @@
 use std::{
+    env::current_dir,
     fs::create_dir_all,
     path::{Path, PathBuf},
 };
@@ -7,26 +8,23 @@ use anyhow::Context;
 use rayon::prelude::*;
 use swc::{
     config::{
-        Config, FileMatcher, JsMinifyOptions, JscConfig, ModuleConfig, Options, SourceMapsConfig,
-        TransformConfig,
+        Config, FileMatcher, JsMinifyOptions, JscConfig, ModuleConfig, Options, Paths,
+        SourceMapsConfig, TransformConfig,
     },
     try_with_handler, BoolOrDataConfig, Compiler, TransformOutput,
 };
 use swc_common::{
-    chain,
     comments::{Comment, SingleThreadedComments},
     errors::{EmitterWriter, Handler, HANDLER},
     sync::Lrc,
     BytePos, FileName, Globals, SourceMap, GLOBALS,
 };
-use swc_ecma_ast::{EsVersion, *};
+use swc_compiler_base::{IsModule, PrintArgs};
+use swc_ecma_ast::*;
 use swc_ecma_minifier::option::MangleOptions;
-use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
-use swc_ecma_transforms::{
-    helpers::{self, Helpers},
-    pass::noop,
-};
-use swc_ecma_visit::{Fold, FoldWith};
+use swc_ecma_parser::{EsSyntax, Syntax, TsSyntax};
+use swc_ecma_transforms::helpers::{self, Helpers};
+use swc_ecma_visit::{fold_pass, Fold};
 use testing::{NormalizedOutput, StdErr, Tester};
 use walkdir::WalkDir;
 
@@ -63,11 +61,20 @@ fn file_with_opt(filename: &str, options: Options) -> Result<NormalizedOutput, S
 }
 
 fn str_with_opt(content: &str, options: Options) -> Result<NormalizedOutput, StdErr> {
-    compile_str(FileName::Anon, content, options).map(|v| v.code.into())
+    compile_str(
+        if options.filename.is_empty() {
+            FileName::Anon.into()
+        } else {
+            FileName::Real(PathBuf::from(&options.filename)).into()
+        },
+        content,
+        options,
+    )
+    .map(|v| v.code.into())
 }
 
 fn compile_str(
-    filename: FileName,
+    filename: Lrc<FileName>,
     content: &str,
     options: Options,
 ) -> Result<TransformOutput, StdErr> {
@@ -533,7 +540,7 @@ fn issue_879() {
                 env: Some(Default::default()),
                 module: Some(ModuleConfig::CommonJs(Default::default())),
                 jsc: JscConfig {
-                    syntax: Some(Syntax::Typescript(TsConfig {
+                    syntax: Some(Syntax::Typescript(TsSyntax {
                         tsx: true,
                         decorators: true,
                         ..Default::default()
@@ -588,6 +595,15 @@ fn issue_1203() {
     println!("{}", f);
 
     assert!(!f.contains("return //"))
+}
+
+#[test]
+fn issue_9663() {
+    let f = file("tests/projects/issue-9663/input.js").unwrap();
+    println!("{}", f);
+
+    assert!(f.contains("set = Reflect.set"));
+    assert!(!f.contains("function set1("));
 }
 
 #[test]
@@ -684,7 +700,7 @@ fn should_visit() {
             let c = Compiler::new(cm.clone());
 
             let fm = cm.new_source_file(
-                FileName::Anon,
+                FileName::Anon.into(),
                 "
                     import React from 'react';
                     const comp = () => <amp-something className='something' />;
@@ -700,7 +716,7 @@ fn should_visit() {
                     &swc::config::Options {
                         config: swc::config::Config {
                             jsc: JscConfig {
-                                syntax: Some(Syntax::Es(EsConfig {
+                                syntax: Some(Syntax::Es(EsSyntax {
                                     jsx: true,
                                     ..Default::default()
                                 })),
@@ -712,14 +728,14 @@ fn should_visit() {
                     },
                     &fm.name,
                     Some(&comments),
-                    |_| noop(),
+                    |_| noop_pass(),
                 )
                 .unwrap()
                 .unwrap();
 
             dbg!(config.syntax);
 
-            let config = config.with_pass(|pass| chain!(Panicking, pass));
+            let config = config.with_pass(|pass| (fold_pass(Panicking), pass));
 
             if config.minify {
                 let preserve_excl = |_: &BytePos, vc: &mut Vec<Comment>| -> bool {
@@ -729,30 +745,32 @@ fn should_visit() {
                 c.comments().leading.retain(preserve_excl);
                 c.comments().trailing.retain(preserve_excl);
             }
-            let mut pass = config.pass;
+            let pass = config.pass;
             let program = config.program;
             let program = helpers::HELPERS.set(&Helpers::new(config.external_helpers), || {
                 HANDLER.set(&handler, || {
                     // Fold module
-                    program.fold_with(&mut pass)
+                    program.apply(pass)
                 })
             });
 
             Ok(c.print(
                 &program,
-                None,
-                config.output_path,
-                config.inline_sources_content,
-                config.source_maps,
-                &Default::default(),
-                None,
-                // TODO: figure out sourcemaps
-                Some(&comments),
-                config.emit_source_map_columns,
-                Default::default(),
-                swc_ecma_codegen::Config::default()
-                    .with_target(config.target)
-                    .with_minify(config.minify),
+                PrintArgs {
+                    source_root: None,
+                    source_file_name: None,
+                    output_path: config.output_path,
+                    inline_sources_content: config.inline_sources_content,
+                    source_map: config.source_maps,
+                    orig: None,
+                    // TODO: figure out sourcemaps
+                    comments: Some(&comments),
+                    emit_source_map_columns: config.emit_source_map_columns,
+                    codegen_config: swc_ecma_codegen::Config::default()
+                        .with_target(config.target)
+                        .with_minify(config.minify),
+                    ..Default::default()
+                },
             )
             .unwrap()
             .code)
@@ -763,81 +781,119 @@ fn should_visit() {
 #[testing::fixture("tests/fixture/**/input/")]
 #[testing::fixture("tests/vercel/**/input/")]
 fn fixture(input_dir: PathBuf) {
-    tests(input_dir)
+    tests(input_dir, Some(IsModule::Unknown));
 }
 
-fn tests(input_dir: PathBuf) {
-    let output = input_dir.parent().unwrap().join("output");
+#[testing::fixture("tests/ts-isolated-declaration/**/input/")]
+fn ts_id(input_dir: PathBuf) {
+    tests(input_dir, Some(IsModule::Bool(true)));
+}
 
-    Tester::new()
-        .print_errors(|cm, handler| {
+fn tests(input_dir: PathBuf, is_module: Option<IsModule>) {
+    let output_dir = input_dir.parent().unwrap().join("output");
+
+    for entry in WalkDir::new(&input_dir) {
+        let entry = entry.unwrap();
+
+        let errors = Tester::new().print_errors(|cm, handler| {
             let c = Compiler::new(cm.clone());
 
-            for entry in WalkDir::new(&input_dir) {
-                let entry = entry.unwrap();
-                if entry.metadata().unwrap().is_dir() {
-                    continue;
-                }
-                println!("File: {}", entry.path().to_string_lossy());
+            if entry.metadata().unwrap().is_dir() {
+                return Ok(());
+            }
+            println!("File: {}", entry.path().to_string_lossy());
 
-                if !entry.file_name().to_string_lossy().ends_with(".ts")
-                    && !entry.file_name().to_string_lossy().ends_with(".js")
-                    && !entry.file_name().to_string_lossy().ends_with(".tsx")
-                {
-                    continue;
-                }
-
-                let rel_path = entry
-                    .path()
-                    .strip_prefix(&input_dir)
-                    .expect("failed to strip prefix");
-
-                let fm = cm.load_file(entry.path()).expect("failed to load file");
-                match c.process_js_file(
-                    fm,
-                    &handler,
-                    &Options {
-                        swcrc: true,
-                        output_path: Some(output.join(entry.file_name())),
-                        config: Config {
-                            jsc: JscConfig {
-                                external_helpers: true.into(),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        },
-
-                        ..Default::default()
-                    },
-                ) {
-                    Ok(v) => {
-                        NormalizedOutput::from(v.code)
-                            .compare_to_file(output.join(rel_path))
-                            .unwrap();
-
-                        let _ = create_dir_all(output.join(rel_path).parent().unwrap());
-
-                        let map = v.map.map(|json| {
-                            let json: serde_json::Value = serde_json::from_str(&json).unwrap();
-                            serde_json::to_string_pretty(&json).unwrap()
-                        });
-
-                        NormalizedOutput::from(map.unwrap_or_default())
-                            .compare_to_file(
-                                output.join(rel_path.with_extension("map").file_name().unwrap()),
-                            )
-                            .unwrap();
-                    }
-                    Err(ref err) if format!("{:?}", err).contains("not matched") => {}
-                    Err(ref err) if format!("{:?}", err).contains("Syntax Error") => return Err(()),
-                    Err(err) => panic!("Error: {:?}", err),
-                }
+            if !entry.file_name().to_string_lossy().ends_with(".ts")
+                && !entry.file_name().to_string_lossy().ends_with(".js")
+                && !entry.file_name().to_string_lossy().ends_with(".jsx")
+                && !entry.file_name().to_string_lossy().ends_with(".tsx")
+            {
+                return Ok(());
             }
 
-            Ok(())
-        })
-        .map(|_| ())
-        .expect("failed");
+            let rel_path = entry
+                .path()
+                .strip_prefix(&input_dir)
+                .expect("failed to strip prefix");
+
+            let fm = cm.load_file(entry.path()).expect("failed to load file");
+            match c.process_js_file(
+                fm,
+                &handler,
+                &Options {
+                    swcrc: true,
+                    output_path: Some(output_dir.join(entry.file_name())),
+                    config: Config {
+                        jsc: JscConfig {
+                            external_helpers: true.into(),
+                            ..Default::default()
+                        },
+                        is_module,
+                        ..Default::default()
+                    },
+
+                    ..Default::default()
+                },
+            ) {
+                Ok(v) => {
+                    NormalizedOutput::from(v.code)
+                        .compare_to_file(output_dir.join(rel_path))
+                        .unwrap();
+
+                    let _ = create_dir_all(output_dir.join(rel_path).parent().unwrap());
+
+                    let map = v.map.map(|json| {
+                        let json: serde_json::Value = serde_json::from_str(&json).unwrap();
+                        serde_json::to_string_pretty(&json).unwrap()
+                    });
+
+                    NormalizedOutput::from(map.unwrap_or_default())
+                        .compare_to_file(
+                            output_dir.join(rel_path.with_extension("map").file_name().unwrap()),
+                        )
+                        .unwrap();
+
+                    if let Some(extra) = v.output {
+                        let mut value: serde_json::Map<_, serde_json::Value> =
+                            serde_json::from_str(&extra).unwrap();
+
+                        if let Some(v) = value.remove("__swc_isolated_declarations__") {
+                            let code = v
+                                .as_str()
+                                .expect("isolated declaration pass should emit string");
+
+                            NormalizedOutput::from(code.to_string())
+                                .compare_to_file(output_dir.join(rel_path).with_extension("d.ts"))
+                                .unwrap();
+                        }
+
+                        if !value.is_empty() {
+                            let extra = serde_json::to_string_pretty(&value).unwrap();
+
+                            NormalizedOutput::from(extra)
+                                .compare_to_file(
+                                    output_dir.join(rel_path.with_extension("extra.json")),
+                                )
+                                .unwrap();
+                        }
+                    }
+                }
+                Err(ref err) if format!("{:?}", err).contains("not matched") => {}
+                Err(ref err) if format!("{:?}", err).contains("Syntax Error") => return Err(()),
+                Err(err) => panic!("Error: {:?}", err),
+            }
+            if handler.has_errors() {
+                Err(())
+            } else {
+                Ok(())
+            }
+        });
+
+        if let Err(err) = errors {
+            err.compare_to_file(output_dir.join(entry.path().with_extension("swc-stderr")))
+                .unwrap();
+        }
+    }
 }
 
 #[test]
@@ -845,7 +901,7 @@ fn issue_1984() {
     testing::run_test2(false, |cm, handler| {
         let c = Compiler::new(cm);
         let fm = c.cm.new_source_file(
-            FileName::Anon,
+            FileName::Anon.into(),
             "
             function Set() {}
             function useSelection(selectionType, derivedHalfSelectedKeys) {
@@ -857,8 +913,13 @@ fn issue_1984() {
             .into(),
         );
 
-        c.minify(fm, &handler, &serde_json::from_str("{}").unwrap())
-            .unwrap();
+        c.minify(
+            fm,
+            &handler,
+            &serde_json::from_str("{}").unwrap(),
+            Default::default(),
+        )
+        .unwrap();
 
         Ok(())
     })
@@ -868,7 +929,7 @@ fn issue_1984() {
 #[test]
 fn opt_source_file_name_1() {
     let map = compile_str(
-        FileName::Real(PathBuf::from("not-unique.js")),
+        FileName::Real(PathBuf::from("not-unique.js")).into(),
         "import Foo from 'foo';",
         Options {
             filename: "unique.js".into(),
@@ -899,7 +960,7 @@ fn issue_2224() {
         Options {
             config: Config {
                 jsc: JscConfig {
-                    syntax: Some(Syntax::Typescript(TsConfig {
+                    syntax: Some(Syntax::Typescript(TsSyntax {
                         decorators: true,
                         ..Default::default()
                     })),
@@ -1007,7 +1068,7 @@ fn issue_6009() {
             // test parsing input
             let config = c
                 .parse_js_as_input(fm.clone(), None, &handler, &options, &fm.name, None, |_| {
-                    noop()
+                    noop_pass()
                 })
                 .unwrap();
 
@@ -1050,7 +1111,7 @@ function test() {
 
     GLOBALS.set(&globals, || {
         let fm = cm.new_source_file(
-            FileName::Custom(String::from("Test")),
+            FileName::Custom(String::from("Test")).into(),
             TEST_CODE.to_string(),
         );
         let options = Options {
@@ -1085,13 +1146,13 @@ fn issue_7513_2() {
     let output = GLOBALS
         .set(&Default::default(), || {
             try_with_handler(cm.clone(), Default::default(), |handler| {
-                let fm = cm.new_source_file(FileName::Anon, INPUT.to_string());
+                let fm = cm.new_source_file(FileName::Anon.into(), INPUT.to_string());
 
                 c.minify(
                     fm,
                     handler,
                     &JsMinifyOptions {
-                        module: true,
+                        module: IsModule::Bool(true),
                         compress: BoolOrDataConfig::from_bool(true),
                         mangle: BoolOrDataConfig::from_obj(MangleOptions {
                             props: None,
@@ -1103,9 +1164,10 @@ fn issue_7513_2() {
                         }),
                         keep_classnames: false,
                         keep_fnames: false,
-                        toplevel: true,
+                        toplevel: Some(true),
                         ..Default::default()
                     },
+                    Default::default(),
                 )
                 .context("failed to minify")
             })
@@ -1119,6 +1181,81 @@ fn issue_7513_2() {
     );
 }
 
+#[test]
+fn issue_8674_1() {
+    static INPUT: &str = "import { foo } from 'src/foo'";
+
+    let base_url = current_dir()
+        .unwrap()
+        .join("../../packages/core/tests/issue-8674")
+        .canonicalize()
+        .unwrap();
+
+    dbg!(&base_url);
+
+    let output = str_with_opt(
+        INPUT,
+        Options {
+            config: Config {
+                jsc: JscConfig {
+                    base_url,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    println!("{}", output);
+
+    assert_eq!(output.to_string(), "import { foo } from \"./src/foo\";\n");
+}
+
+#[test]
+fn issue_8701_1() {
+    static INPUT: &str = "import { AppController } from '@app/app.controller';
+    import { AppService } from '@app/app.service';
+    
+    console.log(AppController, AppService);";
+
+    let base_url = current_dir()
+        .unwrap()
+        .join("tests/projects/issue-8701")
+        .canonicalize()
+        .unwrap();
+
+    dbg!(&base_url);
+
+    let output = str_with_opt(
+        INPUT,
+        Options {
+            filename: "src/app.module.ts".into(),
+            config: Config {
+                jsc: JscConfig {
+                    base_url,
+                    paths: {
+                        let mut paths = Paths::default();
+                        paths.insert("@app/*".into(), vec!["./src/*".into()]);
+                        paths
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    println!("{}", output);
+
+    assert_eq!(
+        output.to_string(),
+        "import { AppController } from \"./app.controller\";\nimport { AppService } from \
+         \"./app.service\";\nconsole.log(AppController, AppService);\n"
+    );
+}
+
 #[testing::fixture("tests/minify/**/input.js")]
 fn minify(input_js: PathBuf) {
     let input_dir = input_js.parent().unwrap();
@@ -1128,11 +1265,14 @@ fn minify(input_js: PathBuf) {
         let c = Compiler::new(cm);
         let fm = c.cm.load_file(&input_js).unwrap();
 
-        let mut config: JsMinifyOptions =
-            serde_json::from_str(&std::fs::read_to_string(&config_json_path).unwrap()).unwrap();
+        let config_str = std::fs::read_to_string(&config_json_path).unwrap();
+        let mut config: JsMinifyOptions = serde_json::from_str(&config_str).unwrap();
 
-        config.source_map = BoolOrDataConfig::from_bool(true);
-        let output = c.minify(fm, &handler, &config).unwrap();
+        if config.source_map.inner().is_none() {
+            config.source_map = BoolOrDataConfig::from_bool(true);
+        }
+
+        let output = c.minify(fm, &handler, &config, Default::default()).unwrap();
 
         NormalizedOutput::from(output.code)
             .compare_to_file(input_dir.join("output.js"))

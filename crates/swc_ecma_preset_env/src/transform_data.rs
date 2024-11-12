@@ -22,6 +22,7 @@ impl Feature {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, StringEnum, Hash)]
+#[non_exhaustive]
 pub enum Feature {
     /// `transform-template-literals`
     TemplateLiterals,
@@ -166,6 +167,9 @@ pub enum Feature {
     /// `transform-unicode-sets-regex`
     UnicodeSetsRegex,
 
+    /// `transform-duplicate-named-capturing-groups-regex`
+    DuplicateNamedCapturingGroupsRegex, // TODO
+
     /// `bugfix/transform-async-arrows-in-class`
     BugfixAsyncArrowsInClass,
 
@@ -189,6 +193,15 @@ pub enum Feature {
 
     /// `bugfix/transform-v8-spread-parameters-in-optional-chaining`
     BugfixTransformV8SpreadParametersInOptionalChaining, // TODO
+
+    /// `bugfix/transform-v8-static-class-fields-redefine-readonly`
+    BugfixTransformV8StaticClassFieldsRedefineReadonly, // TODO
+
+    /// `bugfix/transform-firefox-class-in-computed-class-key`
+    BugfixTransformFirefoxClassInComputedClassKey, // TODO
+
+    /// `bugfix/transform-safari-class-field-initializer-scope`
+    BugfixTransformSafariClassFieldInitializerScope, // TODO
 }
 
 pub(crate) static FEATURES: Lazy<AHashMap<Feature, BrowserData<Option<Version>>>> =

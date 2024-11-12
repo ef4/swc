@@ -1,4 +1,3 @@
-use swc_atoms::js_word;
 use swc_common::{util::take::Take, Spanned, SyntaxContext};
 use swc_ecma_ast::*;
 use swc_ecma_utils::{ExprExt, Value::Known};
@@ -19,32 +18,24 @@ impl Optimizer<'_> {
         {
             if args
                 .iter()
-                .any(|arg| arg.expr.may_have_side_effects(&self.expr_ctx))
+                .any(|arg| arg.expr.may_have_side_effects(&self.ctx.expr_ctx))
             {
                 return;
             }
 
-            match &**callee {
-                Expr::Ident(Ident {
-                    sym: js_word!("RegExp"),
-                    ..
-                }) if self.options.unsafe_regexp => {
-                    if args.len() != 1 {
-                        return;
-                    }
-
-                    self.optimize_expr_in_str_ctx(&mut args[0].expr);
-
-                    if let Expr::Lit(Lit::Str(..)) = &*args[0].expr {
-                        self.changed = true;
-                        report_change!(
-                            "strings: Unsafely reduced `RegExp` call in a string context"
-                        );
-
-                        *e = *args[0].expr.take();
-                    }
+            if callee.is_ident_ref_to("RegExp") && self.options.unsafe_regexp {
+                if args.len() != 1 {
+                    return;
                 }
-                _ => {}
+
+                self.optimize_expr_in_str_ctx(&mut args[0].expr);
+
+                if let Expr::Lit(Lit::Str(..)) = &*args[0].expr {
+                    self.changed = true;
+                    report_change!("strings: Unsafely reduced `RegExp` call in a string context");
+
+                    *e = *args[0].expr.take();
+                }
             }
         }
     }
@@ -66,7 +57,7 @@ impl Optimizer<'_> {
             _ => {}
         }
 
-        let value = n.as_pure_string(&self.expr_ctx);
+        let value = n.as_pure_string(&self.ctx.expr_ctx);
         if let Known(value) = value {
             let span = n.span();
 
@@ -74,11 +65,12 @@ impl Optimizer<'_> {
             report_change!(
                 "strings: Converted an expression into a string literal (in string context)"
             );
-            *n = Expr::Lit(Lit::Str(Str {
+            *n = Lit::Str(Str {
                 span,
                 raw: None,
                 value: value.into(),
-            }));
+            })
+            .into();
             return;
         }
 
@@ -93,11 +85,12 @@ impl Optimizer<'_> {
 
                 let value = format!("{:?}", v.value);
 
-                *n = Expr::Lit(Lit::Str(Str {
+                *n = Lit::Str(Str {
                     span: v.span,
                     raw: None,
                     value: value.into(),
-                }));
+                })
+                .into();
             }
 
             Expr::Lit(Lit::Regex(v)) => {
@@ -113,11 +106,12 @@ impl Optimizer<'_> {
 
                 let value = format!("/{}/{}", v.exp, v.flags);
 
-                *n = Expr::Lit(Lit::Str(Str {
+                *n = Lit::Str(Str {
                     span: v.span,
                     raw: None,
                     value: value.into(),
-                }));
+                })
+                .into();
             }
 
             Expr::Bin(BinExpr {
@@ -128,12 +122,12 @@ impl Optimizer<'_> {
             }) => {
                 if let (Expr::Lit(Lit::Num(l)), Expr::Lit(Lit::Num(r))) = (&**left, &**right) {
                     if l.value == 0.0 && r.value == 0.0 {
-                        *n = Expr::Ident(Ident::new(
-                            js_word!("NaN"),
-                            span.with_ctxt(
-                                SyntaxContext::empty().apply_mark(self.marks.unresolved_mark),
-                            ),
-                        ));
+                        *n = Ident::new(
+                            "NaN".into(),
+                            *span,
+                            SyntaxContext::empty().apply_mark(self.marks.unresolved_mark),
+                        )
+                        .into();
                         self.changed = true;
                         report_change!("strings: Evaluated 0 / 0 => NaN in string context");
                     }

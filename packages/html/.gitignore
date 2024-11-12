@@ -1,4 +1,3 @@
-*.js
-*.d.ts
+/*.js
 !binding.js
-!binding.d.ts
+index.d.ts

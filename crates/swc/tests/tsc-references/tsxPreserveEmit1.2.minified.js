@@ -7,7 +7,6 @@ define([
     "require"
 ], function(require) {});
 //// [test.tsx]
-// Should emit 'react-router' in the AMD dependency list
 define([
     "require",
     "exports",
@@ -17,5 +16,5 @@ define([
     var M;
     Object.defineProperty(exports, "__esModule", {
         value: !0
-    }), _reactrouter.Route, M || (M = {}), M || (M = {}), X;
+    }), _reactrouter.Route, M || (M = {}), M || (M = {}), /*#__PURE__*/ X;
 });

@@ -56,6 +56,7 @@ where
     }
 
     /// See [scoped_tls::ScopedKey] for actual documentation.
+    #[track_caller]
     #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn with<F, R>(&'static self, f: F) -> R
     where
@@ -91,7 +92,6 @@ mod tests {
     #[test]
     #[should_panic = "You should perform this operation in the closure passed to `set` of \
                       better_scoped_tls::tests::TESTTLS"]
-
     fn panic_on_with() {
         TESTTLS.with(|s| {
             println!("S: {}", s);

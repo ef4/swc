@@ -1,10 +1,9 @@
-let Foo = /*#__PURE__*/ function(UnknownNativeClass) {
+let Foo = /*#__PURE__*/ function(UnknownNativeClass1) {
     "use strict";
-    _inherits(Foo, UnknownNativeClass);
-    var _super = _create_super(Foo);
+    _inherits(Foo, UnknownNativeClass1);
     function Foo() {
         _class_call_check(this, Foo);
-        return _super.apply(this, arguments);
+        return _call_super(this, Foo, arguments);
     }
     return Foo;
 }(UnknownNativeClass);

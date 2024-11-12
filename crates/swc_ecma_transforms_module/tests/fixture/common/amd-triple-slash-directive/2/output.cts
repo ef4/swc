@@ -2,7 +2,7 @@
 ///<amd-module name='SecondModuleName'/>
 "use strict";
 class Foo {
-    x: number;
+    x;
     constructor(){
         this.x = 5;
     }

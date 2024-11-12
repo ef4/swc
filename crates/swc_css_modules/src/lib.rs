@@ -1,7 +1,5 @@
-#![feature(box_patterns)]
-
 use rustc_hash::FxHashMap;
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::{util::take::Take, Span};
 use swc_css_ast::{
     ComplexSelector, ComplexSelectorChildren, ComponentValue, Declaration, DeclarationName,
@@ -62,6 +60,50 @@ pub fn compile<'a>(ss: &mut Stylesheet, config: impl 'a + TransformConfig) -> Tr
 
     ss.visit_mut_with(&mut compiler);
 
+    fn add(result: &mut TransformResult, data: &Data, key: &JsWord, composes: &[CssClassName]) {
+        let mut extra_classes = Vec::new();
+        {
+            let class_names = result.renamed.entry(key.clone()).or_default();
+
+            class_names.extend(composes.iter().cloned());
+        }
+
+        for composed_class_name in composes.iter() {
+            if let CssClassName::Local { name } = composed_class_name {
+                if let Some(original_class_name) = data.renamed_to_orig.get(&name.value) {
+                    extra_classes.extend(
+                        result
+                            .renamed
+                            .entry(original_class_name.clone())
+                            .or_default()
+                            .split_at(1)
+                            .1
+                            .to_vec(),
+                    );
+                }
+            }
+        }
+
+        {
+            let class_names = result.renamed.entry(key.clone()).or_default();
+
+            class_names.extend(extra_classes);
+        }
+    }
+
+    let composes = compiler.data.composes_inherit.take();
+
+    for (key, composes) in &composes {
+        add(&mut compiler.result, &compiler.data, key, composes);
+    }
+    for (key, composes) in &composes {
+        add(&mut compiler.result, &compiler.data, key, composes);
+    }
+    compiler.result.renamed.iter_mut().for_each(|(_, v)| {
+        v.sort();
+        v.dedup();
+    });
+
     compiler.result
 }
 
@@ -78,6 +120,7 @@ where
 struct Data {
     /// Context for `composes`
     composes_for_current: Option<Vec<CssClassName>>,
+    composes_inherit: Vec<(JsWord, Vec<CssClassName>)>,
 
     renamed_to_orig: FxHashMap<JsWord, JsWord>,
     orig_to_renamed: FxHashMap<JsWord, JsWord>,
@@ -119,7 +162,7 @@ where
                 );
             }
             KeyframesName::PseudoFunction(pseudo_function)
-                if pseudo_function.pseudo.value == js_word!("local") =>
+                if pseudo_function.pseudo.value == "local" =>
             {
                 match &pseudo_function.name {
                     KeyframesName::CustomIdent(custom_ident) => {
@@ -137,9 +180,7 @@ where
 
                 return;
             }
-            KeyframesName::PseudoPrefix(pseudo_prefix)
-                if pseudo_prefix.pseudo.value == js_word!("local") =>
-            {
+            KeyframesName::PseudoPrefix(pseudo_prefix) if pseudo_prefix.pseudo.value == "local" => {
                 match &pseudo_prefix.name {
                     KeyframesName::CustomIdent(custom_ident) => {
                         *n = KeyframesName::CustomIdent(custom_ident.clone());
@@ -157,7 +198,7 @@ where
                 return;
             }
             KeyframesName::PseudoFunction(pseudo_function)
-                if pseudo_function.pseudo.value == js_word!("global") =>
+                if pseudo_function.pseudo.value == "global" =>
             {
                 match &pseudo_function.name {
                     KeyframesName::CustomIdent(custom_ident) => {
@@ -174,7 +215,7 @@ where
                 return;
             }
             KeyframesName::PseudoPrefix(pseudo_prefix)
-                if pseudo_prefix.pseudo.value == js_word!("global") =>
+                if pseudo_prefix.pseudo.value == "global" =>
             {
                 match &pseudo_prefix.name {
                     KeyframesName::CustomIdent(custom_ident) => {
@@ -218,27 +259,7 @@ where
                                     .cloned();
 
                                 if let Some(key) = key {
-                                    let mut renamed = self.result.renamed.clone();
-                                    let class_names = self.result.renamed.entry(key).or_default();
-
-                                    class_names.extend(composes.clone());
-
-                                    for composed_class_name in composes.iter() {
-                                        if let CssClassName::Local { name } = composed_class_name {
-                                            if let Some(original_class_name) =
-                                                self.data.renamed_to_orig.get(&name.value)
-                                            {
-                                                class_names.extend(
-                                                    renamed
-                                                        .entry(original_class_name.clone())
-                                                        .or_default()
-                                                        .split_at(1)
-                                                        .1
-                                                        .to_vec(),
-                                                );
-                                            }
-                                        }
-                                    }
+                                    self.data.composes_inherit.push((key, composes.clone()));
                                 }
                             }
                         }
@@ -277,13 +298,9 @@ where
                     // composes: name from 'foo.css'
                     if n.value.len() >= 3 {
                         match (&n.value[n.value.len() - 2], &n.value[n.value.len() - 1]) {
-                            (
-                                ComponentValue::Ident(box Ident {
-                                    value: js_word!("from"),
-                                    ..
-                                }),
-                                ComponentValue::Str(import_source),
-                            ) => {
+                            (ComponentValue::Ident(ident), ComponentValue::Str(import_source))
+                                if ident.value == "from" =>
+                            {
                                 for class_name in n.value.iter().take(n.value.len() - 2) {
                                     if let ComponentValue::Ident(value) = class_name {
                                         composes_for_current.push(CssClassName::Import {
@@ -295,16 +312,9 @@ where
 
                                 return;
                             }
-                            (
-                                ComponentValue::Ident(box Ident {
-                                    value: js_word!("from"),
-                                    ..
-                                }),
-                                ComponentValue::Ident(box Ident {
-                                    value: js_word!("global"),
-                                    ..
-                                }),
-                            ) => {
+                            (ComponentValue::Ident(from), ComponentValue::Ident(global))
+                                if from.value == "from" && global.value == "global" =>
+                            {
                                 for class_name in n.value.iter().take(n.value.len() - 2) {
                                     if let ComponentValue::Ident(value) = class_name {
                                         composes_for_current.push(CssClassName::Global {
@@ -318,13 +328,24 @@ where
                         }
                     }
 
-                    for class_name in n.value.iter() {
-                        if let ComponentValue::Ident(box Ident { span, value, .. }) = class_name {
-                            if let Some(value) = self.data.orig_to_renamed.get(value) {
+                    for class_name in n.value.iter_mut() {
+                        if let ComponentValue::Ident(ident) = class_name {
+                            let Ident { span, value, .. } = &mut **ident;
+                            let orig = value.clone();
+                            rename(
+                                *span,
+                                &mut self.config,
+                                &mut self.result,
+                                &mut self.data.orig_to_renamed,
+                                &mut self.data.renamed_to_orig,
+                                value,
+                            );
+
+                            if let Some(new_name) = self.data.orig_to_renamed.get(&orig) {
                                 composes_for_current.push(CssClassName::Local {
                                     name: Ident {
                                         span: *span,
-                                        value: value.clone(),
+                                        value: new_name.clone(),
                                         raw: None,
                                     },
                                 });
@@ -336,8 +357,8 @@ where
         }
 
         if let DeclarationName::Ident(name) = &n.name {
-            match name.value {
-                js_word!("animation") => {
+            match &*name.value {
+                "animation" => {
                     let mut can_change = true;
 
                     let mut iteration_count_visited = false;
@@ -348,16 +369,18 @@ where
 
                     for v in &mut n.value {
                         match v {
-                            ComponentValue::Ident(box Ident {
-                                span, value, raw, ..
-                            }) => {
+                            ComponentValue::Ident(ident) => {
                                 if !can_change {
                                     continue;
                                 }
 
-                                match *value {
+                                let Ident {
+                                    span, value, raw, ..
+                                } = &mut **ident;
+
+                                match &**value {
                                     // iteration-count
-                                    js_word!("infinite") => {
+                                    "infinite" => {
                                         if !iteration_count_visited {
                                             iteration_count_visited = true;
                                             continue;
@@ -365,40 +388,29 @@ where
                                     }
                                     // fill-mode
                                     // NOTE: `animation: none:` will be trapped here
-                                    js_word!("none")
-                                    | js_word!("forwards")
-                                    | js_word!("backwards")
-                                    | js_word!("both") => {
+                                    "none" | "forwards" | "backwards" | "both" => {
                                         if !fill_mode_visited {
                                             fill_mode_visited = true;
                                             continue;
                                         }
                                     }
                                     // direction
-                                    js_word!("normal")
-                                    | js_word!("reverse")
-                                    | js_word!("alternate")
-                                    | js_word!("alternate-reverse") => {
+                                    "normal" | "reverse" | "alternate" | "alternate-reverse" => {
                                         if !direction_visited {
                                             direction_visited = true;
                                             continue;
                                         }
                                     }
                                     // easing-function
-                                    js_word!("linear")
-                                    | js_word!("ease")
-                                    | js_word!("ease-in")
-                                    | js_word!("ease-out")
-                                    | js_word!("ease-in-out")
-                                    | js_word!("step-start")
-                                    | js_word!("step-end") => {
+                                    "linear" | "ease" | "ease-in" | "ease-out" | "ease-in-out"
+                                    | "step-start" | "step-end" => {
                                         if !easing_function_visited {
                                             easing_function_visited = true;
                                             continue;
                                         }
                                     }
                                     // play-state
-                                    js_word!("running") | js_word!("paused") => {
+                                    "running" | "paused" => {
                                         if !play_state_visited {
                                             play_state_visited = true;
                                             continue;
@@ -424,11 +436,9 @@ where
                             }
                             ComponentValue::Function(f) => {
                                 if let FunctionName::Ident(ident) = &f.name {
-                                    match ident.value {
+                                    match &*ident.value {
                                         // easing-function
-                                        js_word!("steps")
-                                        | js_word!("cubic-bezier")
-                                        | js_word!("linear") => {
+                                        "steps" | "cubic-bezier" | "linear" => {
                                             easing_function_visited = true;
                                         }
                                         _ => {
@@ -459,12 +469,12 @@ where
                         }
                     }
                 }
-                js_word!("animation-name") => {
+                "animation-name" => {
                     for v in &mut n.value {
-                        if let ComponentValue::Ident(box Ident {
-                            span, value, raw, ..
-                        }) = v
-                        {
+                        if let ComponentValue::Ident(ident) = v {
+                            let Ident {
+                                span, value, raw, ..
+                            } = &mut **ident;
                             *raw = None;
 
                             rename(
@@ -490,7 +500,7 @@ where
 
         'complex: for mut n in n.children.take() {
             if let ComplexSelectorChildren::CompoundSelector(selector) = &mut n {
-                for (sel_index, sel) in selector.subclass_selectors.iter_mut().enumerate() {
+                for sel in selector.subclass_selectors.iter_mut() {
                     match sel {
                         SubclassSelector::Class(..) | SubclassSelector::Id(..) => {
                             if !self.data.is_global_mode {
@@ -503,7 +513,14 @@ where
                                 );
                             }
                         }
-                        SubclassSelector::PseudoClass(class_sel) => match &*class_sel.name.value {
+
+                        _ => {}
+                    }
+                }
+
+                for (sel_index, sel) in selector.subclass_selectors.iter_mut().enumerate() {
+                    if let SubclassSelector::PseudoClass(class_sel) = sel {
+                        match &*class_sel.name.value {
                             "local" => {
                                 if let Some(children) = &mut class_sel.children {
                                     if let Some(PseudoClassSelectorChildren::ComplexSelector(
@@ -522,7 +539,8 @@ where
                                             complex_selector.children.clone();
                                         prepend_left_subclass_selectors(
                                             &mut complex_selector_children,
-                                            selector.subclass_selectors.split_at(sel_index),
+                                            &mut selector.subclass_selectors,
+                                            sel_index,
                                         );
                                         new_children.extend(complex_selector_children);
 
@@ -551,7 +569,8 @@ where
                                             complex_selector.children.clone();
                                         prepend_left_subclass_selectors(
                                             &mut complex_selector_children,
-                                            selector.subclass_selectors.split_at(sel_index),
+                                            &mut selector.subclass_selectors,
+                                            sel_index,
                                         );
                                         new_children.extend(complex_selector_children);
                                     }
@@ -568,8 +587,7 @@ where
                                 continue 'complex;
                             }
                             _ => {}
-                        },
-                        _ => {}
+                        }
                     }
                 }
             }
@@ -675,16 +693,21 @@ fn process_local<C>(
 
 fn prepend_left_subclass_selectors(
     complex_selector_children: &mut [ComplexSelectorChildren],
-    sels: (&[SubclassSelector], &[SubclassSelector]),
+    sels: &mut Vec<SubclassSelector>,
+    mut sel_index: usize,
 ) {
-    if let Some(ComplexSelectorChildren::CompoundSelector(first)) =
-        complex_selector_children.get_mut(0)
+    sels.remove(sel_index);
+
+    for c in complex_selector_children
+        .iter_mut()
+        .filter_map(|c| c.as_mut_compound_selector())
     {
-        first.subclass_selectors = [
-            sels.0.to_vec(),
-            first.subclass_selectors.take(),
-            sels.1[1..].to_vec(),
-        ]
-        .concat();
+        c.subclass_selectors.splice(0..0, sels.drain(..sel_index));
+
+        if !sels.is_empty() {
+            c.subclass_selectors.extend(sels[..].iter().cloned());
+        }
+
+        sel_index = 0;
     }
 }

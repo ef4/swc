@@ -15,7 +15,7 @@ Object.defineProperty(exports, "thing", {
         return 21.75;
     }
 }), Object.defineProperty(exports, "setonlyAccessor", {
-    /** @param {string} str */ set: function(str) {
+    set: function(str) {
         this.rwAccessors = Number(str);
     }
 });
@@ -36,18 +36,15 @@ Object.defineProperty(module.exports, "thing", {
         return 21.75;
     }
 }), Object.defineProperty(module.exports, "setonlyAccessor", {
-    /** @param {string} str */ set: function(str) {
+    set: function(str) {
         this.rwAccessors = Number(str);
     }
 });
 //// [index.js]
-/**
- * @type {number}
- */ require("./mod1").thing, require("./mod2").thing;
+require("./mod1").thing, require("./mod2").thing;
 //// [validator.ts]
-//! 
 //!   x Import assignment cannot be used when targeting ECMAScript modules. Consider using `import * as ns from "mod"`, `import {a} from "mod"`, `import d from "mod"`, or another module format instead.
-//!    ,-[1:1]
+//!    ,-[3:1]
 //!  1 | import "./";
 //!  2 | 
 //!  3 | import m1 = require("./mod1");
@@ -56,9 +53,8 @@ Object.defineProperty(module.exports, "thing", {
 //!  5 | m1.thing;
 //!  6 | m1.readonlyProp;
 //!    `----
-//! 
 //!   x Import assignment cannot be used when targeting ECMAScript modules. Consider using `import * as ns from "mod"`, `import {a} from "mod"`, `import d from "mod"`, or another module format instead.
-//!     ,-[20:1]
+//!     ,-[23:1]
 //!  20 | m1.rwAccessors = "no";
 //!  21 | m1.setonlyAccessor = 0;
 //!  22 | 

@@ -1,8 +1,7 @@
-extern crate swc_node_base;
+extern crate swc_malloc;
 
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
-use swc_atoms::js_word;
-use swc_common::{input::StringInput, FileName, Span, SyntaxContext, DUMMY_SP};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Bencher, Criterion};
+use swc_common::{input::StringInput, FileName, Span, DUMMY_SP};
 use swc_html_ast::{Document, DocumentFragment, DocumentMode, Element, Namespace};
 use swc_html_parser::{lexer::Lexer, parser::Parser};
 use swc_html_visit::{Fold, FoldWith, VisitMut, VisitMutWith};
@@ -14,7 +13,7 @@ where
     F: FnMut(Document) -> Document,
 {
     let _ = ::testing::run_test(false, |cm, _| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
 
         let lexer = Lexer::new(StringInput::from(&*fm));
         let mut parser = Parser::new(lexer, Default::default());
@@ -36,7 +35,7 @@ where
     F: FnMut(DocumentFragment) -> DocumentFragment,
 {
     let _ = ::testing::run_test(false, |cm, _| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
 
         let lexer = Lexer::new(StringInput::from(&*fm));
         let mut parser = Parser::new(lexer, Default::default());
@@ -44,11 +43,11 @@ where
             .parse_document_fragment(
                 Element {
                     span: Default::default(),
-                    tag_name: js_word!("template"),
+                    tag_name: "template".into(),
                     namespace: Namespace::HTML,
-                    attributes: vec![],
+                    attributes: Vec::new(),
                     is_self_closing: false,
-                    children: vec![],
+                    children: Vec::new(),
                     content: None,
                 },
                 DocumentMode::NoQuirks,
@@ -93,10 +92,6 @@ fn bench_cases(c: &mut Criterion) {
 
         impl VisitMut for RespanVisitMut {
             fn visit_mut_span(&mut self, span: &mut Span) {
-                if span.ctxt != SyntaxContext::empty() {
-                    panic!()
-                }
-
                 *span = DUMMY_SP;
             }
         }
@@ -124,11 +119,7 @@ fn bench_cases(c: &mut Criterion) {
         struct RespanFold;
 
         impl Fold for RespanFold {
-            fn fold_span(&mut self, s: Span) -> Span {
-                if s.ctxt != SyntaxContext::empty() {
-                    panic!()
-                }
-
+            fn fold_span(&mut self, _: Span) -> Span {
                 DUMMY_SP
             }
         }
@@ -166,10 +157,6 @@ fn bench_cases(c: &mut Criterion) {
 
             impl VisitMut for RespanVisitMut {
                 fn visit_mut_span(&mut self, span: &mut Span) {
-                    if span.ctxt != SyntaxContext::empty() {
-                        panic!()
-                    }
-
                     *span = DUMMY_SP;
                 }
             }
@@ -200,11 +187,7 @@ fn bench_cases(c: &mut Criterion) {
             struct RespanFold;
 
             impl Fold for RespanFold {
-                fn fold_span(&mut self, s: Span) -> Span {
-                    if s.ctxt != SyntaxContext::empty() {
-                        panic!()
-                    }
-
+                fn fold_span(&mut self, _: Span) -> Span {
                     DUMMY_SP
                 }
             }

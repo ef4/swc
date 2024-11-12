@@ -2,12 +2,11 @@ use swc_common::DUMMY_SP as span;
 use swc_ecma_visit::assert_eq_ignore_span;
 
 use super::*;
-use crate::parser::test_parser;
 
 fn jsx(src: &'static str) -> Box<Expr> {
     test_parser(
         src,
-        crate::Syntax::Es(crate::EsConfig {
+        crate::Syntax::Es(crate::EsSyntax {
             jsx: true,
             ..Default::default()
         }),
@@ -23,12 +22,12 @@ fn self_closing_01() {
             span,
             opening: JSXOpeningElement {
                 span,
-                name: JSXElementName::Ident(Ident::new("a".into(), span)),
+                name: JSXElementName::Ident(Ident::new_no_ctxt("a".into(), span)),
                 self_closing: true,
-                attrs: vec![],
+                attrs: Vec::new(),
                 type_args: None,
             },
-            children: vec![],
+            children: Vec::new(),
             closing: None,
         })))
     );
@@ -42,9 +41,9 @@ fn normal_01() {
             span,
             opening: JSXOpeningElement {
                 span,
-                name: JSXElementName::Ident(Ident::new("a".into(), span)),
+                name: JSXElementName::Ident(Ident::new_no_ctxt("a".into(), span)),
                 self_closing: false,
-                attrs: vec![],
+                attrs: Vec::new(),
                 type_args: None,
             },
             children: vec![JSXElementChild::JSXText(JSXText {
@@ -54,7 +53,7 @@ fn normal_01() {
             })],
             closing: Some(JSXClosingElement {
                 span,
-                name: JSXElementName::Ident(Ident::new("a".into(), span)),
+                name: JSXElementName::Ident(Ident::new_no_ctxt("a".into(), span)),
             })
         })))
     );
@@ -70,18 +69,18 @@ fn escape_in_attr() {
                 span,
                 attrs: vec![JSXAttrOrSpread::JSXAttr(JSXAttr {
                     span,
-                    name: JSXAttrName::Ident(Ident::new("id".into(), span)),
+                    name: JSXAttrName::Ident(IdentName::new("id".into(), span)),
                     value: Some(JSXAttrValue::Lit(Lit::Str(Str {
                         span,
                         value: "w < w".into(),
                         raw: Some("\"w &lt; w\"".into()),
                     }))),
                 })],
-                name: JSXElementName::Ident(Ident::new("div".into(), span)),
+                name: JSXElementName::Ident(Ident::new_no_ctxt("div".into(), span)),
                 self_closing: true,
                 type_args: None,
             },
-            children: vec![],
+            children: Vec::new(),
             closing: None
         })))
     );
@@ -95,10 +94,10 @@ fn issue_584() {
             span,
             opening: JSXOpeningElement {
                 span,
-                name: JSXElementName::Ident(Ident::new("test".into(), span)),
+                name: JSXElementName::Ident(Ident::new_no_ctxt("test".into(), span)),
                 attrs: vec![JSXAttrOrSpread::JSXAttr(JSXAttr {
                     span,
-                    name: JSXAttrName::Ident(Ident::new("other".into(), span)),
+                    name: JSXAttrName::Ident(IdentName::new("other".into(), span)),
                     value: Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
                         span,
                         expr: JSXExpr::Expr(Box::new(Expr::Lit(Lit::Num(Number {
@@ -111,7 +110,7 @@ fn issue_584() {
                 self_closing: true,
                 type_args: None,
             },
-            children: vec![],
+            children: Vec::new(),
             closing: None
         })))
     );

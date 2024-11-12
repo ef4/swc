@@ -5,17 +5,17 @@ var r1 = f10(a1); // unknown
 var r2 = f10(a2); // string
 // Repro from #31663
 var x1 = {
-    a: "foo",
+    a: 'foo',
     b: 42
 };
 var x2 = {
-    a: "foo",
+    a: 'foo',
     b: true
 };
-x1[k] = "bar"; // Error
-x2[k] = "bar"; // Error
-var Tag1;
-var Tag2;
+x1[k] = 'bar'; // Error
+x2[k] = 'bar'; // Error
+;
+;
 s1 = s2;
 s2 = s1;
 t1 = t2;

@@ -7,13 +7,13 @@ var Point = /*#__PURE__*/ function() {
         this.x = x;
         this.y = y;
     }
-    Point.Origin // unexpected error here bug 840246
-     = function Origin() {
+    Point.Origin = function Origin() {
         return {
             x: 0,
             y: 0
         };
-    };
+    } // unexpected error here bug 840246
+    ;
     return Point;
 }();
 (function(Point) {
@@ -22,7 +22,6 @@ var Point = /*#__PURE__*/ function() {
     } //expected duplicate identifier error
     Point.Origin = Origin;
 })(Point || (Point = {}));
-var A;
 (function(A) {
     var Point = /*#__PURE__*/ function() {
         "use strict";
@@ -31,13 +30,13 @@ var A;
             this.x = x;
             this.y = y;
         }
-        Point.Origin // unexpected error here bug 840246
-         = function Origin() {
+        Point.Origin = function Origin() {
             return {
                 x: 0,
                 y: 0
             };
-        };
+        } // unexpected error here bug 840246
+        ;
         return Point;
     }();
     A.Point = Point;
@@ -46,5 +45,6 @@ var A;
             return "";
         } //expected duplicate identifier error
         Point.Origin = Origin;
-    })(Point = A.Point || (A.Point = {}));
+    })(A.Point || (A.Point = {}));
 })(A || (A = {}));
+var A;

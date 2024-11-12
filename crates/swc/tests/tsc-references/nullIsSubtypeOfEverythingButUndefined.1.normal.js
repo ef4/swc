@@ -8,8 +8,8 @@ var r0b = true ? u : null;
 var r0b = true ? null : u;
 var r1 = true ? 1 : null;
 var r1 = true ? null : 1;
-var r2 = true ? "" : null;
-var r2 = true ? null : "";
+var r2 = true ? '' : null;
+var r2 = true ? null : '';
 var r3 = true ? true : null;
 var r3 = true ? null : true;
 var r4 = true ? new Date() : null;
@@ -47,10 +47,10 @@ var C2 = function C2() {
 var c2;
 var r12 = true ? c2 : null;
 var r12 = true ? null : c2;
-var E;
-(function(E) {
+var E = /*#__PURE__*/ function(E) {
     E[E["A"] = 0] = "A";
-})(E || (E = {}));
+    return E;
+}(E || {});
 var r13 = true ? E : null;
 var r13 = true ? null : E;
 var r14 = true ? 0 : null;

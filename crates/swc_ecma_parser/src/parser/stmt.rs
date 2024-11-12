@@ -1,4 +1,3 @@
-use swc_atoms::js_word;
 use swc_common::Spanned;
 use typed_arena::Arena;
 
@@ -121,31 +120,6 @@ impl<'a, I: Tokens> Parser<I> {
     ) -> PResult<Stmt> {
         trace_cur!(self, parse_stmt_internal);
 
-        if top_level && is!(self, "await") {
-            self.state.found_module_item = true;
-            if !self.ctx().can_be_module {
-                self.emit_err(self.input.cur_span(), SyntaxError::TopLevelAwaitInScript);
-            }
-
-            if peeked_is!(self, "using") {
-                assert_and_bump!(self, "await");
-
-                let v = self.parse_using_decl(start, true)?;
-                if let Some(v) = v {
-                    return Ok(Stmt::Decl(Decl::Using(v)));
-                }
-            }
-
-            let expr = self.parse_await_expr()?;
-            let expr = self
-                .include_in_expr(true)
-                .parse_bin_op_recursively(expr, 0)?;
-            eat!(self, ';');
-
-            let span = span!(self, start);
-            return Ok(Stmt::Expr(ExprStmt { span, expr }));
-        }
-
         let is_typescript = self.input.syntax().typescript();
 
         if is_typescript && is!(self, "const") && peeked_is!(self, "enum") {
@@ -157,14 +131,31 @@ impl<'a, I: Tokens> Parser<I> {
                 .map(Stmt::from);
         }
 
-        match cur!(self, true)? {
-            tok!("await") if include_decl => {
+        match cur!(self, true) {
+            tok!("await") if include_decl || top_level => {
+                if top_level {
+                    self.state.found_module_item = true;
+                    if !self.ctx().can_be_module {
+                        self.emit_err(self.input.cur_span(), SyntaxError::TopLevelAwaitInScript);
+                    }
+                }
+
                 if peeked_is!(self, "using") {
+                    let eaten_await = Some(self.input.cur_pos());
                     assert_and_bump!(self, "await");
                     let v = self.parse_using_decl(start, true)?;
                     if let Some(v) = v {
-                        return Ok(Stmt::Decl(Decl::Using(v)));
+                        return Ok(v.into());
                     }
+
+                    let expr = self.parse_await_expr(eaten_await)?;
+                    let expr = self
+                        .include_in_expr(true)
+                        .parse_bin_op_recursively(expr, 0)?;
+                    eat!(self, ';');
+
+                    let span = span!(self, start);
+                    return Ok(ExprStmt { span, expr }.into());
                 }
             }
 
@@ -197,18 +188,19 @@ impl<'a, I: Tokens> Parser<I> {
                 }
 
                 return Ok(if is_break {
-                    Stmt::Break(BreakStmt { span, label })
+                    BreakStmt { span, label }.into()
                 } else {
-                    Stmt::Continue(ContinueStmt { span, label })
+                    ContinueStmt { span, label }.into()
                 });
             }
 
             tok!("debugger") => {
                 bump!(self);
                 expect!(self, ';');
-                return Ok(Stmt::Debugger(DebuggerStmt {
+                return Ok(DebuggerStmt {
                     span: span!(self, start),
-                }));
+                }
+                .into());
             }
 
             tok!("do") => {
@@ -260,10 +252,11 @@ impl<'a, I: Tokens> Parser<I> {
                 let _ = self.parse_catch_clause();
                 let _ = self.parse_finally_block();
 
-                return Ok(Stmt::Expr(ExprStmt {
+                return Ok(ExprStmt {
                     span,
-                    expr: Box::new(Expr::Invalid(Invalid { span })),
-                }));
+                    expr: Invalid { span }.into(),
+                }
+                .into());
             }
 
             // Error recovery
@@ -273,10 +266,11 @@ impl<'a, I: Tokens> Parser<I> {
 
                 let _ = self.parse_finally_block();
 
-                return Ok(Stmt::Expr(ExprStmt {
+                return Ok(ExprStmt {
                     span,
-                    expr: Box::new(Expr::Invalid(Invalid { span })),
-                }));
+                    expr: Invalid { span }.into(),
+                }
+                .into());
             }
 
             tok!("try") => {
@@ -293,32 +287,32 @@ impl<'a, I: Tokens> Parser<I> {
 
             tok!("var") => {
                 let v = self.parse_var_stmt(false)?;
-                return Ok(Stmt::Decl(Decl::Var(v)));
+                return Ok(v.into());
             }
 
             tok!("const") if include_decl => {
                 let v = self.parse_var_stmt(false)?;
-                return Ok(Stmt::Decl(Decl::Var(v)));
+                return Ok(v.into());
             }
 
             // 'let' can start an identifier reference.
             tok!("let") if include_decl => {
                 let strict = self.ctx().strict;
                 let is_keyword = match peek!(self) {
-                    Ok(t) => t.follows_keyword_let(strict),
+                    Some(t) => t.kind().follows_keyword_let(strict),
                     _ => false,
                 };
 
                 if is_keyword {
                     let v = self.parse_var_stmt(false)?;
-                    return Ok(Stmt::Decl(Decl::Var(v)));
+                    return Ok(v.into());
                 }
             }
 
             tok!("using") if include_decl => {
                 let v = self.parse_using_decl(start, false)?;
                 if let Some(v) = v {
-                    return Ok(Stmt::Decl(Decl::Using(v)));
+                    return Ok(v.into());
                 }
             }
 
@@ -329,9 +323,18 @@ impl<'a, I: Tokens> Parser<I> {
                 {
                     let start = self.input.cur_pos();
                     bump!(self);
-                    return Ok(Stmt::Decl(Decl::TsInterface(
-                        self.parse_ts_interface_decl(start)?,
-                    )));
+                    return Ok(self.parse_ts_interface_decl(start)?.into());
+                }
+            }
+
+            tok!("type") => {
+                if is_typescript
+                    && peeked_is!(self, IdentName)
+                    && !self.input.has_linebreak_between_cur_and_peeked()
+                {
+                    let start = self.input.cur_pos();
+                    bump!(self);
+                    return Ok(self.parse_ts_type_alias_decl(start)?.into());
                 }
             }
 
@@ -342,9 +345,7 @@ impl<'a, I: Tokens> Parser<I> {
                 {
                     let start = self.input.cur_pos();
                     bump!(self);
-                    return Ok(Stmt::Decl(Decl::TsEnum(
-                        self.parse_ts_enum_decl(start, false)?,
-                    )));
+                    return Ok(self.parse_ts_enum_decl(start, false)?.into());
                 }
             }
 
@@ -360,9 +361,10 @@ impl<'a, I: Tokens> Parser<I> {
         }
 
         if eat_exact!(self, ';') {
-            return Ok(Stmt::Empty(EmptyStmt {
+            return Ok(EmptyStmt {
                 span: span!(self, start),
-            }));
+            }
+            .into());
         }
 
         // Handle async function foo() {}
@@ -385,12 +387,12 @@ impl<'a, I: Tokens> Parser<I> {
                 if eat!(self, ':') {
                     return self.parse_labelled_stmt(ident);
                 }
-                Box::new(Expr::Ident(ident))
+                ident.into()
             }
             _ => self.verify_expr(expr)?,
         };
         if let Expr::Ident(ref ident) = *expr {
-            if *ident.sym == js_word!("interface") && self.input.had_line_break_before_cur() {
+            if &*ident.sym == "interface" && self.input.had_line_break_before_cur() {
                 self.emit_strict_mode_err(
                     ident.span,
                     SyntaxError::InvalidIdentInStrict(ident.sym.clone()),
@@ -398,22 +400,23 @@ impl<'a, I: Tokens> Parser<I> {
 
                 eat!(self, ';');
 
-                return Ok(Stmt::Expr(ExprStmt {
+                return Ok(ExprStmt {
                     span: span!(self, start),
                     expr,
-                }));
+                }
+                .into());
             }
 
             if self.input.syntax().typescript() {
                 if let Some(decl) = self.parse_ts_expr_stmt(decorators, ident.clone())? {
-                    return Ok(Stmt::Decl(decl));
+                    return Ok(decl.into());
                 }
             }
         }
 
         if let Expr::Ident(Ident { ref sym, span, .. }) = *expr {
-            match *sym {
-                js_word!("enum") | js_word!("interface") => {
+            match &**sym {
+                "enum" | "interface" => {
                     self.emit_strict_mode_err(span, SyntaxError::InvalidIdentInStrict(sym.clone()));
                 }
                 _ => {}
@@ -422,8 +425,8 @@ impl<'a, I: Tokens> Parser<I> {
 
         if self.syntax().typescript() {
             if let Expr::Ident(ref i) = *expr {
-                match i.sym {
-                    js_word!("public") | js_word!("static") | js_word!("abstract") => {
+                match &*i.sym {
+                    "public" | "static" | "abstract" => {
                         if eat!(self, "interface") {
                             self.emit_err(i.span, SyntaxError::TS2427);
                             return self
@@ -438,10 +441,11 @@ impl<'a, I: Tokens> Parser<I> {
         }
 
         if eat!(self, ';') {
-            Ok(Stmt::Expr(ExprStmt {
+            Ok(ExprStmt {
                 span: span!(self, start),
                 expr,
-            }))
+            }
+            .into())
         } else {
             if let Token::BinOp(..) = *cur!(self, false)? {
                 self.emit_err(self.input.cur_span(), SyntaxError::TS1005);
@@ -505,7 +509,7 @@ impl<'a, I: Tokens> Parser<I> {
 
         let cons = {
             // Prevent stack overflow
-            crate::maybe_grow(512 * 1024, 2 * 1024 * 1024, || {
+            crate::maybe_grow(256 * 1024, 1024 * 1024, || {
                 // Annex B
                 if !self.ctx().strict && is!(self, "function") {
                     // TODO: report error?
@@ -537,15 +541,13 @@ impl<'a, I: Tokens> Parser<I> {
                 }
 
                 if !is!(self, "if") {
-                    // As we eat `else` above, we need to parse statement once.
-                    let last = crate::maybe_grow(512 * 1024, 2 * 1024 * 1024, || {
-                        let ctx = Context {
-                            ignore_else_clause: false,
-                            ..self.ctx()
-                        };
+                    let ctx = Context {
+                        ignore_else_clause: false,
+                        ..self.ctx()
+                    };
 
-                        self.with_ctx(ctx).parse_stmt(false)
-                    })?;
+                    // As we eat `else` above, we need to parse statement once.
+                    let last = self.with_ctx(ctx).parse_stmt(false)?;
                     break Some(last);
                 }
 
@@ -555,7 +557,7 @@ impl<'a, I: Tokens> Parser<I> {
 
                 match &mut cur {
                     Some(cur) => {
-                        self.adjust_if_else_clause(cur, Box::new(Stmt::If(alt)));
+                        self.adjust_if_else_clause(cur, Box::new(alt.into()));
                     }
                     _ => {
                         cur = Some(alt);
@@ -568,7 +570,7 @@ impl<'a, I: Tokens> Parser<I> {
                     if let Some(last) = last {
                         self.adjust_if_else_clause(&mut cur, Box::new(last));
                     }
-                    Some(Stmt::If(cur))
+                    Some(cur.into())
                 }
                 _ => last,
             }
@@ -596,10 +598,11 @@ impl<'a, I: Tokens> Parser<I> {
                 p.include_in_expr(true).parse_expr().map(Some)?
             };
             expect!(p, ';');
-            Ok(Stmt::Return(ReturnStmt {
+            Ok(ReturnStmt {
                 span: span!(p, start),
                 arg,
-            }))
+            }
+            .into())
         });
 
         if !self.ctx().in_function && !self.input.syntax().allow_return_outside_function() {
@@ -618,7 +621,7 @@ impl<'a, I: Tokens> Parser<I> {
         let discriminant = self.include_in_expr(true).parse_expr()?;
         expect!(self, ')');
 
-        let mut cases = vec![];
+        let mut cases = Vec::new();
         let mut span_of_previous_default = None;
 
         expect!(self, '{');
@@ -629,7 +632,7 @@ impl<'a, I: Tokens> Parser<I> {
 
         self.with_ctx(ctx).parse_with(|p| {
             while is_one_of!(p, "case", "default") {
-                let mut cons = vec![];
+                let mut cons = Vec::new();
                 let is_case = is!(p, "case");
                 let case_start = cur_pos!(p);
                 bump!(p);
@@ -650,7 +653,7 @@ impl<'a, I: Tokens> Parser<I> {
                 }
 
                 cases.push(SwitchCase {
-                    span: Span::new(case_start, p.input.prev_span().hi, Default::default()),
+                    span: Span::new(case_start, p.input.prev_span().hi),
                     test,
                     cons,
                 });
@@ -662,11 +665,12 @@ impl<'a, I: Tokens> Parser<I> {
         // eof or rbrace
         expect!(self, '}');
 
-        Ok(Stmt::Switch(SwitchStmt {
+        Ok(SwitchStmt {
             span: span!(self, switch_start),
             discriminant,
             cases,
-        }))
+        }
+        .into())
     }
 
     fn parse_throw_stmt(&mut self) -> PResult<Stmt> {
@@ -683,7 +687,7 @@ impl<'a, I: Tokens> Parser<I> {
         expect!(self, ';');
 
         let span = span!(self, start);
-        Ok(Stmt::Throw(ThrowStmt { span, arg }))
+        Ok(ThrowStmt { span, arg }.into())
     }
 
     fn parse_try_stmt(&mut self) -> PResult<Stmt> {
@@ -697,19 +701,17 @@ impl<'a, I: Tokens> Parser<I> {
         let finalizer = self.parse_finally_block()?;
 
         if handler.is_none() && finalizer.is_none() {
-            self.emit_err(
-                Span::new(catch_start, catch_start, Default::default()),
-                SyntaxError::TS1005,
-            );
+            self.emit_err(Span::new(catch_start, catch_start), SyntaxError::TS1005);
         }
 
         let span = span!(self, start);
-        Ok(Stmt::Try(Box::new(TryStmt {
+        Ok(TryStmt {
             span,
             block,
             handler,
             finalizer,
-        })))
+        }
+        .into())
     }
 
     fn parse_catch_clause(&mut self) -> PResult<Option<CatchClause>> {
@@ -741,7 +743,7 @@ impl<'a, I: Tokens> Parser<I> {
     /// It's optional since es2019
     fn parse_catch_param(&mut self) -> PResult<Option<Pat>> {
         if eat!(self, '(') {
-            let mut pat = self.parse_binding_pat_or_ident()?;
+            let mut pat = self.parse_binding_pat_or_ident(false)?;
 
             let type_ann_start = cur_pos!(self);
 
@@ -796,7 +798,7 @@ impl<'a, I: Tokens> Parser<I> {
 
         assert_and_bump!(self, "using");
 
-        let mut decls = vec![];
+        let mut decls = Vec::new();
         let mut first = true;
         while first || eat!(self, ',') {
             if first {
@@ -875,14 +877,15 @@ impl<'a, I: Tokens> Parser<I> {
             match res {
                 Ok(true) => {
                     let pos = var_span.hi();
-                    let span = Span::new(pos, pos, Default::default());
+                    let span = Span::new(pos, pos);
                     self.emit_err(span, SyntaxError::TS1123);
 
                     return Ok(Box::new(VarDecl {
                         span: span!(self, start),
                         kind,
                         declare: false,
-                        decls: vec![],
+                        decls: Vec::new(),
+                        ..Default::default()
                     }));
                 }
                 Err(..) => {}
@@ -890,7 +893,7 @@ impl<'a, I: Tokens> Parser<I> {
             }
         }
 
-        let mut decls = vec![];
+        let mut decls = Vec::new();
         let mut first = true;
         while first || eat!(self, ',') {
             if first {
@@ -913,7 +916,7 @@ impl<'a, I: Tokens> Parser<I> {
             if is_exact!(self, ';') || eof!(self) {
                 let prev_span = self.input.prev_span();
                 let span = if prev_span == var_span {
-                    Span::new(prev_span.hi, prev_span.hi, Default::default())
+                    Span::new(prev_span.hi, prev_span.hi)
                 } else {
                     prev_span
                 };
@@ -943,6 +946,7 @@ impl<'a, I: Tokens> Parser<I> {
             declare: false,
             kind,
             decls,
+            ..Default::default()
         }))
     }
 
@@ -953,7 +957,9 @@ impl<'a, I: Tokens> Parser<I> {
     ) -> PResult<VarDeclarator> {
         let start = cur_pos!(self);
 
-        let mut name = self.parse_binding_pat_or_ident()?;
+        let is_let_or_const = matches!(kind, VarDeclKind::Let | VarDeclKind::Const);
+
+        let mut name = self.parse_binding_pat_or_ident(is_let_or_const)?;
 
         let definite = if self.input.syntax().typescript() {
             match name {
@@ -1048,7 +1054,7 @@ impl<'a, I: Tokens> Parser<I> {
 
         let span = span!(self, start);
 
-        Ok(Stmt::DoWhile(DoWhileStmt { span, test, body }))
+        Ok(DoWhileStmt { span, test, body }.into())
     }
 
     fn parse_while_stmt(&mut self) -> PResult<Stmt> {
@@ -1068,7 +1074,7 @@ impl<'a, I: Tokens> Parser<I> {
         let body = self.with_ctx(ctx).parse_stmt(false).map(Box::new)?;
 
         let span = span!(self, start);
-        Ok(Stmt::While(WhileStmt { span, test, body }))
+        Ok(WhileStmt { span, test, body }.into())
     }
 
     fn parse_with_stmt(&mut self) -> PResult<Stmt> {
@@ -1097,7 +1103,7 @@ impl<'a, I: Tokens> Parser<I> {
         let body = self.with_ctx(ctx).parse_stmt(false).map(Box::new)?;
 
         let span = span!(self, start);
-        Ok(Stmt::With(WithStmt { span, obj, body }))
+        Ok(WithStmt { span, obj, body }.into())
     }
 
     pub(super) fn parse_block(&mut self, allow_directives: bool) -> PResult<BlockStmt> {
@@ -1108,7 +1114,11 @@ impl<'a, I: Tokens> Parser<I> {
         let stmts = self.parse_block_body(allow_directives, false, Some(&tok!('}')))?;
 
         let span = span!(self, start);
-        Ok(BlockStmt { span, stmts })
+        Ok(BlockStmt {
+            span,
+            stmts,
+            ctxt: Default::default(),
+        })
     }
 
     fn parse_labelled_stmt(&mut self, l: Ident) -> PResult<Stmt> {
@@ -1120,15 +1130,19 @@ impl<'a, I: Tokens> Parser<I> {
         self.with_ctx(ctx).parse_with(|p| {
             let start = l.span.lo();
 
+            let mut errors = Vec::new();
             for lb in &p.state.labels {
                 if l.sym == *lb {
-                    p.emit_err(l.span, SyntaxError::DuplicateLabel(l.sym.clone()));
+                    errors.push(Error::new(
+                        l.span,
+                        SyntaxError::DuplicateLabel(l.sym.clone()),
+                    ));
                 }
             }
             p.state.labels.push(l.sym.clone());
 
             let body = Box::new(if is!(p, "function") {
-                let f = p.parse_fn_decl(vec![])?;
+                let f = p.parse_fn_decl(Vec::new())?;
                 if let Decl::Fn(FnDecl { function, .. }) = &f {
                     if p.ctx().strict {
                         p.emit_err(function.span, SyntaxError::LabelledFunctionInStrict)
@@ -1143,6 +1157,10 @@ impl<'a, I: Tokens> Parser<I> {
                 p.parse_stmt(false)?
             });
 
+            for err in errors {
+                p.emit_error(err);
+            }
+
             {
                 let pos = p.state.labels.iter().position(|v| v == &l.sym);
                 if let Some(pos) = pos {
@@ -1150,11 +1168,12 @@ impl<'a, I: Tokens> Parser<I> {
                 }
             }
 
-            Ok(Stmt::Labeled(LabeledStmt {
+            Ok(LabeledStmt {
                 span: span!(p, start),
                 label: l,
                 body,
-            }))
+            }
+            .into())
         })
     }
 
@@ -1190,33 +1209,36 @@ impl<'a, I: Tokens> Parser<I> {
                     syntax_error!(self, await_token, SyntaxError::AwaitForStmt);
                 }
 
-                Stmt::For(ForStmt {
+                ForStmt {
                     span,
                     init,
                     test,
                     update,
                     body,
-                })
+                }
+                .into()
             }
             TempForHead::ForIn { left, right } => {
                 if let Some(await_token) = await_token {
                     syntax_error!(self, await_token, SyntaxError::AwaitForStmt);
                 }
 
-                Stmt::ForIn(ForInStmt {
+                ForInStmt {
                     span,
                     left,
                     right,
                     body,
-                })
+                }
+                .into()
             }
-            TempForHead::ForOf { left, right } => Stmt::ForOf(ForOfStmt {
+            TempForHead::ForOf { left, right } => ForOfStmt {
                 span,
                 is_await: await_token.is_some(),
                 left,
                 right,
                 body,
-            }),
+            }
+            .into(),
         })
     }
 
@@ -1224,7 +1246,8 @@ impl<'a, I: Tokens> Parser<I> {
         let strict = self.ctx().strict;
 
         if is_one_of!(self, "const", "var")
-            || (is!(self, "let") && peek!(self)?.follows_keyword_let(strict))
+            || (is!(self, "let")
+                && peek!(self).map_or(false, |v| v.kind().follows_keyword_let(strict)))
         {
             let decl = self.parse_var_stmt(true)?;
 
@@ -1272,23 +1295,38 @@ impl<'a, I: Tokens> Parser<I> {
         let start = cur_pos!(self);
         let init = self.include_in_expr(false).parse_for_head_prefix()?;
 
-        let is_using_decl = self.input.syntax().explicit_resource_management()
-            && match *init {
-                Expr::Ident(Ident {
-                    sym: js_word!("using"),
-                    ..
-                }) => {
-                    is!(self, BindingIdent)
-                        && !is!(self, "of")
-                        && (peeked_is!(self, "of") || peeked_is!(self, "in"))
-                }
-                _ => false,
-            };
+        let mut is_using_decl = false;
+        let mut is_await_using_decl = false;
+
+        if self.input.syntax().explicit_resource_management() {
+            // using foo
+            let mut maybe_using_decl = init.is_ident_ref_to("using");
+            let mut maybe_await_using_decl = false;
+
+            // await using foo
+            if !maybe_using_decl
+                && init
+                    .as_await_expr()
+                    .filter(|e| e.arg.is_ident_ref_to("using"))
+                    .is_some()
+            {
+                maybe_using_decl = true;
+                maybe_await_using_decl = true;
+            }
+
+            if maybe_using_decl
+                && !is!(self, "of")
+                && (peeked_is!(self, "of") || peeked_is!(self, "in"))
+            {
+                is_using_decl = maybe_using_decl;
+                is_await_using_decl = maybe_await_using_decl;
+            }
+        }
 
         if is_using_decl {
-            let name = self.parse_binding_ident()?;
+            let name = self.parse_binding_ident(false)?;
             let decl = VarDeclarator {
-                name: Pat::Ident(name),
+                name: name.into(),
                 span: span!(self, start),
                 init: None,
                 definite: false,
@@ -1296,11 +1334,11 @@ impl<'a, I: Tokens> Parser<I> {
 
             let pat = Box::new(UsingDecl {
                 span: span!(self, start),
-                is_await: false,
+                is_await: is_await_using_decl,
                 decls: vec![decl],
             });
 
-            cur!(self, true)?;
+            cur!(self, true);
 
             return self.parse_for_each_head(ForHead::UsingDecl(pat));
         }
@@ -1383,15 +1421,7 @@ enum TempForHead {
 pub(super) trait IsDirective {
     fn as_ref(&self) -> Option<&Stmt>;
     fn is_use_strict(&self) -> bool {
-        match self.as_ref() {
-            Some(Stmt::Expr(expr)) => match *expr.expr {
-                Expr::Lit(Lit::Str(Str { ref raw, .. })) => {
-                    matches!(raw, Some(value) if value == "\"use strict\"" || value == "'use strict'")
-                }
-                _ => false,
-            },
-            _ => false,
-        }
+        self.as_ref().map_or(false, Stmt::is_use_strict)
     }
 }
 
@@ -1432,7 +1462,7 @@ where
     }
 }
 
-impl<'a, I: Tokens> StmtLikeParser<'a, Stmt> for Parser<I> {
+impl<I: Tokens> StmtLikeParser<'_, Stmt> for Parser<I> {
     fn handle_import_export(&mut self, _: bool, _: Vec<Decorator>) -> PResult<Stmt> {
         let start = cur_pos!(self);
         if is!(self, "import") && peeked_is!(self, '(') {
@@ -1469,7 +1499,7 @@ mod tests {
     use swc_ecma_visit::assert_eq_ignore_span;
 
     use super::*;
-    use crate::EsConfig;
+    use crate::EsSyntax;
 
     fn stmt(s: &'static str) -> Stmt {
         test_parser(s, Syntax::default(), |p| p.parse_stmt(true))
@@ -1501,7 +1531,7 @@ mod tests {
                 span,
                 block: BlockStmt {
                     span,
-                    stmts: vec![]
+                    ..Default::default()
                 },
                 handler: Some(CatchClause {
                     span,
@@ -1511,7 +1541,9 @@ mod tests {
                         props: vec![ObjectPatProp::Rest(RestPat {
                             span,
                             dot3_token: span,
-                            arg: Box::new(Pat::Ident(Ident::new("a34".into(), span).into())),
+                            arg: Box::new(Pat::Ident(
+                                Ident::new_no_ctxt("a34".into(), span).into()
+                            )),
                             type_ann: None
                         })],
                         type_ann: None,
@@ -1519,7 +1551,7 @@ mod tests {
                     .into(),
                     body: BlockStmt {
                         span,
-                        stmts: vec![]
+                        ..Default::default()
                     }
                 }),
                 finalizer: None
@@ -1551,12 +1583,12 @@ mod tests {
                     decls: vec![VarDeclarator {
                         span,
                         init: None,
-                        name: Pat::Ident(Ident::new("a".into(), span).into()),
+                        name: Pat::Ident(Ident::new_no_ctxt("a".into(), span).into()),
                         definite: false,
                     }],
-                    declare: false,
+                    ..Default::default()
                 })),
-                right: Box::new(Expr::Ident(Ident::new("b".into(), span))),
+                right: Box::new(Expr::Ident(Ident::new_no_ctxt("b".into(), span))),
 
                 body: Box::new(Stmt::Empty(EmptyStmt { span })),
             })
@@ -1579,6 +1611,7 @@ mod tests {
             Stmt::Block(BlockStmt {
                 span,
                 stmts: vec![stmt("1")],
+                ..Default::default()
             })
         );
     }
@@ -1605,14 +1638,14 @@ mod tests {
             @dec2
             class Foo {}
             ",
-                Syntax::Es(EsConfig {
+                Syntax::Es(EsSyntax {
                     decorators: true,
                     ..Default::default()
                 }),
                 |p| p.parse_stmt_list_item(true),
             ),
             Stmt::Decl(Decl::Class(ClassDecl {
-                ident: Ident::new("Foo".into(), span),
+                ident: Ident::new_no_ctxt("Foo".into(), span),
                 class: Box::new(Class {
                     span,
                     decorators: vec![
@@ -1626,11 +1659,9 @@ mod tests {
                         }
                     ],
                     super_class: None,
-                    implements: vec![],
-                    body: vec![],
+                    body: Vec::new(),
                     is_abstract: false,
-                    super_type_params: None,
-                    type_params: None,
+                    ..Default::default()
                 }),
                 declare: false,
             }))
@@ -1652,7 +1683,7 @@ ReactDOM.render(<App />, document.getElementById('root'))
 "#;
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1671,7 +1702,7 @@ function App() {
 export default App"#;
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1684,7 +1715,7 @@ export default App"#;
         let src = "export v, { x, y as w } from 'mod';";
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1697,7 +1728,7 @@ export default App"#;
         let src = "export foo from 'bar';";
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1710,7 +1741,7 @@ export default App"#;
         let src = "export default from 'bar';";
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1723,7 +1754,7 @@ export default App"#;
         let src = "export default, {foo} from 'bar';";
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1753,7 +1784,7 @@ let x = 4";
     fn issue_226() {
         test_parser(
             "export * as Foo from 'bar';",
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1766,7 +1797,7 @@ let x = 4";
     fn issue_4369_1() {
         test_parser(
             r#"export * as foo, { bar } from "mod""#,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: false,
                 ..Default::default()
             }),
@@ -1778,7 +1809,7 @@ let x = 4";
     fn issue_4369_2() {
         test_parser(
             r#"export foo, * as bar, { baz } from "mod""#,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1790,7 +1821,7 @@ let x = 4";
     fn issue_4369_3() {
         test_parser(
             r#"export foo, * as bar from "mod""#,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1802,7 +1833,7 @@ let x = 4";
     fn issue_4369_4() {
         test_parser(
             r#"export * as bar, { baz } from "mod""#,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -1814,7 +1845,7 @@ let x = 4";
     fn issue_4369_5() {
         test_parser(
             r#"export foo, { baz } from "mod""#,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 export_default_from: true,
                 ..Default::default()
             }),
@@ -2044,15 +2075,16 @@ export default function waitUntil(callback, options = {}) {
                             elems: vec![
                                 None,
                                 None,
-                                Some(Pat::Ident(Ident::new("t".into(), span).into()))
+                                Some(Pat::Ident(Ident::new_no_ctxt("t".into(), span).into()))
                             ]
                         }),
-                        init: Some(Box::new(Expr::Ident(Ident::new(
+                        init: Some(Box::new(Expr::Ident(Ident::new_no_ctxt(
                             "simple_array".into(),
                             span
                         )))),
                         definite: false
-                    }]
+                    }],
+                    ..Default::default()
                 }))
             ),
             _ => unreachable!(),
@@ -2065,7 +2097,6 @@ export default function waitUntil(callback, options = {}) {
                 v,
                 VarDeclOrExpr::VarDecl(Box::new(VarDecl {
                     span,
-                    declare: false,
                     kind: VarDeclKind::Let,
                     decls: vec![VarDeclarator {
                         span,
@@ -2075,13 +2106,17 @@ export default function waitUntil(callback, options = {}) {
                             span,
                             props: vec![ObjectPatProp::Assign(AssignPatProp {
                                 span,
-                                key: Ident::new("num".into(), span),
+                                key: Ident::new_no_ctxt("num".into(), span).into(),
                                 value: None
                             })]
                         }),
-                        init: Some(Box::new(Expr::Ident(Ident::new("obj".into(), span)))),
+                        init: Some(Box::new(Expr::Ident(Ident::new_no_ctxt(
+                            "obj".into(),
+                            span
+                        )))),
                         definite: false
-                    }]
+                    }],
+                    ..Default::default()
                 }))
             ),
             _ => unreachable!(),
@@ -2221,7 +2256,7 @@ export default function waitUntil(callback, options = {}) {
                 ident: Some(Ident {
                     span,
                     sym: "Foo".into(),
-                    optional: false,
+                    ..Default::default()
                 }),
                 class: Box::new(Class {
                     span,
@@ -2236,8 +2271,10 @@ export default function waitUntil(callback, options = {}) {
                         body: BlockStmt {
                             span,
                             stmts: vec!(stmt("1 + 1;")),
+                            ..Default::default()
                         }
-                    }))
+                    })),
+                    ..Default::default()
                 })
             }))
         );
@@ -2252,22 +2289,20 @@ export default function waitUntil(callback, options = {}) {
                 ident: Some(Ident {
                     span,
                     sym: "Foo".into(),
-                    optional: false,
+                    ..Default::default()
                 }),
                 class: Box::new(Class {
                     span,
                     decorators: Vec::new(),
                     super_class: None,
-                    type_params: None,
-                    super_type_params: None,
                     is_abstract: false,
-                    implements: Vec::new(),
                     body: vec!(
                         ClassMember::StaticBlock(StaticBlock {
                             span,
                             body: BlockStmt {
                                 span,
                                 stmts: vec!(stmt("1 + 1;")),
+                                ..Default::default()
                             },
                         }),
                         ClassMember::StaticBlock(StaticBlock {
@@ -2275,9 +2310,11 @@ export default function waitUntil(callback, options = {}) {
                             body: BlockStmt {
                                 span,
                                 stmts: vec!(stmt("1 + 1;")),
+                                ..Default::default()
                             },
                         })
-                    )
+                    ),
+                    ..Default::default()
                 })
             }))
         );
@@ -2297,23 +2334,20 @@ export default function waitUntil(callback, options = {}) {
                 ident: Some(Ident {
                     span,
                     sym: "Foo".into(),
-                    optional: false,
+                    ..Default::default()
                 }),
                 class: Box::new(Class {
                     span,
-                    decorators: Vec::new(),
-                    super_class: None,
-                    type_params: None,
-                    super_type_params: None,
                     is_abstract: false,
-                    implements: Vec::new(),
                     body: vec!(ClassMember::StaticBlock(StaticBlock {
                         span,
                         body: BlockStmt {
                             span,
                             stmts: vec!(stmt("1 + 1;")),
+                            ..Default::default()
                         }
-                    }))
+                    })),
+                    ..Default::default()
                 })
             }))
         );
@@ -2331,23 +2365,20 @@ export default function waitUntil(callback, options = {}) {
                 ident: Some(Ident {
                     span,
                     sym: "Foo".into(),
-                    optional: false,
+                    ..Default::default()
                 }),
                 class: Box::new(Class {
                     span,
-                    decorators: Vec::new(),
-                    super_class: None,
-                    type_params: None,
-                    super_type_params: None,
                     is_abstract: false,
-                    implements: Vec::new(),
                     body: vec!(ClassMember::StaticBlock(StaticBlock {
                         span,
                         body: BlockStmt {
                             span,
                             stmts: Vec::new(),
+                            ..Default::default()
                         }
-                    }))
+                    })),
+                    ..Default::default()
                 })
             }))
         );
@@ -2383,6 +2414,46 @@ export default function waitUntil(callback, options = {}) {
         test_parser(src, Syntax::Typescript(Default::default()), |p| {
             p.parse_expr()
         });
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected ident")]
+    fn class_static_blocks_with_await() {
+        let src = "class Foo{
+            static {
+                var await = 'bar';
+            }
+        }";
+        test_parser(src, Syntax::Es(Default::default()), |p| p.parse_expr());
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected ident")]
+    fn class_static_blocks_with_await_in_nested_class() {
+        let src = "class Foo{
+            static {
+                function foo() {
+                    class Foo {
+                        static {
+                            var await = 'bar';
+                        }
+                    }
+                }
+            }
+        }";
+        test_parser(src, Syntax::Es(Default::default()), |p| p.parse_expr());
+    }
+
+    #[test]
+    fn class_static_blocks_with_await_in_fn() {
+        let src = "class Foo{
+            static {
+                function foo() {
+                    var await = 'bar';
+                }
+            }
+        }";
+        test_parser(src, Syntax::Es(Default::default()), |p| p.parse_expr());
     }
 
     #[test]
@@ -2433,7 +2504,7 @@ export default function waitUntil(callback, options = {}) {
         let src = "import('foo',)";
         test_parser(
             src,
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 import_attributes: true,
                 ..Default::default()
             }),

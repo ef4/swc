@@ -32,8 +32,7 @@
 //! -----
 //!
 //! Adopted from `synstructure`.
-use pmutil::{prelude::*, *};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{
     punctuated::Pair,
@@ -62,7 +61,6 @@ impl<'a> Binder<'a> {
         Self::new(&input.ident, &input.data, &input.attrs)
     }
 
-    ///
     pub fn variants(&self) -> Vec<VariantBinder<'a>> {
         match *self.body {
             Data::Enum(DataEnum { ref variants, .. }) => {
@@ -121,15 +119,11 @@ impl<'a> VariantBinder<'a> {
     /// `EnumName::VariantName` for enum, and `StructName` for struct.
     pub fn qual_path(&self) -> Path {
         match self.enum_name {
-            Some(enum_name) => Quote::new(def_site::<Span>())
-                .quote_with(smart_quote!(
-                    Vars {
-                        EnumName: enum_name,
-                        VariantName: self.name,
-                    },
-                    { EnumName::VariantName }
-                ))
-                .parse(),
+            Some(enum_name) => {
+                let vn = &self.name;
+
+                parse_quote!(#enum_name::#vn)
+            }
             None => self.name.clone().into(),
         }
     }
@@ -154,13 +148,13 @@ impl<'a> VariantBinder<'a> {
                 });
 
                 // Unit struct does not have any field to bind
-                (pat, vec![])
+                (pat, Vec::new())
             }
             Fields::Named(FieldsNamed {
                 named: ref fields,
                 brace_token,
             }) => {
-                let mut bindings = vec![];
+                let mut bindings = Vec::new();
 
                 let fields = fields
                     .pairs()
@@ -176,7 +170,8 @@ impl<'a> VariantBinder<'a> {
                                 .clone()
                                 .expect("field of struct-like variants should have name");
 
-                            let binded_ident = ident.new_ident_with(|s| format!("{}{}", prefix, s));
+                            let binded_ident =
+                                Ident::new(&format!("{}{}", prefix, ident), ident.span());
                             bindings.push(BindedField {
                                 idx,
                                 binded_ident: binded_ident.clone(),
@@ -218,7 +213,7 @@ impl<'a> VariantBinder<'a> {
                 paren_token,
             }) => {
                 // TODO
-                let mut bindings = vec![];
+                let mut bindings = Vec::new();
 
                 let pats = fields
                     .pairs()
@@ -230,7 +225,8 @@ impl<'a> VariantBinder<'a> {
                     .map(|(idx, f)| {
                         f.map_item(|f| {
                             let binded_ident =
-                                def_site::<Span>().new_ident(format!("{}{}", prefix, idx));
+                                Ident::new(&format!("{}{}", prefix, idx), def_site());
+
                             bindings.push(BindedField {
                                 idx,
                                 binded_ident: binded_ident.clone(),
@@ -284,7 +280,7 @@ pub struct BindedField<'a> {
     field: &'a Field,
 }
 
-impl<'a> BindedField<'a> {
+impl BindedField<'_> {
     pub const fn idx(&self) -> usize {
         self.idx
     }
@@ -299,7 +295,7 @@ impl<'a> BindedField<'a> {
     }
 }
 
-impl<'a> ToTokens for BindedField<'a> {
+impl ToTokens for BindedField<'_> {
     fn to_tokens(&self, t: &mut TokenStream) {
         self.binded_ident.to_tokens(t)
     }

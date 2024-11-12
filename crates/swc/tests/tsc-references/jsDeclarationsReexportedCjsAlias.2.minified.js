@@ -1,8 +1,6 @@
 //// [lib.js]
-/**
- * @param {string} a
- */ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
-var SomeClass = function() {
+import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
+var SomeClass = /*#__PURE__*/ function() {
     function SomeClass() {
         _class_call_check(this, SomeClass);
     }
@@ -17,7 +15,7 @@ module.exports = {
     SomeClass: SomeClass
 };
 //// [main.js]
-var _require = require("./lib"), SomeClass = _require.SomeClass, Another = _require.SomeClass;
+var _require = require('./lib'), SomeClass = _require.SomeClass, Another = _require.SomeClass;
 module.exports = {
     SomeClass: SomeClass,
     Another: Another

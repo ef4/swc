@@ -2,16 +2,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Error;
 use relative_path::RelativePath;
-use swc_atoms::js_word;
 use swc_common::{collections::AHashMap, util::move_map::MoveMap, FileName, Mark, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::{
     fixer::fixer,
-    helpers::{inject_helpers, HELPERS},
+    helpers::{inject_helpers, Helpers, HELPERS},
     hygiene::hygiene,
 };
 use swc_ecma_utils::{contains_top_level_await, find_pat_ids, private_ident, ExprFactory};
-use swc_ecma_visit::{noop_fold_type, Fold, FoldWith};
+use swc_ecma_visit::{noop_fold_type, Fold, FoldWith, VisitMutWith};
 
 use crate::{hash::calc_hash, Bundle, BundleKind, Bundler, Load, ModuleType, Resolve};
 
@@ -38,27 +37,28 @@ where
                 bundle.module = self.optimize(bundle.module);
 
                 if !self.config.disable_hygiene {
-                    bundle.module = bundle.module.fold_with(&mut hygiene());
+                    bundle.module.visit_mut_with(&mut hygiene());
                 }
 
                 bundle.module = self.may_wrap_with_iife(bundle.module);
 
                 if !self.config.disable_fixer {
-                    bundle.module = bundle.module.fold_with(&mut fixer(None));
+                    bundle.module.visit_mut_with(&mut fixer(None));
                 }
 
                 {
                     // Inject swc helpers
-                    let swc_helpers = self
+                    let swc_helpers = *self
                         .scope
                         .get_module(bundle.id)
                         .expect("module should exist at this point")
-                        .swc_helpers;
+                        .swc_helpers
+                        .lock();
 
-                    let module = bundle.module;
-
-                    bundle.module = HELPERS.set(&swc_helpers, || {
-                        module.fold_with(&mut inject_helpers(unresolved_mark))
+                    HELPERS.set(&Helpers::from_data(swc_helpers), || {
+                        bundle
+                            .module
+                            .visit_mut_with(&mut inject_helpers(unresolved_mark));
                     });
                 }
 
@@ -118,7 +118,7 @@ where
             }
 
             new = new.move_map(|bundle| {
-                let path = match self.scope.get_module(bundle.id).unwrap().fm.name {
+                let path = match &*self.scope.get_module(bundle.id).unwrap().fm.name {
                     FileName::Real(ref v) => v.clone(),
                     _ => {
                         tracing::error!("Cannot rename: not a real file");
@@ -151,7 +151,7 @@ where
         let is_async = contains_top_level_await(&module);
 
         // Properties of returned object
-        let mut props = vec![];
+        let mut props = Vec::new();
 
         let mut body = BlockStmt {
             span: module.span,
@@ -191,7 +191,7 @@ where
                                 _ => unreachable!(),
                             }
 
-                            Some(Stmt::Decl(export.decl))
+                            Some(export.decl.into())
                         }
 
                         ModuleDecl::ExportNamed(NamedExport {
@@ -207,11 +207,11 @@ where
                                     ExportSpecifier::Default(s) => {
                                         props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
                                             KeyValueProp {
-                                                key: PropName::Ident(Ident::new(
-                                                    js_word!("default"),
+                                                key: PropName::Ident(IdentName::new(
+                                                    "default".into(),
                                                     DUMMY_SP,
                                                 )),
-                                                value: Box::new(Expr::Ident(s.exported)),
+                                                value: s.exported.into(),
                                             },
                                         ))));
                                     }
@@ -225,8 +225,8 @@ where
                                             };
                                             props.push(PropOrSpread::Prop(Box::new(
                                                 Prop::KeyValue(KeyValueProp {
-                                                    key: PropName::Ident(exported),
-                                                    value: Box::new(Expr::Ident(orig)),
+                                                    key: PropName::Ident(exported.into()),
+                                                    value: orig.into(),
                                                 }),
                                             )));
                                         }
@@ -259,19 +259,22 @@ where
 
                                 props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
                                     KeyValueProp {
-                                        key: PropName::Ident(Ident::new(
-                                            js_word!("default"),
+                                        key: PropName::Ident(IdentName::new(
+                                            "default".into(),
                                             export.span,
                                         )),
-                                        value: Box::new(Expr::Ident(ident.clone())),
+                                        value: ident.clone().into(),
                                     },
                                 ))));
 
-                                Some(Stmt::Decl(Decl::Class(ClassDecl {
-                                    ident,
-                                    class: expr.class,
-                                    declare: false,
-                                })))
+                                Some(
+                                    ClassDecl {
+                                        ident,
+                                        class: expr.class,
+                                        declare: false,
+                                    }
+                                    .into(),
+                                )
                             }
                             DefaultDecl::Fn(expr) => {
                                 let ident = expr.ident;
@@ -280,19 +283,22 @@ where
 
                                 props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
                                     KeyValueProp {
-                                        key: PropName::Ident(Ident::new(
-                                            js_word!("default"),
+                                        key: PropName::Ident(IdentName::new(
+                                            "default".into(),
                                             export.span,
                                         )),
-                                        value: Box::new(Expr::Ident(ident.clone())),
+                                        value: ident.clone().into(),
                                     },
                                 ))));
 
-                                Some(Stmt::Decl(Decl::Fn(FnDecl {
-                                    ident,
-                                    function: expr.function,
-                                    declare: false,
-                                })))
+                                Some(
+                                    FnDecl {
+                                        ident,
+                                        function: expr.function,
+                                        declare: false,
+                                    }
+                                    .into(),
+                                )
                             }
                             DefaultDecl::TsInterfaceDecl(_) => None,
                         },
@@ -303,40 +309,48 @@ where
                             ))));
                             let var = VarDeclarator {
                                 span: DUMMY_SP,
-                                name: Pat::Ident(default_var.into()),
+                                name: default_var.into(),
                                 init: Some(export.expr),
                                 definite: false,
                             };
-                            Some(Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                                span: DUMMY_SP,
-                                kind: VarDeclKind::Const,
-                                declare: false,
-                                decls: vec![var],
-                            }))))
+                            Some(
+                                VarDecl {
+                                    span: DUMMY_SP,
+                                    kind: VarDeclKind::Const,
+                                    declare: false,
+                                    decls: vec![var],
+                                    ..Default::default()
+                                }
+                                .into(),
+                            )
                         }
 
                         ModuleDecl::ExportAll(_) => None,
                     }
                 })
                 .collect(),
+            ..Default::default()
         };
-        body.stmts.push(Stmt::Return(ReturnStmt {
-            span: DUMMY_SP,
-            arg: Some(Box::new(Expr::Object(ObjectLit {
+        body.stmts.push(
+            ReturnStmt {
                 span: DUMMY_SP,
-                props,
-            }))),
-        }));
+                arg: Some(
+                    ObjectLit {
+                        span: DUMMY_SP,
+                        props,
+                    }
+                    .into(),
+                ),
+            }
+            .into(),
+        );
 
         let f = Function {
             is_generator: false,
             is_async,
-            params: Default::default(),
-            decorators: Default::default(),
             span: DUMMY_SP,
             body: Some(body),
-            type_params: Default::default(),
-            return_type: Default::default(),
+            ..Default::default()
         };
 
         let invoked_fn_expr = FnExpr {
@@ -344,12 +358,13 @@ where
             function: Box::new(f),
         };
 
-        let iife = Box::new(Expr::Call(CallExpr {
+        let iife = CallExpr {
             span: DUMMY_SP,
             callee: invoked_fn_expr.as_callee(),
             args: Default::default(),
-            type_args: Default::default(),
-        }));
+            ..Default::default()
+        }
+        .into();
 
         Module {
             span: DUMMY_SP,
@@ -383,7 +398,7 @@ where
             .resolver
             .resolve(&FileName::Real(self.base.clone()), &import.src.value)
         {
-            Ok(v) => match v {
+            Ok(v) => match v.filename {
                 FileName::Real(v) => v,
                 _ => panic!("rename_bundles called with non-path module"),
             },

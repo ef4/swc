@@ -1,11 +1,11 @@
 //// [heterogeneousArrayLiterals.ts]
 // type of an array is the best common type of its elements (plus its contextual type if it exists)
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var a = [
     1,
-    ""
+    ''
 ]; // {}[]
 var b = [
     1,
@@ -13,7 +13,7 @@ var b = [
 ]; // number[]
 var c = [
     1,
-    "",
+    '',
     null
 ]; // {}[]
 var d = [
@@ -35,13 +35,13 @@ var g = [
         1
     ],
     [
-        ""
+        ''
     ]
 ]; // {}[]
 var h = [
     {
         foo: 1,
-        bar: ""
+        bar: ''
     },
     {
         foo: 2
@@ -50,10 +50,10 @@ var h = [
 var i = [
     {
         foo: 1,
-        bar: ""
+        bar: ''
     },
     {
-        foo: ""
+        foo: ''
     }
 ]; // {}[]
 var j = [
@@ -61,7 +61,7 @@ var j = [
         return 1;
     },
     function() {
-        return "";
+        return '';
     }
 ]; // {}[]
 var k = [
@@ -85,7 +85,7 @@ var m = [
         return 1;
     },
     function() {
-        return "";
+        return '';
     },
     function() {
         return null;
@@ -99,7 +99,7 @@ var n = [
     ],
     [
         function() {
-            return "";
+            return '';
         }
     ]
 ]; // {}[]
@@ -110,20 +110,18 @@ var Base = function Base() {
 var Derived = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(Derived, Base);
-    var _super = _create_super(Derived);
     function Derived() {
         _class_call_check(this, Derived);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived, arguments);
     }
     return Derived;
 }(Base);
 var Derived2 = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(Derived2, Base);
-    var _super = _create_super(Derived2);
     function Derived2() {
         _class_call_check(this, Derived2);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived2, arguments);
     }
     return Derived2;
 }(Base);
@@ -218,7 +216,6 @@ var derived2;
         ]
     ]; // {}[]
 })(Derived || (Derived = {}));
-var WithContextualType;
 (function(WithContextualType) {
     // no errors
     var a = [
@@ -462,3 +459,4 @@ function foo4(t, u) {
  //    var j = [u, derived]; // Derived[]
  //    var k: Base[] = [t, u];
  //}
+var WithContextualType;

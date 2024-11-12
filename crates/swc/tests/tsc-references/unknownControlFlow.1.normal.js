@@ -1,4 +1,5 @@
 //// [unknownControlFlow.ts]
+import { _ as _type_of } from "@swc/helpers/_/_type_of";
 function f01(u) {
     var x1 = u; // Error
     var x2 = u;
@@ -132,23 +133,23 @@ function f23(x) {
     }
 }
 function f30(x) {
-    if (typeof x === "object") {
+    if ((typeof x === "undefined" ? "undefined" : _type_of(x)) === "object") {
         x; // object
     }
 }
 function f31(x) {
-    if (typeof x === "object") {
+    if ((typeof x === "undefined" ? "undefined" : _type_of(x)) === "object") {
         x; // T & object | T & null
     }
-    if (x && typeof x === "object") {
+    if (x && (typeof x === "undefined" ? "undefined" : _type_of(x)) === "object") {
         x; // T & object
     }
-    if (typeof x === "object" && x) {
+    if ((typeof x === "undefined" ? "undefined" : _type_of(x)) === "object" && x) {
         x; // T & object
     }
 }
 function f32(x) {
-    if (typeof x === "object") {
+    if ((typeof x === "undefined" ? "undefined" : _type_of(x)) === "object") {
         x; // T & object
     }
 }
@@ -189,7 +190,7 @@ function f41(a) {
 }
 // Repro from #48468
 function deepEquals(a, b) {
-    if (typeof a !== "object" || typeof b !== "object" || !a || !b) {
+    if ((typeof a === "undefined" ? "undefined" : _type_of(a)) !== 'object' || (typeof b === "undefined" ? "undefined" : _type_of(b)) !== 'object' || !a || !b) {
         return false;
     }
     if (Array.isArray(a) || Array.isArray(b)) {
@@ -222,10 +223,10 @@ function ff3(t, k) {
 function ff4(t, k) {
     t[k];
 }
-ff1(null, "foo"); // Error
-ff2(null, "foo"); // Error
-ff3(null, "foo");
-ff4(null, "foo"); // Error
+ff1(null, 'foo'); // Error
+ff2(null, 'foo'); // Error
+ff3(null, 'foo');
+ff4(null, 'foo'); // Error
 // Generics and intersections with {}
 function fx0(value) {
     if (value === 42) {
@@ -284,8 +285,8 @@ function fx10(x, y) {
 }
 // Repros from #50706
 function SendBlob(encoding) {
-    if (encoding !== undefined && encoding !== "utf8") {
-        throw new Error("encoding");
+    if (encoding !== undefined && encoding !== 'utf8') {
+        throw new Error('encoding');
     }
     encoding;
 }
@@ -294,7 +295,7 @@ function doSomething1(value) {
         return value;
     }
     if (value === 42) {
-        throw Error("Meaning of life value");
+        throw Error('Meaning of life value');
     }
     return value;
 }
@@ -310,12 +311,12 @@ function x(x, y) {
     var r2 = y;
 }
 function assertNever(v) {
-    throw new Error("never");
+    throw new Error('never');
 }
 function fx20(value) {
-    if (value === "left") {
+    if (value === 'left') {
         var foo = value;
-    } else if (value === "right") {
+    } else if (value === 'right') {
         var bar = value;
     } else {
         assertNever(value);

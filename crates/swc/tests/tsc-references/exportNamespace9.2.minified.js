@@ -3,7 +3,6 @@ export { };
 //// [/b.ts]
 export { };
 //// [/c.ts]
-//! 
 //!   x the name `A` is defined multiple times
 //!    ,-[1:1]
 //!  1 | import { A } from "./b";
@@ -21,7 +20,5 @@ import { A } from "./c";
 export var A = 1;
 //// [/f.ts]
 export * from "./e";
- // Collision error
 //// [/g.ts]
 import { A } from "./f";
- // Follow-on from collision error

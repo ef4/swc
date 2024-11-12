@@ -7,7 +7,7 @@ import { isBrowser } from "./utils/isbrowser";
 import { makeLoadScriptUrl } from "./utils/make-load-script-url";
 let cleaningUp = !1;
 export function DefaultLoadingElement() {
-    return _jsx("div", {
+    return /*#__PURE__*/ _jsx("div", {
         children: "Loading..."
     });
 }
@@ -28,7 +28,9 @@ class LoadScript extends React.PureComponent {
         }
     }
     componentDidUpdate(prevProps) {
-        this.props.libraries !== prevProps.libraries && console.warn("Performance warning! LoadScript has been reloaded unintentionally! You should not pass `libraries` prop as new array. Please keep an array of libraries as static class property for Components and PureComponents, or just a const variable outside of component, or somewhere in config files or ENV variables"), isBrowser && prevProps.language !== this.props.language && (this.cleanup(), this.setState(function() {
+        this.props.libraries !== prevProps.libraries && console.warn("Performance warning! LoadScript has been reloaded unintentionally! You should not pass `libraries` prop as new array. Please keep an array of libraries as static class property for Components and PureComponents, or just a const variable outside of component, or somewhere in config files or ENV variables"), isBrowser && prevProps.language !== this.props.language && (this.cleanup(), // TODO: refactor to use gDSFP maybe... wait for hooks refactoring.
+        // eslint-disable-next-line react/no-did-update-set-state
+        this.setState(function() {
             return {
                 loaded: !1
             };
@@ -36,23 +38,25 @@ class LoadScript extends React.PureComponent {
     }
     componentWillUnmount() {
         isBrowser && (this.cleanup(), window.setTimeout(()=>{
-            this.check.current || (delete window.google, cleaningUp = !1);
+            this.check.current || (// @ts-ignore
+            delete window.google, cleaningUp = !1);
         }, 1), this.props.onUnmount && this.props.onUnmount());
     }
     render() {
-        return _jsxs(_Fragment, {
+        return /*#__PURE__*/ _jsxs(_Fragment, {
             children: [
-                _jsx("div", {
+                /*#__PURE__*/ _jsx("div", {
                     ref: this.check
                 }),
-                this.state.loaded ? this.props.children : this.props.loadingElement || _jsx(DefaultLoadingElement, {})
+                this.state.loaded ? this.props.children : this.props.loadingElement || /*#__PURE__*/ _jsx(DefaultLoadingElement, {})
             ]
         });
     }
     constructor(...args){
-        super(...args), this.check = React.createRef(), this.state = {
+        super(...args), this.check = /*#__PURE__*/ React.createRef(), this.state = {
             loaded: !1
         }, this.cleanupCallback = ()=>{
+            // @ts-ignore
             delete window.google.maps, this.injectScript();
         }, this.isCleaningUp = async ()=>new Promise(function(resolve) {
                 if (cleaningUp) {
@@ -79,13 +83,11 @@ class LoadScript extends React.PureComponent {
                 style.parentNode && style.parentNode.removeChild(style);
             });
         }, this.injectScript = ()=>{
-            this.props.preventGoogleFontsLoading && preventGoogleFonts(), invariant(!!this.props.id, 'LoadScript requires "id" prop to be a string: %s', this.props.id);
-            const injectScriptOptions = {
+            this.props.preventGoogleFontsLoading && preventGoogleFonts(), invariant(!!this.props.id, 'LoadScript requires "id" prop to be a string: %s', this.props.id), injectScript({
                 id: this.props.id,
                 nonce: this.props.nonce,
                 url: makeLoadScriptUrl(this.props)
-            };
-            injectScript(injectScriptOptions).then(()=>{
+            }).then(()=>{
                 this.props.onLoad && this.props.onLoad(), this.setState(function() {
                     return {
                         loaded: !0

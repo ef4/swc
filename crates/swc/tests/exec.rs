@@ -16,7 +16,7 @@ use swc::{
 };
 use swc_common::{errors::ColorConfig, SourceMap, GLOBALS};
 use swc_ecma_ast::EsVersion;
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_ecma_parser::{Syntax, TsSyntax};
 use swc_ecma_testing::{exec_node_js, JsExecOptions};
 use testing::{assert_eq, find_executable, unignore_fixture};
 use tracing::{span, Level};
@@ -63,7 +63,6 @@ fn init_helpers() -> Arc<PathBuf> {
         }
 
         let yarn = find_executable("yarn").expect("failed to find yarn");
-        let npm = find_executable("npm").expect("failed to find npm");
         {
             let mut cmd = if cfg!(target_os = "windows") {
                 let mut c = Command::new("cmd");
@@ -87,25 +86,6 @@ fn init_helpers() -> Arc<PathBuf> {
             };
             cmd.current_dir(&helper_dir).arg("build");
             let status = cmd.status().expect("failed to compile helper package");
-            assert!(status.success());
-        }
-
-        {
-            let mut cmd = if cfg!(target_os = "windows") {
-                let mut c = Command::new("cmd");
-                c.arg("/C").arg(&npm);
-                c
-            } else {
-                Command::new(&npm)
-            };
-            cmd.current_dir(&project_root)
-                .arg("install")
-                .arg("--no-save")
-                .arg("--no-package-lock")
-                .arg("./packages/helpers");
-            let status = cmd
-                .status()
-                .expect("failed to install helper package from root");
             assert!(status.success());
         }
 
@@ -137,6 +117,7 @@ fn create_matrix(entry: &Path) -> Vec<Options> {
         .unwrap_or_default();
 
     [
+        EsVersion::EsNext,
         EsVersion::Es2022,
         EsVersion::Es2021,
         EsVersion::Es2020,
@@ -153,7 +134,7 @@ fn create_matrix(entry: &Path) -> Vec<Options> {
 
         if let Some(ext) = entry.extension() {
             if ext == "ts" {
-                let ts = Syntax::Typescript(TsConfig {
+                let ts = Syntax::Typescript(TsSyntax {
                     decorators: true,
                     ..Default::default()
                 });
@@ -299,7 +280,7 @@ fn get_expected_stdout(input: &Path) -> Result<String, Error> {
                             config: Config {
                                 jsc: JscConfig {
                                     target: Some(EsVersion::Es2022),
-                                    syntax: Some(Syntax::Typescript(TsConfig {
+                                    syntax: Some(Syntax::Typescript(TsSyntax {
                                         decorators: true,
                                         ..Default::default()
                                     })),

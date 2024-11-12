@@ -5,7 +5,7 @@ use std::{
 
 use is_macro::Is;
 use string_enum::StringEnum;
-use swc_atoms::{Atom, JsWord};
+use swc_atoms::Atom;
 use swc_common::{ast_node, util::take::Take, EqIgnoreSpan, Span};
 
 use crate::Function;
@@ -14,8 +14,8 @@ use crate::Function;
 #[derive(Eq, PartialOrd, Ord, Hash)]
 pub struct Ident {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+
+    pub value: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -48,8 +48,8 @@ impl Take for Ident {
 #[derive(Eq, Hash)]
 pub struct CustomIdent {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+
+    pub value: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -64,8 +64,8 @@ impl EqIgnoreSpan for CustomIdent {
 #[derive(Eq, Hash)]
 pub struct DashedIdent {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+
+    pub value: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -87,8 +87,8 @@ impl PartialEq<str> for DashedIdent {
 #[derive(Eq, Hash)]
 pub struct CustomPropertyName {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+
+    pub value: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -103,8 +103,8 @@ impl EqIgnoreSpan for CustomPropertyName {
 #[derive(Eq, Hash)]
 pub struct Str {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+
+    pub value: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -121,11 +121,7 @@ impl EqIgnoreSpan for Str {
 )]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
 #[cfg_attr(feature = "rkyv", archive_attr(repr(u32)))]
@@ -176,8 +172,7 @@ pub struct HexColor {
     /// Includes `#`
     pub span: Span,
     /// Does **not** include `#`
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+    pub value: Atom,
     /// Does **not** include `#`
     pub raw: Option<Atom>,
 }
@@ -402,11 +397,7 @@ pub struct Ratio {
 )]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
 #[cfg_attr(feature = "rkyv", archive_attr(repr(u32)))]
@@ -443,8 +434,8 @@ pub enum UrlValue {
 #[derive(Eq, Hash, EqIgnoreSpan)]
 pub struct UrlValueRaw {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub value: JsWord,
+
+    pub value: Atom,
     pub raw: Option<Atom>,
 }
 
@@ -461,10 +452,10 @@ pub enum UrlModifier {
 #[derive(Eq, Hash)]
 pub struct UnicodeRange {
     pub span: Span,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub start: JsWord,
-    #[cfg_attr(feature = "rkyv", with(swc_atoms::EncodeJsWord))]
-    pub end: Option<JsWord>,
+
+    pub start: Atom,
+
+    pub end: Option<Atom>,
     pub raw: Option<Atom>,
 }
 
@@ -512,11 +503,7 @@ pub struct CalcOperator {
 )]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
 #[cfg_attr(feature = "rkyv-impl", archive(check_bytes))]
 #[cfg_attr(feature = "rkyv-impl", archive_attr(repr(u32)))]

@@ -1,36 +1,43 @@
-use swc_atoms::JsWord;
+use rustc_hash::FxHashMap;
 use swc_common::{
-    collections::AHashMap,
     util::{move_map::MoveMap, take::Take},
     Spanned, SyntaxContext, DUMMY_SP,
 };
 use swc_ecma_ast::*;
+use swc_ecma_utils::{ident::IdentLike, stack_size::maybe_grow_default};
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
+use super::RenameMap;
 use crate::{
     hygiene::Config,
     perf::{cpu_count, ParExplode, Parallel, ParallelExt},
 };
 
-pub(super) struct Operator<'a> {
-    pub rename: &'a AHashMap<Id, JsWord>,
+pub(super) struct Operator<'a, I>
+where
+    I: IdentLike,
+{
+    pub rename: &'a FxHashMap<Id, I>,
     pub config: Config,
 
     pub extra: Vec<ModuleItem>,
 }
 
-impl Operator<'_> {
+impl<I> Operator<'_, I>
+where
+    I: IdentLike,
+{
     fn keep_class_name(&mut self, ident: &mut Ident, class: &mut Class) -> Option<ClassExpr> {
         if !self.config.keep_class_names {
             return None;
         }
 
         let mut orig_name = ident.clone();
-        orig_name.span.ctxt = SyntaxContext::empty();
+        orig_name.ctxt = SyntaxContext::empty();
 
         {
             // Remove span hygiene of the class.
-            let mut rename = AHashMap::default();
+            let mut rename = RenameMap::default();
 
             rename.insert(ident.to_id(), orig_name.sym.clone());
 
@@ -55,7 +62,10 @@ impl Operator<'_> {
     }
 }
 
-impl Parallel for Operator<'_> {
+impl<I> Parallel for Operator<'_, I>
+where
+    I: IdentLike,
+{
     fn create(&self) -> Self {
         Self {
             rename: self.rename,
@@ -73,7 +83,10 @@ impl Parallel for Operator<'_> {
     }
 }
 
-impl ParExplode for Operator<'_> {
+impl<I> ParExplode for Operator<'_, I>
+where
+    I: IdentLike,
+{
     fn after_one_stmt(&mut self, _: &mut Vec<Stmt>) {}
 
     fn after_one_module_item(&mut self, stmts: &mut Vec<ModuleItem>) {
@@ -81,16 +94,16 @@ impl ParExplode for Operator<'_> {
     }
 }
 
-impl<'a> VisitMut for Operator<'a> {
+impl<I> VisitMut for Operator<'_, I>
+where
+    I: IdentLike,
+{
     noop_visit_mut_type!();
 
     /// Preserve key of properties.
     fn visit_mut_assign_pat_prop(&mut self, p: &mut AssignPatProp) {
-        match &mut p.value {
-            Some(value) => {
-                value.visit_mut_children_with(self);
-            }
-            None => {}
+        if let Some(value) = &mut p.value {
+            value.visit_mut_children_with(self);
         }
     }
 
@@ -117,14 +130,14 @@ impl<'a> VisitMut for Operator<'a> {
                     let var = VarDeclarator {
                         span,
                         name: cls.ident.clone().into(),
-                        init: Some(Box::new(Expr::Class(expr))),
+                        init: Some(expr.into()),
                         definite: false,
                     };
                     *decl = VarDecl {
                         span,
                         kind: VarDeclKind::Let,
-                        declare: false,
                         decls: vec![var],
+                        ..Default::default()
                     }
                     .into();
                     return;
@@ -160,6 +173,22 @@ impl<'a> VisitMut for Operator<'a> {
                 s.exported = Some(exported);
             }
         }
+    }
+
+    fn visit_mut_expr(&mut self, n: &mut Expr) {
+        maybe_grow_default(|| n.visit_mut_children_with(self))
+    }
+
+    fn visit_mut_expr_or_spreads(&mut self, n: &mut Vec<ExprOrSpread>) {
+        self.maybe_par(cpu_count() * 100, n, |v, n| {
+            n.visit_mut_with(v);
+        })
+    }
+
+    fn visit_mut_exprs(&mut self, n: &mut Vec<Box<Expr>>) {
+        self.maybe_par(cpu_count() * 100, n, |v, n| {
+            n.visit_mut_with(v);
+        })
     }
 
     fn visit_mut_ident(&mut self, ident: &mut Ident) {
@@ -246,25 +275,28 @@ impl<'a> VisitMut for Operator<'a> {
                 let orig_ident = ident.clone();
                 match self.rename_ident(&mut ident) {
                     Ok(..) => {
-                        *item = ModuleItem::Stmt(Stmt::Decl(Decl::Class(ClassDecl {
+                        *item = ClassDecl {
                             ident: ident.clone(),
                             class: class.take(),
                             declare: *declare,
-                        })));
+                        }
+                        .into();
                         export!(
                             ModuleExportName::Ident(orig_ident),
                             ModuleExportName::Ident(ident.take())
                         );
                     }
                     Err(..) => {
-                        *item = ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                        *item = ExportDecl {
                             span: *span,
-                            decl: Decl::Class(ClassDecl {
+                            decl: ClassDecl {
                                 ident: ident.take(),
                                 class: class.take(),
                                 declare: *declare,
-                            }),
-                        }))
+                            }
+                            .into(),
+                        }
+                        .into()
                     }
                 }
             }
@@ -284,25 +316,28 @@ impl<'a> VisitMut for Operator<'a> {
                 let orig_ident = ident.clone();
                 match self.rename_ident(&mut ident) {
                     Ok(..) => {
-                        *item = ModuleItem::Stmt(Stmt::Decl(Decl::Fn(FnDecl {
+                        *item = FnDecl {
                             ident: ident.clone(),
                             function,
                             declare: *declare,
-                        })));
+                        }
+                        .into();
                         export!(
                             ModuleExportName::Ident(orig_ident),
                             ModuleExportName::Ident(ident)
                         );
                     }
                     Err(..) => {
-                        *item = ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                        *item = ExportDecl {
                             span: *span,
-                            decl: Decl::Fn(FnDecl {
+                            decl: FnDecl {
                                 ident,
                                 function,
                                 declare: *declare,
-                            }),
-                        }))
+                            }
+                            .into(),
+                        }
+                        .into()
                     }
                 }
             }
@@ -312,7 +347,7 @@ impl<'a> VisitMut for Operator<'a> {
             })) => {
                 let decls = var.decls.take();
 
-                let mut renamed: Vec<ExportSpecifier> = vec![];
+                let mut renamed: Vec<ExportSpecifier> = Vec::new();
                 let decls = decls.move_map(|mut decl| {
                     decl.name.visit_mut_with(&mut VarFolder {
                         orig: self,
@@ -323,29 +358,32 @@ impl<'a> VisitMut for Operator<'a> {
                 });
 
                 if renamed.is_empty() {
-                    *item = ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                    *item = ExportDecl {
                         span,
-                        decl: Decl::Var(Box::new(VarDecl {
+                        decl: VarDecl {
                             decls,
                             ..*var.take()
-                        })),
-                    }));
+                        }
+                        .into(),
+                    }
+                    .into();
                     return;
                 }
-                *item = ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                *item = VarDecl {
                     decls,
                     ..*var.take()
-                }))));
-                self.extra
-                    .push(ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(
-                        NamedExport {
-                            span,
-                            specifiers: renamed,
-                            src: None,
-                            type_only: false,
-                            with: None,
-                        },
-                    )));
+                }
+                .into();
+                self.extra.push(
+                    NamedExport {
+                        span,
+                        specifiers: renamed,
+                        src: None,
+                        type_only: false,
+                        with: None,
+                    }
+                    .into(),
+                );
             }
             _ => {
                 item.visit_mut_children_with(self);
@@ -378,7 +416,7 @@ impl<'a> VisitMut for Operator<'a> {
                         })
                     })
                     .reduce(
-                        || (Parallel::create(&*self), vec![]),
+                        || (Parallel::create(&*self), Vec::new()),
                         |mut a, b| {
                             Parallel::merge(&mut a.0, b.0);
 
@@ -414,11 +452,87 @@ impl<'a> VisitMut for Operator<'a> {
         *nodes = buf;
     }
 
+    fn visit_mut_named_export(&mut self, e: &mut NamedExport) {
+        if e.src.is_some() {
+            return;
+        }
+
+        e.visit_mut_children_with(self);
+    }
+
+    fn visit_mut_object_pat_prop(&mut self, n: &mut ObjectPatProp) {
+        n.visit_mut_children_with(self);
+
+        if let ObjectPatProp::Assign(p) = n {
+            let mut renamed = Ident::from(&p.key);
+            if self.rename_ident(&mut renamed).is_ok() {
+                if renamed.sym == p.key.sym {
+                    return;
+                }
+
+                *n = KeyValuePatProp {
+                    key: PropName::Ident(p.key.take().into()),
+                    value: match p.value.take() {
+                        Some(default_expr) => AssignPat {
+                            span: p.span,
+                            left: renamed.into(),
+                            right: default_expr,
+                        }
+                        .into(),
+                        None => renamed.into(),
+                    },
+                }
+                .into();
+            }
+        }
+    }
+
+    fn visit_mut_opt_vec_expr_or_spreads(&mut self, n: &mut Vec<Option<ExprOrSpread>>) {
+        self.maybe_par(cpu_count() * 100, n, |v, n| {
+            n.visit_mut_with(v);
+        })
+    }
+
+    fn visit_mut_prop(&mut self, prop: &mut Prop) {
+        match prop {
+            Prop::Shorthand(i) => {
+                let mut renamed = i.clone();
+                if self.rename_ident(&mut renamed).is_ok() {
+                    if renamed.sym == i.sym {
+                        return;
+                    }
+
+                    *prop = Prop::KeyValue(KeyValueProp {
+                        key: PropName::Ident(IdentName {
+                            // clear mark
+                            span: i.span,
+                            sym: i.sym.clone(),
+                        }),
+                        value: renamed.into(),
+                    })
+                }
+            }
+            _ => prop.visit_mut_children_with(self),
+        }
+    }
+
+    fn visit_mut_prop_name(&mut self, n: &mut PropName) {
+        if let PropName::Computed(c) = n {
+            c.visit_mut_with(self)
+        }
+    }
+
+    fn visit_mut_prop_or_spreads(&mut self, n: &mut Vec<PropOrSpread>) {
+        self.maybe_par(cpu_count() * 100, n, |v, n| {
+            n.visit_mut_with(v);
+        })
+    }
+
     fn visit_mut_stmts(&mut self, nodes: &mut Vec<Stmt>) {
         use std::mem::take;
 
         #[cfg(feature = "concurrent")]
-        if nodes.len() >= 8 * cpu_count() {
+        if nodes.len() >= 100 * cpu_count() {
             ::swc_common::GLOBALS.with(|globals| {
                 use rayon::prelude::*;
 
@@ -439,7 +553,7 @@ impl<'a> VisitMut for Operator<'a> {
                         })
                     })
                     .reduce(
-                        || (Parallel::create(&*self), vec![]),
+                        || (Parallel::create(&*self), Vec::new()),
                         |mut a, b| {
                             Parallel::merge(&mut a.0, b.0);
 
@@ -475,69 +589,6 @@ impl<'a> VisitMut for Operator<'a> {
         *nodes = buf;
     }
 
-    fn visit_mut_named_export(&mut self, e: &mut NamedExport) {
-        if e.src.is_some() {
-            return;
-        }
-
-        e.visit_mut_children_with(self);
-    }
-
-    fn visit_mut_object_pat_prop(&mut self, n: &mut ObjectPatProp) {
-        n.visit_mut_children_with(self);
-
-        if let ObjectPatProp::Assign(p) = n {
-            let mut renamed = p.key.clone();
-            if self.rename_ident(&mut renamed).is_ok() {
-                if renamed.sym == p.key.sym {
-                    return;
-                }
-
-                *n = KeyValuePatProp {
-                    key: PropName::Ident(p.key.take()),
-                    value: match p.value.take() {
-                        Some(default_expr) => Box::new(Pat::Assign(AssignPat {
-                            span: p.span,
-                            left: renamed.into(),
-                            right: default_expr,
-                        })),
-                        None => renamed.into(),
-                    },
-                }
-                .into();
-            }
-        }
-    }
-
-    fn visit_mut_prop(&mut self, prop: &mut Prop) {
-        match prop {
-            Prop::Shorthand(i) => {
-                let mut renamed = i.clone();
-                if self.rename_ident(&mut renamed).is_ok() {
-                    if renamed.sym == i.sym {
-                        return;
-                    }
-
-                    *prop = Prop::KeyValue(KeyValueProp {
-                        key: PropName::Ident(Ident {
-                            // clear mark
-                            span: i.span.with_ctxt(SyntaxContext::empty()),
-                            ..i.clone()
-                        }),
-                        value: Box::new(Expr::Ident(renamed)),
-                    })
-                }
-            }
-            _ => prop.visit_mut_children_with(self),
-        }
-    }
-
-    fn visit_mut_prop_name(&mut self, n: &mut PropName) {
-        if let PropName::Computed(c) = n {
-            c.visit_mut_with(self)
-        }
-    }
-
     fn visit_mut_super_prop_expr(&mut self, expr: &mut SuperPropExpr) {
         expr.span.visit_mut_with(self);
         if let SuperProp::Computed(c) = &mut expr.prop {
@@ -545,47 +596,32 @@ impl<'a> VisitMut for Operator<'a> {
         }
     }
 
-    fn visit_mut_prop_or_spreads(&mut self, n: &mut Vec<PropOrSpread>) {
-        self.maybe_par(cpu_count() * 8, n, |v, n| {
-            n.visit_mut_with(v);
-        })
-    }
-
-    fn visit_mut_expr_or_spreads(&mut self, n: &mut Vec<ExprOrSpread>) {
-        self.maybe_par(cpu_count() * 8, n, |v, n| {
-            n.visit_mut_with(v);
-        })
-    }
-
-    fn visit_mut_opt_vec_expr_or_spreads(&mut self, n: &mut Vec<Option<ExprOrSpread>>) {
-        self.maybe_par(cpu_count() * 8, n, |v, n| {
-            n.visit_mut_with(v);
-        })
-    }
-
-    fn visit_mut_exprs(&mut self, n: &mut Vec<Box<Expr>>) {
-        self.maybe_par(cpu_count() * 8, n, |v, n| {
-            n.visit_mut_with(v);
-        })
-    }
-
     fn visit_mut_var_declarators(&mut self, n: &mut Vec<VarDeclarator>) {
-        self.maybe_par(cpu_count() * 8, n, |v, n| {
+        self.maybe_par(cpu_count() * 100, n, |v, n| {
             n.visit_mut_with(v);
         })
     }
 }
 
-struct VarFolder<'a, 'b> {
-    orig: &'a mut Operator<'b>,
+struct VarFolder<'a, 'b, I>
+where
+    I: IdentLike,
+{
+    orig: &'a mut Operator<'b, I>,
     renamed: &'a mut Vec<ExportSpecifier>,
 }
 
-impl VisitMut for VarFolder<'_, '_> {
+impl<I> VisitMut for VarFolder<'_, '_, I>
+where
+    I: IdentLike,
+{
     noop_visit_mut_type!();
 
     #[inline]
     fn visit_mut_expr(&mut self, _: &mut Expr) {}
+
+    #[inline]
+    fn visit_mut_simple_assign_target(&mut self, _: &mut SimpleAssignTarget) {}
 
     fn visit_mut_ident(&mut self, i: &mut Ident) {
         let orig = i.clone();
@@ -601,16 +637,21 @@ impl VisitMut for VarFolder<'_, '_> {
     }
 }
 
-impl<'a> Operator<'a> {
+impl<I> Operator<'_, I>
+where
+    I: IdentLike,
+{
     /// Returns `Ok(renamed_ident)` if ident should be renamed.
     fn rename_ident(&mut self, ident: &mut Ident) -> Result<(), ()> {
-        if let Some(sym) = self.rename.get(&ident.to_id()) {
-            if *sym == ident.sym {
+        if let Some(new_id) = self.rename.get(&ident.to_id()) {
+            let (new_sym, new_ctxt) = new_id.to_id();
+
+            if new_sym == ident.sym {
                 return Err(());
             }
 
-            ident.span = ident.span.with_ctxt(SyntaxContext::empty());
-            ident.sym = sym.clone();
+            ident.ctxt = new_ctxt;
+            ident.sym = new_sym;
             return Ok(());
         }
 

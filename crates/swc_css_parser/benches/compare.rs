@@ -1,7 +1,7 @@
-extern crate swc_node_base;
+extern crate swc_malloc;
 
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
-use swc_common::{input::StringInput, FileName, Span, SyntaxContext, DUMMY_SP};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Bencher, Criterion};
+use swc_common::{comments::SingleThreadedComments, input::StringInput, FileName, Span, DUMMY_SP};
 use swc_css_ast::Stylesheet;
 use swc_css_parser::{lexer::Lexer, parser::Parser};
 use swc_css_visit::{Fold, FoldWith, VisitMut, VisitMutWith};
@@ -13,9 +13,11 @@ where
     F: FnMut(Stylesheet) -> Stylesheet,
 {
     let _ = ::testing::run_test(false, |cm, _| {
-        let fm = cm.new_source_file(FileName::Anon, SOURCE.into());
+        let comments = SingleThreadedComments::default();
 
-        let lexer = Lexer::new(StringInput::from(&*fm), Default::default());
+        let fm = cm.new_source_file(FileName::Anon.into(), SOURCE.into());
+
+        let lexer = Lexer::new(StringInput::from(&*fm), Some(&comments), Default::default());
         let mut parser = Parser::new(lexer, Default::default());
         let stylesheet: Stylesheet = parser.parse_all().unwrap();
 
@@ -54,10 +56,6 @@ fn bench_cases(c: &mut Criterion) {
 
         impl VisitMut for RespanVisitMut {
             fn visit_mut_span(&mut self, span: &mut Span) {
-                if span.ctxt != SyntaxContext::empty() {
-                    panic!()
-                }
-
                 *span = DUMMY_SP;
             }
         }
@@ -85,11 +83,7 @@ fn bench_cases(c: &mut Criterion) {
         struct RespanFold;
 
         impl Fold for RespanFold {
-            fn fold_span(&mut self, s: Span) -> Span {
-                if s.ctxt != SyntaxContext::empty() {
-                    panic!()
-                }
-
+            fn fold_span(&mut self, _: Span) -> Span {
                 DUMMY_SP
             }
         }

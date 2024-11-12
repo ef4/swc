@@ -1,6 +1,5 @@
 extern crate proc_macro;
 
-use pmutil::{smart_quote, Quote};
 use swc_macros_common::prelude::*;
 use syn::*;
 
@@ -33,7 +32,7 @@ fn derive(
         _ => panic!("#[derive(FromVariant)] only works for an enum."),
     };
 
-    let mut from_impls: Vec<ItemImpl> = vec![];
+    let mut from_impls: Vec<ItemImpl> = Vec::new();
 
     for v in variants {
         let variant_name = v.ident;
@@ -47,23 +46,17 @@ fn derive(
                 }
                 let field = unnamed.into_iter().next().unwrap();
 
-                let from_impl = Quote::new(def_site::<Span>())
-                    .quote_with(smart_quote!(
-                        Vars {
-                            VariantType: field.ty,
-                            Variant: variant_name,
-                            Type: &ident,
-                        },
-                        {
-                            impl From<VariantType> for Type {
-                                fn from(v: VariantType) -> Self {
-                                    Type::Variant(v)
-                                }
-                            }
+                let variant_type = &field.ty;
+
+                let from_impl: ItemImpl = parse_quote!(
+                    impl From<#variant_type> for #ident {
+                        fn from(v: #variant_type) -> Self {
+                            #ident::#variant_name(v)
                         }
-                    ))
-                    .parse::<ItemImpl>()
-                    .with_generics(generics.clone());
+                    }
+                );
+
+                let from_impl = from_impl.with_generics(generics.clone());
 
                 from_impls.push(from_impl);
             }

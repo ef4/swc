@@ -7,7 +7,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use swc_common::{FileName, SourceMap};
 use swc_ecma_ast::*;
-use swc_ecma_minifier::option::MinifyOptions;
+use swc_ecma_minifier::option::{CompressOptions, MangleOptions, MinifyOptions};
 use swc_ecma_transforms_base::fixer::fixer;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
@@ -18,6 +18,28 @@ pub fn get_minified(
     file: &Path,
     compress: bool,
     mangle: bool,
+) -> Result<ModuleRecord> {
+    get_minified_with_opts(
+        cm,
+        file,
+        if compress {
+            Some(Default::default())
+        } else {
+            None
+        },
+        if mangle {
+            Some(Default::default())
+        } else {
+            None
+        },
+    )
+}
+
+pub fn get_minified_with_opts(
+    cm: Arc<SourceMap>,
+    file: &Path,
+    compress: Option<CompressOptions>,
+    mangle: Option<MangleOptions>,
 ) -> Result<ModuleRecord> {
     let fm = cm.load_file(file)?;
 
@@ -30,21 +52,14 @@ pub fn get_minified(
             Some(&m.comments),
             None,
             &MinifyOptions {
-                compress: if compress {
-                    Some(Default::default())
-                } else {
-                    None
-                },
-                mangle: if mangle {
-                    Some(Default::default())
-                } else {
-                    None
-                },
+                compress,
+                mangle,
                 ..Default::default()
             },
             &swc_ecma_minifier::option::ExtraOptions {
                 unresolved_mark: m.unresolved_mark,
                 top_level_mark: m.top_level_mark,
+                mangle_name_cache: None,
             },
         )
         .expect_module()
@@ -82,7 +97,7 @@ pub fn get_terser_output(file: &Path, compress: bool, mangle: bool) -> Result<St
 
         // Drop comments
         let cm = Arc::new(SourceMap::default());
-        let fm = cm.new_source_file(FileName::Anon, output);
+        let fm = cm.new_source_file(FileName::Anon.into(), output);
         let m = parse_js(fm)?;
 
         let code = print_js(cm, &m.module, true)?;
@@ -122,7 +137,7 @@ pub fn get_esbuild_output(file: &Path, mangle: bool) -> Result<String> {
 struct Normalizer {}
 
 impl VisitMut for Normalizer {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_prop(&mut self, p: &mut Prop) {
         p.visit_mut_children_with(self);

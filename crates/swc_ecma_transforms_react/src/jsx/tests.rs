@@ -5,36 +5,33 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use swc_common::{chain, Mark};
 use swc_ecma_codegen::{Config, Emitter};
-use swc_ecma_parser::{EsConfig, Parser, StringInput};
+use swc_ecma_parser::{EsSyntax, Parser, StringInput};
 use swc_ecma_transforms_base::{fixer::fixer, hygiene, resolver};
 use swc_ecma_transforms_compat::{
     es2015::{arrow, classes},
     es3::property_literals,
 };
-use swc_ecma_transforms_module::common_js::common_js;
 use swc_ecma_transforms_testing::{parse_options, test, test_fixture, FixtureTestConfig, Tester};
-use swc_ecma_visit::FoldWith;
 use testing::NormalizedOutput;
 
 use super::*;
 use crate::{display_name, pure_annotations, react};
 
-fn tr(t: &mut Tester, options: Options, top_level_mark: Mark) -> impl Fold {
+fn tr(t: &mut Tester, options: Options, top_level_mark: Mark) -> impl Pass {
     let unresolved_mark = Mark::new();
 
-    chain!(
+    (
         resolver(unresolved_mark, top_level_mark, false),
         jsx(
             t.cm.clone(),
             Some(t.comments.clone()),
             options,
             top_level_mark,
-            unresolved_mark
+            unresolved_mark,
         ),
         display_name(),
-        classes(Some(t.comments.clone()), Default::default()),
+        classes(Default::default()),
         arrow(unresolved_mark),
     )
 }
@@ -62,7 +59,7 @@ fn true_by_default() -> bool {
     true
 }
 
-fn fixture_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Fold {
+fn fixture_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Pass {
     let unresolved_mark = Mark::new();
     let top_level_mark = Mark::new();
 
@@ -72,7 +69,7 @@ fn fixture_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Fold {
         options.options.runtime = Some(Runtime::Classic);
     }
 
-    chain!(
+    (
         resolver(unresolved_mark, top_level_mark, false),
         jsx(
             t.cm.clone(),
@@ -82,11 +79,11 @@ fn fixture_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Fold {
             unresolved_mark,
         ),
         display_name(),
-        pure_annotations(Some(t.comments.clone()))
+        pure_annotations(Some(t.comments.clone())),
     )
 }
 
-fn integration_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Fold {
+fn integration_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Pass {
     let unresolved_mark = Mark::new();
     let top_level_mark = Mark::new();
 
@@ -96,20 +93,21 @@ fn integration_tr(t: &mut Tester, mut options: FixtureOptions) -> impl Fold {
         options.options.runtime = Some(Runtime::Classic);
     }
 
-    chain!(
+    (
         resolver(unresolved_mark, top_level_mark, false),
         react(
             t.cm.clone(),
             Some(t.comments.clone()),
             options.options,
             top_level_mark,
-            unresolved_mark
+            unresolved_mark,
         ),
         display_name(),
     )
 }
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -119,17 +117,12 @@ test!(
 <Component
   {...props}
   sound="moo" />
-"#,
-    r#"
-React.createElement(Component, {
-  ...props,
-  sound: "moo"
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -143,25 +136,12 @@ var foo = function () {
 var bar = function () {
   return () => <this.foo />;
 };
-"#,
-    r#"
-var foo = function() {
-    var _this = this;
-    return function() {
-        return React.createElement(_this, null);
-    };
-};
-var bar = function() {
-    var _this = this;
-    return function() {
-        return React.createElement(_this.foo, null);
-    };
-};
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -181,24 +161,12 @@ var x =
     {null}
     quack
   </div>
-  "#,
-    r#"
-var x = React.createElement(
-  "div",
-  null,
-  "foo",
-  "bar",
-  "baz",
-  React.createElement("div", null, "buz bang"),
-  "qux",
-  null,
-  "quack"
-);
-"#
+  "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -209,19 +177,12 @@ Component = React.createClass({
   render: function render() {
   return null;
   }
-});"#,
-    r#"
-var Component;
-Component = React.createClass({
-  render: function render() {
-    return null;
-  },
-  displayName: "Component",
 });"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -233,19 +194,12 @@ export default React.createClass({
     return null;
   }
 });
-"#,
-    r#"
-export default React.createClass({
-  render: function render() {
-    return null;
-  },
-  displayName: "input",
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -265,25 +219,12 @@ var Bar = React.createClass({
     return null;
   }
 });
-"#,
-    r#"
-var Whateva = React.createClass({
-  displayName: "Whatever",
-  render: function render() {
-    return null;
-  }
-});
-var Bar = React.createClass({
-  "displayName": "Ba",
-  render: function render() {
-    return null;
-  }
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -296,20 +237,12 @@ exports = {
       return null;
     }
   })
-};"#,
-    r#"
-exports = {
-  Component: React.createClass({
-    render: function render() {
-      return null;
-    },
-    displayName: "Component",
-  })
 };"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -321,19 +254,12 @@ exports.Component = React.createClass({
   return null;
   }
 });
-"#,
-    r#"
-exports.Component = React.createClass({
-  render: function render() {
-    return null;
-  },
-  displayName: "Component",
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -345,19 +271,12 @@ var Component = React.createClass({
     return null;
   }
 });
-"#,
-    r#"
-var Component = React.createClass({
-  render: function render() {
-    return null;
-  },
-  displayName: "Component",
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -368,19 +287,12 @@ test!(
   To get started, edit index.ios.js!!!{"\n"}
   Press Cmd+R to reload
 </Text>
-"#,
-    r#"React.createElement(
-  Text,
-  null,
-  "To get started, edit index.ios.js!!!",
-  "\n",
-  "Press Cmd+R to reload"
-);
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -393,18 +305,12 @@ test!(
 var profile = <div>
   <img src="avatar.png" className="profile" />
   <h3>{[user.firstName, user.lastName].join(" ")}</h3>
-</div>;"#,
-    r#"/** @jsx dom */
-dom(Foo, null);
-var profile = dom("div", null, dom("img", {
-  src: "avatar.png",
-  className: "profile"
-}), dom("h3", null, [user.firstName, user.lastName].join(" ")));
-"#
+</div>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -419,19 +325,12 @@ var profile = <div>
   <img src="avatar.png" className="profile" />
   <h3>{[user.firstName, user.lastName].join(" ")}</h3>
 </div>;
-"#,
-    r#"
-/** @jsx dom */
-dom(Foo, null);
-var profile = dom("div", null, dom("img", {
-  src: "avatar.png",
-  className: "profile"
-}), dom("h3", null, [user.firstName, user.lastName].join(" ")));
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -451,41 +350,35 @@ test!(
 var profile = <div>
   <img src="avatar.png" className="profile" />
   <h3>{[user.firstName, user.lastName].join(" ")}</h3>
-</div>;"#,
-    r#"
-dom(Foo, null);
-var profile = dom("div", null, dom("img", {
-  src: "avatar.png",
-  className: "profile"
-}), dom("h3", null, [user.firstName, user.lastName].join(" ")));"#
+</div>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_jsx_with_retainlines_option,
-    r#"var div = <div>test</div>;"#,
-    r#"var div = React.createElement("div", null, "test");"#
+    r#"var div = <div>test</div>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_jsx_without_retainlines_option,
-    r#"var div = <div>test</div>;"#,
-    r#"var div = React.createElement("div", null, "test");"#
+    r#"var div = <div>test</div>;"#
 );
 
 test!(
     // Optimization is not implemented yet
     ignore,
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -509,121 +402,70 @@ class App extends React.Component {
     </div>;
   }
 }
-"#,
-    r#"
-var _ref =
-/*#__PURE__*/
-<div className="navbar-header">
-      <a className="navbar-brand" href="/">
-        <img src="/img/logo/logo-96x36.png" />
-      </a>
-    </div>;
-
-let App =
-/*#__PURE__*/
-function (_React$Component) {
-  "use strict";
-
-  _inherits(App, _React$Component);
-
-  function App() {
-    _class_call_check(this, App);
-    return _possible_constructor_return(this, _get_prototype_of(App).apply(this, arguments));
-  }
-
-  _create_class(App, [{
-    key: "render",
-    value: function render() {
-      const navbarHeader = _ref;
-      return <div>
-      <nav className="navbar navbar-default">
-        <div className="container">
-          {navbarHeader}
-        </div>
-      </nav>
-    </div>;
-    }
-  }]);
-  return App;
-}(React.Component);"#
-);
-
-test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
-        jsx: true,
-        ..Default::default()
-    }),
-    |t| chain!(
-        tr(t, Default::default(), Mark::fresh(Mark::root())),
-        property_literals(),
-    ),
-    react_should_add_quotes_es3,
-    r#"var es3 = <F aaa new const var default foo-bar/>;"#,
-    r#"
-var es3 = React.createElement(F, {
-  aaa: true,
-  "new": true,
-  "const": true,
-  "var": true,
-  "default": true,
-  "foo-bar": true
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
+        jsx: true,
+        ..Default::default()
+    }),
+    |t| (
+        tr(t, Default::default(), Mark::fresh(Mark::root())),
+        property_literals(),
+    ),
+    react_should_add_quotes_es3,
+    r#"var es3 = <F aaa new const var default foo-bar/>;"#
+);
+
+test!(
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_allow_constructor_as_prop,
-    r#"<Component constructor="foo" />;"#,
-    r#"
-React.createElement(Component, {
-  constructor: "foo"
-});
-"#
+    r#"<Component constructor="foo" />;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_allow_deeper_js_namespacing,
-    r#"<Namespace.DeepNamespace.Component />;"#,
-    r#"React.createElement(Namespace.DeepNamespace.Component, null);"#
+    r#"<Namespace.DeepNamespace.Component />;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_allow_elements_as_attributes,
-    r#"<div attr=<div /> />"#,
-    r#"
-React.createElement("div", {
-  attr: React.createElement("div", null)
-});"#
+    r#"<div attr=<div /> />"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_allow_js_namespacing,
-    r#"<Namespace.Component />;"#,
-    r#"React.createElement(Namespace.Component, null);"#
+    r#"<Namespace.Component />;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -642,23 +484,12 @@ test!(
     </>
   </>
 </div>
-"#,
-    r#"
-React.createElement("div", null, React.createElement(
-    React.Fragment, null, React.createElement(React.Fragment, null,
-        React.createElement("span", null, "Hello"),
-        React.createElement("span", null, "world")
-    ),
-    React.createElement(React.Fragment, null, React.createElement("span", null, "Goodbye"),
-        React.createElement("span", null, "world")
-    )
-    )
-);
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -668,15 +499,12 @@ test!(
 /** @jsx dom */
 
 <div>no fragment is used</div>
-"#,
-    r#"
-/** @jsx dom */
-dom("div", null, "no fragment is used");
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -687,17 +515,12 @@ test!(
 /** @jsxFrag DomFrag */
 
 <></>
-"#,
-    r#"
-/** @jsx dom */
-/** @jsxFrag DomFrag */
-
-dom(DomFrag, null);
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -719,39 +542,34 @@ var x = <Composite>
 var x = <Composite>
   <Composite2 />
 </Composite>;
-"#,
-    r#"
-var x = React.createElement("div", null, React.createElement(Component, null));
-var x = React.createElement("div", null, props.children);
-var x = React.createElement(Composite, null, props.children);
-var x = React.createElement(Composite, null, React.createElement(Composite2, null));
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_convert_simple_tags,
-    r#"var x = <div></div>;"#,
-    r#"var x = React.createElement("div", null);"#
+    r#"var x = <div></div>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_convert_simple_text,
-    r#"var x = <div>text</div>;"#,
-    r#"var x = React.createElement("div", null, "text");"#
+    r#"var x = <div>text</div>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -761,23 +579,12 @@ test!(
 <div id="wôw" />;
 <div id="\w" />;
 <div id="w &lt; w" />;
-"#,
-    r#"
-React.createElement("div", {
-  id: "w\xf4w"
-});
-React.createElement("div", {
-  id: "\\w"
-});
-React.createElement("div", {
-  id: "w < w"
-});
-"#,
-    ok_if_code_eq
+"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -794,21 +601,12 @@ test!(
 <div>this should parse as unicode: {'\u00a0 '}</div>;
 
 <div>w &lt; w</div>;
-",
-    r#"
-React.createElement("div", null, "wow");
-React.createElement("div", null, "w\xf4w");
-React.createElement("div", null, "w & w");
-React.createElement("div", null, "w & w");
-React.createElement("div", null, "w \xa0 w");
-React.createElement("div", null, "this should parse as unicode: ", '\u00a0 ');
-React.createElement("div", null, "w < w");
-"#,
-    ok_if_code_eq
+"
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -816,30 +614,24 @@ test!(
     react_should_escape_xhtml_jsxtext_2,
     r"
 <div>this should not parse as unicode: \u00a0</div>;
-",
-    r#"
-React.createElement("div", null, "this should not parse as unicode: \\u00a0");
-"#,
-    ok_if_code_eq
+"
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_escape_unicode_chars_in_attribute,
-    r#"<Bla title="Ú"/>"#,
-    r#"React.createElement(Bla, {
-    title: "\xda"
-});"#
+    r#"<Bla title="Ú"/>"#
 );
 
 test!(
     // FIXME
     ignore,
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -847,14 +639,12 @@ test!(
     react_should_escape_xhtml_jsxtext_3,
     r#"
 <div>this should parse as nbsp:   </div>;
-"#,
-    r#"
-React.createElement("div", null, "this should parse as nbsp: \xa0 ");
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -872,36 +662,23 @@ React.render(<HelloMessage name={
     Sebastian
   </span>
 } />, mountNode);
-"#,
-    r#"
-var HelloMessage = React.createClass({
-  render: function() {
-    return React.createElement("div", null, "Hello ", this.props.name);
-  },
-  displayName: "HelloMessage",
-});
-React.render(
-  React.createElement(HelloMessage, {
-    name: React.createElement("span", null, "Sebastian")
-  }),
-  mountNode
-);
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_handle_has_own_property_correctly,
-    r#"<hasOwnProperty>testing</hasOwnProperty>;"#,
-    r#"React.createElement("hasOwnProperty", null, "testing");"#
+    r#"<hasOwnProperty>testing</hasOwnProperty>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -913,19 +690,12 @@ var x = <div>
   <Component>{foo}<br />{bar}</Component>
   <br />
 </div>;
-"#,
-    r#"
-var x = React.createElement("div", null,
-    React.createElement("div", null, React.createElement("br", null)),
-    React.createElement(Component, null, foo,
-        React.createElement("br", null), bar
-    ), React.createElement("br", null)
-);
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -948,79 +718,57 @@ var x =
     }
     attr4="baz">
   </div>
-"#,
-    r#"
-var x = React.createElement("div", {
-  attr1: "foo" + "bar",
-  attr2: "foo" + "bar" + "baz" + "bug",
-  attr3: "foo" + "bar" + "baz" + "bug",
-  attr4: "baz"
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_not_add_quotes_to_identifier_names,
-    r#"var e = <F aaa new const var default foo-bar/>;"#,
-    r#"
-var e = React.createElement(F, {
-  aaa: true,
-  new: true,
-  const: true,
-  var: true,
-  default: true,
-  "foo-bar": true
-});
-"#
+    r#"var e = <F aaa new const var default foo-bar/>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_not_mangle_expressioncontainer_attribute_values,
-    r#"<button data-value={"a value\n  with\nnewlines\n   and spaces"}>Button</button>;"#,
-    r#"
-React.createElement("button", {
-  "data-value": "a value\n  with\nnewlines\n   and spaces"
-}, "Button");
-"#
+    r#"<button data-value={"a value\n  with\nnewlines\n   and spaces"}>Button</button>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_not_strip_nbsp_even_coupled_with_other_whitespace,
-    r#"<div>&nbsp; </div>;"#,
-    r#"React.createElement("div", null, "\xa0 ");"#,
-    ok_if_code_eq
+    r#"<div>&nbsp; </div>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_not_strip_tags_with_a_single_child_of_nbsp,
-    r#"<div>&nbsp;</div>;"#,
-    r#"React.createElement("div", null, "\xa0");"#,
-    ok_if_code_eq
+    r#"<div>&nbsp;</div>;"#
 );
 
 test!(
+    module,
     // Comments are currently stripped out
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -1037,36 +785,23 @@ var x = (
     />
   </div>
 );
-"#,
-    r#"
-var x = React.createElement("div", {
-  /* a multi-line
-     comment */
-  attr1: "foo"
-}, React.createElement("span", {
-  // a double-slash comment
-  attr2: "bar"
-}));
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_quote_jsx_attributes,
-    r#"<button data-value='a value'>Button</button>;"#,
-    r#"
-React.createElement("button", {
-  "data-value": "a value"
-}, "Button");
-"#
+    r#"<button data-value='a value'>Button</button>;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -1080,25 +815,23 @@ test!(
         Mark::fresh(Mark::root())
     ),
     react_should_support_xml_namespaces_if_flag,
-    r#"<f:image n:attr />;"#,
-    r#"h("f:image", {
-  "n:attr": true
-});"#
+    r#"<f:image n:attr />;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_should_transform_known_hyphenated_tags,
-    r#"<font-face />;"#,
-    r#"React.createElement("font-face", null);"#
+    r#"<font-face />;"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -1107,172 +840,117 @@ test!(
     r#"
 <Component { ... x } y
 ={2 } z />
-"#,
-    r#"
-React.createElement(Component, {
-  ...x,
-  y: 2,
-  z: true
-});
 "#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_wraps_props_in_react_spread_for_last_spread_attributes,
-    r#"<Component y={2} z { ... x } />"#,
-    r#"
-React.createElement(Component, {
-  y: 2,
-  z: true,
-  ...x
-});
-"#
+    r#"<Component y={2} z { ... x } />"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_wraps_props_in_react_spread_for_middle_spread_attributes,
-    r#"<Component y={2} { ... x } z />"#,
-    r#"
-React.createElement(Component, {
-    y: 2,
-    ...x,
-    z: true
-});"#
+    r#"<Component y={2} { ... x } z />"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     react_attribute_html_entity_quote,
-    r#"<Component text="Hello &quot;World&quot;" />"#,
-    r#"
-React.createElement(Component, {
-  text: 'Hello "World"'
-});"#
+    r#"<Component text="Hello &quot;World&quot;" />"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     use_builtins_assignment,
-    r#"var div = <Component {...props} foo="bar" />"#,
-    r#"
-var div = React.createElement(Component, {
-    ...props,
-    foo: "bar"
-});"#
+    r#"var div = <Component {...props} foo="bar" />"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     use_spread_assignment,
-    r#"<Component y={2} { ...x } z />"#,
-    r#"
-React.createElement(Component, {y: 2, ...x, z: true});"#
+    r#"<Component y={2} { ...x } z />"#
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     issue_229,
     "const a = <>test</>
-const b = <div>test</div>",
-    "const a = React.createElement(React.Fragment, null, \"test\");
-const b = React.createElement(\"div\", null, \"test\");"
+const b = <div>test</div>"
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| {
         let top_level_mark = Mark::fresh(Mark::root());
-        chain!(
-            tr(t, Default::default(), top_level_mark),
-            common_js(
-                top_level_mark,
-                Default::default(),
-                Default::default(),
-                Some(t.comments.clone())
-            )
-        )
+        tr(t, Default::default(), top_level_mark)
     },
     issue_351,
     "import React from 'react';
 
-<div />;",
-    "\"use strict\";
-Object.defineProperty(exports, \"__esModule\", {
-    value: true
-});
-var _react = _interop_require_default(require(\"react\"));
-_react.default.createElement(\"div\", null);"
+<div />;"
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     issue_481,
-    "<span> {foo}</span>;",
-    "React.createElement(\"span\", null, \" \", foo);"
+    "<span> {foo}</span>;"
 );
 
 // https://github.com/swc-project/swc/issues/517
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| {
         let top_level_mark = Mark::fresh(Mark::root());
-        chain!(
-            tr(t, Default::default(), top_level_mark),
-            common_js(
-                Mark::fresh(Mark::root()),
-                Default::default(),
-                Default::default(),
-                Some(t.comments.clone())
-            )
-        )
+        tr(t, Default::default(), top_level_mark)
     },
     issue_517,
     "import React from 'react';
-<div style='white-space: pre'>Hello World</div>;",
-    "\"use strict\";
-Object.defineProperty(exports, \"__esModule\", {
-    value: true
-});
-var _react = _interop_require_default(require(\"react\"));
-_react.default.createElement(\"div\", {
-    style: \"white-space: pre\"
-}, \"Hello World\");"
+<div style='white-space: pre'>Hello World</div>;"
 );
 
 #[test]
@@ -1284,22 +962,21 @@ fn jsx_text() {
 
 // https://github.com/swc-project/swc/issues/542
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |t| tr(t, Default::default(), Mark::fresh(Mark::root())),
     issue_542,
-    "let page = <p>Click <em>New melody</em> listen to a randomly generated melody</p>",
-    "let page = React.createElement(\"p\", null, \"Click \", React.createElement(\"em\", null, \
-     \"New melody\"), \" listen to a randomly generated melody\");"
+    "let page = <p>Click <em>New melody</em> listen to a randomly generated melody</p>"
 );
 
 // regression_2775
 test!(
     // Module
     ignore,
-    Syntax::Es(EsConfig {
+    Syntax::Es(EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -1307,15 +984,15 @@ test!(
         let top_level_mark = Mark::fresh(Mark::root());
         let unresolved_mark = Mark::fresh(Mark::root());
 
-        chain!(
-            classes(Some(t.comments.clone()), Default::default()),
+        (
+            classes(Default::default()),
             jsx(
                 t.cm.clone(),
                 Some(t.comments.clone()),
                 Default::default(),
                 top_level_mark,
-                unresolved_mark
-            )
+                unresolved_mark,
+            ),
         )
     },
     regression_2775,
@@ -1336,45 +1013,12 @@ return (
 }
 }
 
-"#,
-    r#"
-
-
-Object.defineProperty(exports, "__esModule", {
-value: true
-});
-exports.default = void 0;
-
-var _react = _interop_require_default(require("react"));
-
-var RandomComponent =
-/*#__PURE__*/
-function (_Component) {
-_inherits(RandomComponent, _Component);
-
-function RandomComponent() {
-_class_call_check(this, RandomComponent);
-return _possible_constructor_return(this, _get_prototype_of(RandomComponent).call(this));
-}
-
-_create_class(RandomComponent, [{
-key: "render",
-value: function render() {
-  return _react.default.createElement("div", {
-    className: "sui-RandomComponent"
-  }, _react.default.createElement("h2", null, "Hi there!"));
-}
-}]);
-return RandomComponent;
-}(_react.Component);
-
-exports.default = RandomComponent;
-
 "#
 );
 
 test!(
-    Syntax::Es(EsConfig {
+    module,
+    Syntax::Es(EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -1382,26 +1026,21 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             jsx(
                 t.cm.clone(),
                 Some(t.comments.clone()),
                 Default::default(),
                 top_level_mark,
-                unresolved_mark
-            )
+                unresolved_mark,
+            ),
         )
     },
     issue_4956,
     "
     <div title=\"\u{2028}\"/>
-    ",
-    r#"
-    React.createElement("div", {
-      title: "\u2028"
-    });
-  "#
+    "
 );
 
 #[testing::fixture("tests/jsx/fixture/**/input.js")]
@@ -1412,7 +1051,7 @@ fn fixture(input: PathBuf) {
     }
 
     test_fixture(
-        Syntax::Es(EsConfig {
+        Syntax::Es(EsSyntax {
             jsx: true,
             ..Default::default()
         }),
@@ -1424,6 +1063,7 @@ fn fixture(input: PathBuf) {
         &output,
         FixtureTestConfig {
             allow_error: true,
+            module: Some(true),
             ..Default::default()
         },
     );
@@ -1437,7 +1077,7 @@ fn integration(input: PathBuf) {
     }
 
     test_fixture(
-        Syntax::Es(EsConfig {
+        Syntax::Es(EsSyntax {
             jsx: true,
             ..Default::default()
         }),
@@ -1449,6 +1089,7 @@ fn integration(input: PathBuf) {
         &output,
         FixtureTestConfig {
             allow_error: true,
+            module: Some(true),
             ..Default::default()
         },
     );
@@ -1469,9 +1110,9 @@ fn test_script(src: &str, output: &Path, options: Options) {
     Tester::run(|tester| {
         let fm = tester
             .cm
-            .new_source_file(FileName::Real("input.js".into()), src.into());
+            .new_source_file(FileName::Real("input.js".into()).into(), src.into());
 
-        let syntax = Syntax::Es(EsConfig {
+        let syntax = Syntax::Es(EsSyntax {
             jsx: true,
             ..Default::default()
         });
@@ -1483,7 +1124,7 @@ fn test_script(src: &str, output: &Path, options: Options) {
         let top_level_mark = Mark::new();
         let unresolved_mark = Mark::new();
 
-        let script = script.fold_with(&mut chain!(
+        let script = Program::Script(script).apply((
             resolver(Mark::new(), top_level_mark, false),
             react(
                 tester.cm.clone(),
@@ -1493,10 +1134,10 @@ fn test_script(src: &str, output: &Path, options: Options) {
                 unresolved_mark,
             ),
             hygiene::hygiene(),
-            fixer(Some(&tester.comments))
+            fixer(Some(&tester.comments)),
         ));
 
-        let mut buf = vec![];
+        let mut buf = Vec::new();
 
         let mut emitter = Emitter {
             cfg: Config::default()
@@ -1513,7 +1154,7 @@ fn test_script(src: &str, output: &Path, options: Options) {
         };
 
         // println!("Emitting: {:?}", module);
-        emitter.emit_script(&script).unwrap();
+        emitter.emit_program(&script).unwrap();
 
         let s = String::from_utf8_lossy(&buf).to_string();
         assert!(NormalizedOutput::new_raw(s).compare_to_file(output).is_ok());

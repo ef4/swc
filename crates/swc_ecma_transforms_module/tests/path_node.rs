@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -9,7 +12,7 @@ use swc_ecma_transforms_module::{
     path::{ImportResolver, NodeImportResolver},
     rewriter::import_rewriter,
 };
-use swc_ecma_transforms_testing::test_fixture;
+use swc_ecma_transforms_testing::{test_fixture, FixtureTestConfig};
 use testing::run_test2;
 
 type TestProvider = NodeImportResolver<NodeModulesResolver>;
@@ -19,7 +22,7 @@ fn node_modules() {
     let provider = TestProvider::default();
 
     run_test2(false, |cm, _| {
-        let fm = cm.new_source_file(FileName::Real("foo".into()), "".into());
+        let fm = cm.new_source_file(FileName::Real("foo".into()).into(), "".into());
 
         let resolved = provider
             .resolve_import(&fm.name, "core-js")
@@ -51,7 +54,7 @@ fn issue_4730() {
                     .join("packages")
                     .join("a")
                     .join("src")
-                    .join("index.ts")
+                    .join("index.js")
                     .display()
                     .to_string()],
             );
@@ -62,7 +65,7 @@ fn issue_4730() {
                     .join("packages")
                     .join("b")
                     .join("src")
-                    .join("index.ts")
+                    .join("index.js")
                     .display()
                     .to_string()],
             );
@@ -73,12 +76,15 @@ fn issue_4730() {
 
             import_rewriter(
                 FileName::Real(input_dir.join("src").join("index.js")),
-                resolver,
+                Arc::new(resolver),
             )
         },
         &input_dir.join("src").join("index.js"),
         &output_dir.join("index.js"),
-        Default::default(),
+        FixtureTestConfig {
+            module: Some(true),
+            ..Default::default()
+        },
     );
 }
 
@@ -99,7 +105,7 @@ fn paths_resolver(base_dir: &Path, rules: Vec<(String, Vec<String>)>) -> JscPath
         ),
         swc_ecma_transforms_module::path::Config {
             base_dir: Some(base_dir),
-            resolve_fully: false,
+            resolve_fully: true,
         },
     )
 }
@@ -126,19 +132,27 @@ fn fixture(input_dir: PathBuf) {
     let config = serde_json::from_str::<TestConfig>(&paths_json).unwrap();
 
     let index_path = input_dir.join(config.input_file.as_deref().unwrap_or("index.ts"));
+    dbg!(&index_path);
 
+    let base_dir = input_dir
+        .join(config.base_url.clone().unwrap_or(input_dir.clone()))
+        .canonicalize()
+        .unwrap();
+    dbg!(&base_dir);
     test_fixture(
         Syntax::default(),
         &|_| {
             let rules = config.paths.clone().into_iter().collect();
 
-            let resolver =
-                paths_resolver(&config.base_url.clone().unwrap_or(input_dir.clone()), rules);
+            let resolver = paths_resolver(&base_dir, rules);
 
-            import_rewriter(FileName::Real(index_path.clone()), resolver)
+            import_rewriter(FileName::Real(index_path.clone()), Arc::new(resolver))
         },
         &index_path,
         &output_dir.join("index.ts"),
-        Default::default(),
+        FixtureTestConfig {
+            module: Some(true),
+            ..Default::default()
+        },
     );
 }

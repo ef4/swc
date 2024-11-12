@@ -75,7 +75,7 @@ impl SourceCode for MietteSourceCode<'_> {
         let lo = span.offset();
         let hi = lo + span.len();
 
-        let mut span = Span::new(BytePos(lo as _), BytePos(hi as _), Default::default());
+        let mut span = Span::new(BytePos(lo as _), BytePos(hi as _));
 
         span = self
             .0
@@ -136,7 +136,7 @@ impl SourceCode for MietteSourceCode<'_> {
         let name = if self.1.skip_filename {
             None
         } else {
-            match loc.file.name {
+            match &*loc.file.name {
                 FileName::Real(ref path) => Some(path.to_string_lossy().into_owned()),
                 FileName::Custom(ref name) => Some(name.clone()),
                 FileName::Anon => None,
@@ -267,7 +267,7 @@ impl fmt::Display for MietteDiagnostic<'_> {
 fn convert_span(span: Span) -> SourceSpan {
     let len = span.hi - span.lo;
     let start = SourceOffset::from(span.lo.0 as usize);
-    SourceSpan::new(start, SourceOffset::from(len.0 as usize))
+    SourceSpan::new(start, len.0 as usize)
 }
 
 struct MietteSubdiagnostic<'a> {

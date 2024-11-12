@@ -16,7 +16,7 @@ use swc_common::{
     errors::{ColorConfig, Handler},
     FileName, FilePathMapping, SourceMap, GLOBALS,
 };
-use swc_ecma_parser::{EsConfig, Syntax};
+use swc_ecma_parser::{EsSyntax, Syntax};
 use swc_estree_compat::babelify::{Babelify, Context};
 use test::{test_main, DynTestFn, ShouldPanic, TestDesc, TestDescAndFn, TestName, TestType};
 use testing::{json::diff_json_value, DebugUsingDisplay};
@@ -24,7 +24,7 @@ use walkdir::WalkDir;
 
 #[test]
 fn fixtures() -> Result<(), Error> {
-    let mut tests = vec![];
+    let mut tests = Vec::new();
 
     let fixtures_path = PathBuf::from("tests").join("fixtures");
     for entry in WalkDir::new(&fixtures_path).into_iter() {
@@ -85,7 +85,7 @@ fn fixtures() -> Result<(), Error> {
                     let syntax = if is_typescript {
                         Syntax::Typescript(Default::default())
                     } else if is_jsx {
-                        Syntax::Es(EsConfig {
+                        Syntax::Es(EsSyntax {
                             jsx: true,
                             ..Default::default()
                         })
@@ -136,7 +136,7 @@ fn run_test(src: String, expected: String, syntax: Syntax, is_module: bool) {
         Some(cm.clone()),
     ));
     let compiler = Compiler::new(cm.clone());
-    let fm = compiler.cm.new_source_file(FileName::Anon, src);
+    let fm = compiler.cm.new_source_file(FileName::Anon.into(), src);
 
     let comments = compiler.comments().clone();
 

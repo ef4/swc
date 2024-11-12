@@ -1,20 +1,23 @@
 #![deny(warnings)]
 
-extern crate swc_node_base;
+extern crate swc_malloc;
 
 use std::{env, fs, path::PathBuf, time::Instant};
 
 use anyhow::Result;
 use rayon::prelude::*;
 use swc_common::{errors::HANDLER, sync::Lrc, Mark, SourceMap, GLOBALS};
+use swc_ecma_ast::Program;
 use swc_ecma_codegen::text_writer::JsWriter;
 use swc_ecma_minifier::{
     optimize,
     option::{ExtraOptions, MangleOptions, MinifyOptions},
 };
 use swc_ecma_parser::parse_file_as_module;
-use swc_ecma_transforms_base::{fixer::fixer, resolver};
-use swc_ecma_visit::FoldWith;
+use swc_ecma_transforms_base::{
+    fixer::{fixer, paren_remover},
+    resolver,
+};
 use walkdir::WalkDir;
 
 fn main() {
@@ -40,22 +43,20 @@ fn main() {
                                 Default::default(),
                                 Default::default(),
                                 None,
-                                &mut vec![],
+                                &mut Vec::new(),
                             )
                             .map_err(|err| {
                                 err.into_diagnostic(&handler).emit();
                             })
+                            .map(Program::Module)
                             .map(|module| {
-                                module.fold_with(&mut resolver(
-                                    unresolved_mark,
-                                    top_level_mark,
-                                    false,
-                                ))
+                                module.apply(&mut resolver(unresolved_mark, top_level_mark, false))
                             })
+                            .map(|module| module.apply(&mut paren_remover(None)))
                             .unwrap();
 
                             let output = optimize(
-                                program.into(),
+                                program,
                                 cm.clone(),
                                 None,
                                 None,
@@ -70,11 +71,11 @@ fn main() {
                                 &ExtraOptions {
                                     unresolved_mark,
                                     top_level_mark,
+                                    mangle_name_cache: None,
                                 },
-                            )
-                            .expect_module();
+                            );
 
-                            let output = output.fold_with(&mut fixer(None));
+                            let output = output.apply(&mut fixer(None));
 
                             let code = print(cm.clone(), &[output], true);
 
@@ -118,7 +119,7 @@ fn expand_dirs(dirs: Vec<String>) -> Vec<PathBuf> {
 }
 
 fn print<N: swc_ecma_codegen::Node>(cm: Lrc<SourceMap>, nodes: &[N], minify: bool) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
 
     {
         let mut emitter = swc_ecma_codegen::Emitter {

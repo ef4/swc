@@ -1,32 +1,30 @@
 //// [genericCallWithFunctionTypedArguments5.ts]
-// Generic call with parameter of object type with member of function type of n args passed object whose associated member is call signature with n+1 args
 function foo(arg) {
     return arg.cb(null);
 }
 var arg = {
     cb: function(x) {
-        return "";
+        return '';
     }
 };
 foo(arg), foo({
     cb: function(x, y) {
-        return "";
+        return '';
     }
 }), foo({
     cb: function(x, y) {
-        return "";
+        return '';
     }
 }), foo(arg), foo({
     cb: function(x) {
-        return "";
+        return '';
     }
 }), foo({
     cb: function(x) {
-        return "";
+        return '';
     }
 }), foo({
     cb: function() {
-        return "";
+        return '';
     }
 });
- // string

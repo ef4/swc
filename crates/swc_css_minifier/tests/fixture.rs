@@ -20,8 +20,8 @@ fn minify_fixtures(input: PathBuf) {
     testing::run_test(false, |cm, handler| {
         let fm = cm.load_file(&input).unwrap();
 
-        let mut errors = vec![];
-        let res: Result<Stylesheet, _> = parse_file(&fm, Default::default(), &mut errors);
+        let mut errors = Vec::new();
+        let res: Result<Stylesheet, _> = parse_file(&fm, None, Default::default(), &mut errors);
 
         for err in errors {
             err.to_diagnostics(handler).emit();

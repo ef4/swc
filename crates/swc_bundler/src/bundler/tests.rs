@@ -5,6 +5,7 @@ use anyhow::Error;
 use indexmap::IndexMap;
 use swc_common::{collections::ARandomState, sync::Lrc, FileName, SourceMap, Span, GLOBALS};
 use swc_ecma_ast::*;
+use swc_ecma_loader::resolve::Resolution;
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput};
 use swc_ecma_utils::drop_span;
 use swc_ecma_visit::VisitMutWith;
@@ -28,7 +29,7 @@ impl Load for Loader {
         let v = self.files.get(&f.to_string());
         let v = v.unwrap();
 
-        let fm = self.cm.new_source_file(f.clone(), v.to_string());
+        let fm = self.cm.new_source_file(f.clone().into(), v.to_string());
 
         let lexer = Lexer::new(
             Default::default(),
@@ -52,7 +53,7 @@ impl Load for Loader {
 pub struct Resolver;
 
 impl Resolve for Resolver {
-    fn resolve(&self, _: &FileName, s: &str) -> Result<FileName, Error> {
+    fn resolve(&self, _: &FileName, s: &str) -> Result<Resolution, Error> {
         assert!(s.starts_with("./"));
 
         let path = PathBuf::from(s.to_string())
@@ -61,11 +62,14 @@ impl Resolve for Resolver {
             .unwrap()
             .into();
 
-        Ok(FileName::Real(path))
+        Ok(Resolution {
+            filename: FileName::Real(path),
+            slug: None,
+        })
     }
 }
 
-impl<'a> Tester<'a> {
+impl Tester<'_> {
     pub fn module(&self, name: &str) -> TransformedModule {
         self.bundler
             .scope
@@ -77,7 +81,7 @@ impl<'a> Tester<'a> {
     pub fn parse(&self, s: &str) -> Module {
         let fm = self
             .cm
-            .new_source_file(FileName::Real(PathBuf::from("input.js")), s.into());
+            .new_source_file(FileName::Real(PathBuf::from("input.js")).into(), s.into());
 
         let lexer = Lexer::new(
             Default::default(),
@@ -137,7 +141,7 @@ impl TestBuilder {
                         disable_hygiene: false,
                         disable_fixer: false,
                         disable_dce: false,
-                        external_modules: vec![],
+                        external_modules: Vec::new(),
                         module: Default::default(),
                     },
                     Box::new(Hook),

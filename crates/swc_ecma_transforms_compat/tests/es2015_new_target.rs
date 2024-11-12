@@ -1,17 +1,20 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use serde::Deserialize;
-use swc_common::{chain, Mark};
-use swc_ecma_transforms_base::pass::noop;
+use swc_common::Mark;
+use swc_ecma_ast::Pass;
+use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_compat::{
     es2015::{arrow, classes, new_target::new_target},
     es2022::class_properties,
 };
 use swc_ecma_transforms_testing::{exec_tr, parse_options, test, test_fixture, Tester};
-use swc_ecma_visit::Fold;
 
-fn get_passes(t: &Tester, plugins: &[PluginConfig]) -> Box<dyn Fold> {
-    let mut pass: Box<dyn Fold> = Box::new(noop());
+fn get_passes(_: &Tester, plugins: &[PluginConfig]) -> Box<dyn Pass> {
+    let unresolved_mark = Mark::new();
+    let top_level_mark = Mark::new();
+
+    let mut pass: Box<dyn Pass> = Box::new(resolver(unresolved_mark, top_level_mark, true));
 
     for plugin in plugins {
         let (name, option) = match plugin {
@@ -35,23 +38,24 @@ fn get_passes(t: &Tester, plugins: &[PluginConfig]) -> Box<dyn Fold> {
             "transform-new-target" => {}
 
             "proposal-class-properties" => {
-                pass = Box::new(chain!(
+                pass = Box::new((
                     pass,
                     class_properties(
-                        Some(t.comments.clone()),
                         class_properties::Config {
                             constant_super: loose,
                             set_public_fields: loose,
                             private_as_properties: loose,
                             no_document_all: loose,
                             static_blocks_mark: Mark::new(),
-                        }
-                    )
+                            pure_getter: loose,
+                        },
+                        unresolved_mark,
+                    ),
                 ));
             }
 
             "transform-arrow-functions" => {
-                pass = Box::new(chain!(pass, arrow(Mark::new())));
+                pass = Box::new((pass, arrow(Mark::new())));
             }
 
             _ => {
@@ -60,7 +64,7 @@ fn get_passes(t: &Tester, plugins: &[PluginConfig]) -> Box<dyn Fold> {
         }
     }
 
-    pass = Box::new(chain!(pass, new_target()));
+    pass = Box::new((pass, new_target()));
 
     pass
 }
@@ -106,10 +110,7 @@ fn fixture(input: PathBuf) {
 
 test!(
     ::swc_ecma_parser::Syntax::default(),
-    |t| chain!(
-        classes(Some(t.comments.clone()), Default::default()),
-        new_target()
-    ),
+    |_| (classes(Default::default()), new_target()),
     issue_6259,
     r#"
 (() => {
@@ -119,22 +120,6 @@ test!(
       const actualProto = new.target.prototype;
     }
   }
-})();
-"#,
-    r#"
-(()=>{
-    var SomeError = function _target(Error) {
-        "use strict";
-        _inherits(SomeError, Error);
-        var _super = _create_super(SomeError);
-        function SomeError(issues) {
-            _class_call_check(this, SomeError);
-            var _this = _super.call(this);
-            const actualProto = (this instanceof SomeError ? this.constructor : void 0).prototype;
-            return _this;
-        }
-        return SomeError;
-    }(_wrap_native_super(Error));
 })();
 "#
 );

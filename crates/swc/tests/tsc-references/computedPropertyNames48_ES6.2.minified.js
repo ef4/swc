@@ -1,10 +1,9 @@
 //// [computedPropertyNames48_ES6.ts]
-var E, a, E1;
-(E1 = E || (E = {}))[E1.x = 0] = "x", extractIndexer({
+var E, a, E1 = ((E = E1 || {})[E.x = 0] = "x", E);
+extractIndexer({
     [a]: ""
 }), extractIndexer({
     0: ""
 }), extractIndexer({
     0: ""
 });
- // Should return any (widened form of undefined)

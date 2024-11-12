@@ -65,7 +65,7 @@ impl Entry {
 }
 
 impl VisitMut for Entry {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_import_decl(&mut self, i: &mut ImportDecl) {
         let remove = i.specifiers.is_empty() && self.add_all(&i.src.value);
@@ -86,27 +86,22 @@ impl VisitMut for Entry {
                     ..
                 }) = &**expr
                 {
-                    if let Expr::Ident(Ident {
-                        sym: js_word!("require"),
-                        ..
-                    }) = &**callee
-                    {
-                        if args.len() == 1
-                            && if let ExprOrSpread { spread: None, expr } = &args[0] {
-                                if let Expr::Lit(Lit::Str(s)) = &**expr {
-                                    s.value == *"core-js"
-                                        || s.value == *"@swc/polyfill"
-                                        || s.value == *"@babel/polyfill"
-                                } else {
-                                    false
-                                }
+                    if callee.is_ident_ref_to("require")
+                        && args.len() == 1
+                        && if let ExprOrSpread { spread: None, expr } = &args[0] {
+                            if let Expr::Lit(Lit::Str(s)) = &**expr {
+                                s.value == *"core-js"
+                                    || s.value == *"@swc/polyfill"
+                                    || s.value == *"@babel/polyfill"
                             } else {
                                 false
                             }
-                            && self.add_all("@swc/polyfill")
-                        {
-                            return false;
+                        } else {
+                            false
                         }
+                        && self.add_all("@swc/polyfill")
+                    {
+                        return false;
                     }
                 }
             }

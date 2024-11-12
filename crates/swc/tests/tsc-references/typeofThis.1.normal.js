@@ -11,16 +11,16 @@ var Test1 = function Test1() {
     "use strict";
     _class_call_check(this, Test1);
     this.data = {
-        foo: ""
+        foo: ''
     };
-    this["this"] = "";
+    this['this'] = '';
     var copy = {
-        foo: ""
+        foo: ''
     };
-    var foo = "";
+    var foo = '';
     var self = this;
     self.data;
-    var str = "";
+    var str = '';
 };
 function Test2() {
     var x = 1;
@@ -40,13 +40,11 @@ var Test5 = function Test5() {
         var x = 1;
     };
 };
-var Test6;
 (function(Test6) {
     Test6.f = function() {
         var x = 1;
     };
 })(Test6 || (Test6 = {}));
-var Test7;
 (function(Test7) {
     Test7.f = function() {
         var x = 1;
@@ -154,3 +152,4 @@ var Tests12 = /*#__PURE__*/ function() {
     };
     return Tests12;
 }();
+var Test6, Test7;

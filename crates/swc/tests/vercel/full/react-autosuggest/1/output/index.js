@@ -1,7 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", {
-    value: !0
-});
 var _instanceof = require("@swc/helpers/_/_instanceof");
 Object.defineProperty(exports, "__esModule", {
     value: !0
@@ -58,12 +55,6 @@ function ownKeys(object, enumerableOnly) {
     }
     return keys;
 }
-function _defineProperties(target, props) {
-    for(var i = 0; i < props.length; i++){
-        var descriptor = props[i];
-        descriptor.enumerable = descriptor.enumerable || !1, descriptor.configurable = !0, "value" in descriptor && (descriptor.writable = !0), Object.defineProperty(target, descriptor.key, descriptor);
-    }
-}
 function _assertThisInitialized(self) {
     if (void 0 === self) throw ReferenceError("this hasn't been initialised - super() hasn't been called");
     return self;
@@ -97,9 +88,9 @@ var ItemsList = /*#__PURE__*/ function(_Component) {
             }
         }), superClass && _setPrototypeOf(subClass, superClass);
     }(ItemsList, _Component);
-    var protoProps, staticProps, _super = function() {
-        var call, result, Super = _getPrototypeOf(ItemsList);
-        if (function() {
+    var protoProps, _super = function() {
+        var result, Super = _getPrototypeOf(ItemsList);
+        return result = !function() {
             if ("undefined" == typeof Reflect || !Reflect.construct || Reflect.construct.sham) return !1;
             if ("function" == typeof Proxy) return !0;
             try {
@@ -107,11 +98,7 @@ var ItemsList = /*#__PURE__*/ function(_Component) {
             } catch (e) {
                 return !1;
             }
-        }()) {
-            var NewTarget = _getPrototypeOf(this).constructor;
-            result = Reflect.construct(Super, arguments, NewTarget);
-        } else result = Super.apply(this, arguments);
-        return (call = result) && ("object" === _typeof(call) || "function" == typeof call) ? call : _assertThisInitialized(this);
+        }() ? Super.apply(this, arguments) : Reflect.construct(Super, arguments, _getPrototypeOf(this).constructor), result && ("object" === _typeof(result) || "function" == typeof result) ? result : _assertThisInitialized(this);
     };
     function ItemsList() {
         var _this;
@@ -158,7 +145,7 @@ var ItemsList = /*#__PURE__*/ function(_Component) {
                         id: getItemId(sectionIndex, itemIndex),
                         "aria-selected": isHighlighted
                     }, theme(itemKey, "item", isFirst && "itemFirst", isHighlighted && "itemHighlighted"), {}, itemPropsObj);
-                    /* eslint-disable react/jsx-key */ return isHighlighted && (allItemProps.ref = _this2.storeHighlightedItemReference), /*#__PURE__*/ _react.default.createElement(_Item.default, _extends({}, allItemProps, {
+                    return isHighlighted && (allItemProps.ref = _this2.storeHighlightedItemReference), /*#__PURE__*/ _react.default.createElement(_Item.default, _extends({}, allItemProps, {
                         sectionIndex: sectionIndex,
                         isHighlighted: isHighlighted,
                         itemIndex: itemIndex,
@@ -166,10 +153,15 @@ var ItemsList = /*#__PURE__*/ function(_Component) {
                         renderItem: renderItem,
                         renderItemData: renderItemData
                     }));
-                /* eslint-enable react/jsx-key */ }));
+                }));
             }
         }
-    ], _defineProperties(ItemsList.prototype, protoProps), staticProps && _defineProperties(ItemsList, staticProps), ItemsList;
+    ], function(target, props) {
+        for(var i = 0; i < props.length; i++){
+            var descriptor = props[i];
+            descriptor.enumerable = descriptor.enumerable || !1, descriptor.configurable = !0, "value" in descriptor && (descriptor.writable = !0), Object.defineProperty(target, descriptor.key, descriptor);
+        }
+    }(ItemsList.prototype, protoProps), ItemsList;
 }(_react.Component);
 exports.default = ItemsList, _defineProperty(ItemsList, "propTypes", {
     items: _propTypes.default.array.isRequired,

@@ -1,18 +1,21 @@
 #![deny(warnings)]
 
-extern crate swc_node_base;
+extern crate swc_malloc;
 
-use std::{env::args, fs, path::Path};
+use std::{env::args, fs, path::Path, sync::Arc};
 
 use swc_common::{errors::HANDLER, sync::Lrc, Mark, SourceMap};
+use swc_ecma_ast::Program;
 use swc_ecma_codegen::text_writer::{omit_trailing_semi, JsWriter};
 use swc_ecma_minifier::{
     optimize,
-    option::{ExtraOptions, MangleOptions, MinifyOptions},
+    option::{ExtraOptions, MangleOptions, MinifyOptions, SimpleMangleCache},
 };
 use swc_ecma_parser::parse_file_as_module;
-use swc_ecma_transforms_base::{fixer::fixer, resolver};
-use swc_ecma_visit::FoldWith;
+use swc_ecma_transforms_base::{
+    fixer::{fixer, paren_remover},
+    resolver,
+};
 
 fn main() {
     let file = args().nth(1).expect("should provide a path to file");
@@ -31,16 +34,18 @@ fn main() {
                 Default::default(),
                 Default::default(),
                 None,
-                &mut vec![],
+                &mut Vec::new(),
             )
             .map_err(|err| {
                 err.into_diagnostic(&handler).emit();
             })
-            .map(|module| module.fold_with(&mut resolver(unresolved_mark, top_level_mark, false)))
+            .map(Program::Module)
+            .map(|module| module.apply(resolver(unresolved_mark, top_level_mark, false)))
+            .map(|module| module.apply(paren_remover(None)))
             .unwrap();
 
             let output = optimize(
-                program.into(),
+                program,
                 cm.clone(),
                 None,
                 None,
@@ -55,11 +60,12 @@ fn main() {
                 &ExtraOptions {
                     unresolved_mark,
                     top_level_mark,
+                    // Mangle name cache example. You may not need this.
+                    mangle_name_cache: Some(Arc::new(SimpleMangleCache::default())),
                 },
-            )
-            .expect_module();
+            );
 
-            let output = output.fold_with(&mut fixer(None));
+            let output = output.apply(fixer(None));
 
             let code = print(cm, &[output], true);
 
@@ -72,7 +78,7 @@ fn main() {
 }
 
 fn print<N: swc_ecma_codegen::Node>(cm: Lrc<SourceMap>, nodes: &[N], minify: bool) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
 
     {
         let mut emitter = swc_ecma_codegen::Emitter {

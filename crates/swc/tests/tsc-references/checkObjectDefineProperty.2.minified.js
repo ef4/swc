@@ -18,14 +18,13 @@ Object.defineProperty(x, "name", {
         return 21.75;
     }
 }), Object.defineProperty(x, "zipStr", {
-    /** @param {string} str */ set: function(str) {
+    set: function(str) {
         this.zip = Number(str);
     }
 }), x.name, x.zip, x.houseNumber, module.exports = x;
 //// [validate.ts]
-//! 
 //!   x Import assignment cannot be used when targeting ECMAScript modules. Consider using `import * as ns from "mod"`, `import {a} from "mod"`, `import d from "mod"`, or another module format instead.
-//!    ,-[1:1]
+//!    ,-[2:1]
 //!  1 | // Validate in TS as simple validations would usually be interpreted as more special assignments
 //!  2 | import x = require("./");
 //!    : ^^^^^^^^^^^^^^^^^^^^^^^^^

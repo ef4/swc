@@ -99,7 +99,6 @@ fn write_ignore_file(base_path: &Path) -> Result<()> {
     };
 
     let mut f = OpenOptions::new()
-        .write(true)
         .append(true)
         .create(true)
         .open(&ignore_file_path)?;
@@ -238,8 +237,8 @@ build-wasm32 = "build --target wasm32-unknown-unknown"
             src_path.join("lib.rs"),
             r##"use swc_core::ecma::{
     ast::Program,
-    transforms::testing::test,
-    visit::{as_folder, FoldWith, VisitMut},
+    transforms::testing::test_inline,
+    visit::{visit_mut_pass, FoldWith, VisitMut},
 };
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 
@@ -268,16 +267,16 @@ impl VisitMut for TransformVisitor {
 /// Refer swc_plugin_macro to see how does it work internally.
 #[plugin_transform]
 pub fn process_transform(program: Program, _metadata: TransformPluginProgramMetadata) -> Program {
-    program.fold_with(&mut as_folder(TransformVisitor))
+    program.fold_with(&mut visit_mut_pass(TransformVisitor))
 }
 
 // An example to test plugin transform.
 // Recommended strategy to test plugin's transform is verify
 // the Visitor's behavior, instead of trying to run `process_transform` with mocks
 // unless explicitly required to do so.
-test!(
+test_inline!(
     Default::default(),
-    |_| as_folder(TransformVisitor),
+    |_| visit_mut_pass(TransformVisitor),
     boo,
     // Input codes
     r#"console.log("transform");"#,

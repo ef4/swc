@@ -1,16 +1,16 @@
-use swc_common::{sync::Lrc, FilePathMapping};
+use swc_common::FilePathMapping;
 use swc_ecma_transforms_testing::{test, test_exec};
 
 use super::*;
 
-fn tr() -> impl Fold {
+fn tr() -> impl Pass {
     let cm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
     jsx_src(true, cm)
 }
 
 test_exec!(
     ignore,
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -35,19 +35,19 @@ expect(actual).toBe(expected);
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
     |_| tr(),
     no_jsx,
-    r#"var x = 42;"#,
     r#"var x = 42;"#
 );
 
 test_exec!(
     ignore,
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),

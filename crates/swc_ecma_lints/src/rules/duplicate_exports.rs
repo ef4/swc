@@ -1,6 +1,6 @@
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, mem};
 
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::{collections::AHashMap, errors::HANDLER, Span};
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
@@ -82,7 +82,9 @@ impl Visit for DuplicateExports {
 
     fn visit_ts_module_decl(&mut self, d: &TsModuleDecl) {
         if !d.declare {
+            let old = mem::take(self);
             d.visit_children_with(self);
+            *self = old;
         }
     }
 
@@ -97,7 +99,7 @@ impl Visit for DuplicateExports {
 
         d.visit_children_with(self);
 
-        self.add(&Ident::new(js_word!("default"), d.span));
+        self.add(&Ident::new_no_ctxt("default".into(), d.span));
     }
 
     fn visit_export_default_expr(&mut self, d: &ExportDefaultExpr) {
@@ -108,7 +110,7 @@ impl Visit for DuplicateExports {
             _ => {}
         }
 
-        self.add(&Ident::new(js_word!("default"), d.span));
+        self.add(&Ident::new_no_ctxt("default".into(), d.span));
     }
 
     fn visit_export_default_specifier(&mut self, s: &ExportDefaultSpecifier) {

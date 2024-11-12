@@ -1,7 +1,7 @@
-use std::{borrow::Cow, fmt::Debug, mem::take};
+use std::{borrow::Cow, cell::RefCell, fmt::Debug, mem::take, rc::Rc};
 
-use swc_atoms::Atom;
-use swc_common::{BytePos, Span, Spanned, SyntaxContext};
+use swc_atoms::{Atom, AtomStore};
+use swc_common::{BytePos, Span, Spanned};
 use swc_css_ast::{ComponentValue, FunctionName, ListOfComponentValues, Token, TokenAndSpan};
 
 use super::PResult;
@@ -20,6 +20,8 @@ pub trait ParserInput: Clone + Iterator<Item = TokenAndSpan> {
 
     /// Returns `last_pos`
     fn skip_ws(&mut self) -> Option<BytePos>;
+
+    fn atom(&self, s: Cow<'_, str>) -> Atom;
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +50,10 @@ where
         }
     }
 
+    pub fn atom<'a>(&self, s: impl Into<Cow<'a, str>>) -> Atom {
+        self.input.atom(s.into())
+    }
+
     pub fn last_pos(&mut self) -> BytePos {
         self.cur();
         self.last_pos
@@ -61,7 +67,7 @@ where
         self.cur
             .as_ref()
             .map(|cur| cur.span)
-            .unwrap_or_else(|| Span::new(self.last_pos, self.last_pos, Default::default()))
+            .unwrap_or_else(|| Span::new(self.last_pos, self.last_pos))
     }
 
     pub fn cur(&mut self) -> Option<&Token> {
@@ -170,7 +176,7 @@ where
     }
 
     pub(super) fn reset(&mut self, state: &WrappedState<I::State>) {
-        self.cur = state.cur.clone();
+        self.cur.clone_from(&state.cur);
         self.input.reset(&state.inner);
     }
 }
@@ -206,11 +212,12 @@ pub struct Tokens {
     pub tokens: Vec<TokenAndSpan>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Input<'a> {
     input: InputType<'a>,
     idx: Vec<usize>,
     balance_stack: Option<Vec<BalanceToken>>,
+    atoms: Rc<RefCell<AtomStore>>,
 }
 
 #[derive(Debug, Clone)]
@@ -254,6 +261,7 @@ impl<'a> Input<'a> {
             input,
             idx,
             balance_stack,
+            atoms: Default::default(),
         }
     }
 
@@ -274,11 +282,7 @@ impl<'a> Input<'a> {
             Some(ComponentValue::Function(function)) => {
                 if self.idx.len() - 1 == deep {
                     return Some(TokenOrBlock::Function(Box::new((
-                        Span::new(
-                            function.span_lo(),
-                            function.name.span_hi() + BytePos(1),
-                            Default::default(),
-                        ),
+                        Span::new(function.span_lo(), function.name.span_hi() + BytePos(1)),
                         function.name.clone(),
                     ))));
                 }
@@ -320,11 +324,8 @@ impl<'a> Input<'a> {
                 let res = self.get_component_value(&simple_block.value, deep + 1);
 
                 if res.is_none() {
-                    let span = Span::new(
-                        simple_block.span_hi() - BytePos(1),
-                        simple_block.span_hi(),
-                        Default::default(),
-                    );
+                    let span =
+                        Span::new(simple_block.span_hi() - BytePos(1), simple_block.span_hi());
                     let close = match simple_block.name.token {
                         Token::LBracket => TokenOrBlock::RBracket((span.lo, span.hi)),
                         Token::LParen => TokenOrBlock::RParen((span.lo, span.hi)),
@@ -353,7 +354,7 @@ impl<'a> Input<'a> {
                     Some(idx) => idx,
                     _ => {
                         let bp = input.span.hi;
-                        let span = Span::new(bp, bp, SyntaxContext::empty());
+                        let span = Span::new(bp, bp);
 
                         return Err(Error::new(span, ErrorKind::Eof));
                     }
@@ -363,7 +364,7 @@ impl<'a> Input<'a> {
                     Some(token_and_span) => token_and_span,
                     None => {
                         let bp = input.span.hi;
-                        let span = Span::new(bp, bp, SyntaxContext::empty());
+                        let span = Span::new(bp, bp);
 
                         return Err(Error::new(span, ErrorKind::Eof));
                     }
@@ -381,11 +382,14 @@ impl<'a> Input<'a> {
                             let name = match function.1 {
                                 FunctionName::Ident(name) => match name.raw {
                                     Some(raw) => (name.value, raw),
-                                    _ => (name.value.clone(), Atom::from(name.value)),
+                                    _ => (name.value.clone(), name.value),
                                 },
                                 FunctionName::DashedIdent(name) => match name.raw {
-                                    Some(raw) => (format!("--{}", name.value).into(), raw),
-                                    _ => (name.value.clone(), Atom::from(name.value)),
+                                    Some(raw) => (
+                                        self.atoms.borrow_mut().atom(format!("--{}", name.value)),
+                                        raw,
+                                    ),
+                                    _ => (name.value.clone(), name.value),
                                 },
                             };
 
@@ -398,33 +402,33 @@ impl<'a> Input<'a> {
                             }
                         }
                         TokenOrBlock::LBracket(span) => TokenAndSpan {
-                            span: Span::new(span.0, span.1, Default::default()),
+                            span: Span::new(span.0, span.1),
                             token: Token::LBracket,
                         },
                         TokenOrBlock::LBrace(span) => TokenAndSpan {
-                            span: Span::new(span.0, span.1, Default::default()),
+                            span: Span::new(span.0, span.1),
                             token: Token::LBrace,
                         },
                         TokenOrBlock::LParen(span) => TokenAndSpan {
-                            span: Span::new(span.0, span.1, Default::default()),
+                            span: Span::new(span.0, span.1),
                             token: Token::LParen,
                         },
                         TokenOrBlock::RBracket(span) => TokenAndSpan {
-                            span: Span::new(span.0, span.1, Default::default()),
+                            span: Span::new(span.0, span.1),
                             token: Token::RBracket,
                         },
                         TokenOrBlock::RBrace(span) => TokenAndSpan {
-                            span: Span::new(span.0, span.1, Default::default()),
+                            span: Span::new(span.0, span.1),
                             token: Token::RBrace,
                         },
                         TokenOrBlock::RParen(span) => TokenAndSpan {
-                            span: Span::new(span.0, span.1, Default::default()),
+                            span: Span::new(span.0, span.1),
                             token: Token::RParen,
                         },
                     },
                     None => {
                         let bp = input.span.hi;
-                        let span = Span::new(bp, bp, SyntaxContext::empty());
+                        let span = Span::new(bp, bp);
 
                         return Err(Error::new(span, ErrorKind::Eof));
                     }
@@ -436,7 +440,7 @@ impl<'a> Input<'a> {
     }
 }
 
-impl<'a> ParserInput for Input<'a> {
+impl ParserInput for Input<'_> {
     type State = State;
 
     fn start_pos(&mut self) -> BytePos {
@@ -454,12 +458,12 @@ impl<'a> ParserInput for Input<'a> {
     }
 
     fn reset(&mut self, state: &Self::State) {
-        self.idx = state.idx.clone();
-        self.balance_stack = state.balance_stack.clone();
+        self.idx.clone_from(&state.idx);
+        self.balance_stack.clone_from(&state.balance_stack);
     }
 
     fn take_errors(&mut self) -> Vec<Error> {
-        vec![]
+        Vec::new()
     }
 
     fn skip_ws(&mut self) -> Option<BytePos> {
@@ -479,9 +483,13 @@ impl<'a> ParserInput for Input<'a> {
 
         last_pos
     }
+
+    fn atom(&self, s: Cow<str>) -> Atom {
+        self.atoms.borrow_mut().atom(s)
+    }
 }
 
-impl<'a> Iterator for Input<'a> {
+impl Iterator for Input<'_> {
     type Item = TokenAndSpan;
 
     fn next(&mut self) -> Option<Self::Item> {

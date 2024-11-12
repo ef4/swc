@@ -185,6 +185,14 @@ macro_rules! test_de {
     };
 }
 
+macro_rules! boxed {
+    ($T:ty, [$($variant_ty:ty),*]) => {
+        $(
+            bridge_from!($T, Box<$variant_ty>, $variant_ty);
+        )*
+    };
+}
+
 /// Implement `From<$src>` for `$dst`, by using implementation of `From<$src>`
 /// for `$bridge`.
 ///
@@ -192,7 +200,7 @@ macro_rules! test_de {
 /// - `$bridge` must implement `From<$src>`.
 ///
 ///
-/// e.g. For `&str` -> `Box<Expr>`, we convert it by `&str` -> `JsWord` -> `Str`
+/// e.g. For `&str` -> `Box<Expr>`, we convert it by `&str` -> `Atom` -> `Str`
 /// -> `Lit` -> `Expr` -> `Box<Expr>`.
 macro_rules! bridge_from {
     ($dst:ty, $bridge:ty, $src:ty) => {
@@ -218,20 +226,5 @@ macro_rules! bridge_pat_from {
         bridge_from!(crate::Pat, $bridge, $src);
         bridge_from!(crate::Param, crate::Pat, $src);
         bridge_from!(Box<crate::Pat>, crate::Pat, $src);
-    };
-}
-
-macro_rules! bridge_stmt_from {
-    ($bridge:ty, $src:ty) => {
-        bridge_from!(crate::Stmt, $bridge, $src);
-        bridge_from!(crate::ModuleItem, crate::Stmt, $src);
-    };
-}
-
-macro_rules! bridge_decl_from {
-    ($bridge:ty, $src:ty) => {
-        bridge_from!(crate::Decl, $bridge, $src);
-        bridge_from!(crate::Stmt, crate::Decl, $src);
-        bridge_from!(crate::ModuleItem, crate::Stmt, $src);
     };
 }

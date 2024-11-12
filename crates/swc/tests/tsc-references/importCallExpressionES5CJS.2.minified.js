@@ -36,7 +36,7 @@ Promise.resolve().then(function() {
 });
 var p2 = Promise.resolve().then(function() {
     return /*#__PURE__*/ _interop_require_wildcard._(require("./0"));
-}), D = function() {
+}), D = /*#__PURE__*/ function() {
     function D() {
         _class_call_check._(this, D);
     }

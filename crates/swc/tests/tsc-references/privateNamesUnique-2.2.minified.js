@@ -4,7 +4,7 @@ import { _ as _class_private_field_init } from "@swc/helpers/_/_class_private_fi
 var _x = /*#__PURE__*/ new WeakMap();
 export class Foo {
     copy(other) {
-        _class_private_field_get(other, _x); // error
+        _class_private_field_get(other, _x);
     }
     constructor(){
         _class_private_field_init(this, _x, {
@@ -28,4 +28,4 @@ export class Foo {
 import { Foo as A } from "./a";
 import { Foo as B } from "./b";
 let a = new A(), b = new B();
-a.copy(b); // error
+a.copy(b);

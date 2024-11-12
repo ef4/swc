@@ -48,16 +48,11 @@ pub struct Config {
     pub module: ModuleType,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Default)]
 pub enum ModuleType {
+    #[default]
     Es,
     Iife,
-}
-
-impl Default for ModuleType {
-    fn default() -> Self {
-        ModuleType::Es
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -146,7 +141,7 @@ where
     }
 
     pub(crate) fn is_external(&self, src: &JsWord) -> bool {
-        return self.config.external_modules.iter().any(|v| v == src);
+        self.config.external_modules.iter().any(|v| v == src)
     }
 
     ///

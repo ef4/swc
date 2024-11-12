@@ -2,7 +2,7 @@
 use rayon::prelude::*;
 use swc_common::{util::take::Take, EqIgnoreSpan, Spanned, DUMMY_SP};
 use swc_ecma_ast::*;
-use swc_ecma_utils::{extract_var_ids, ExprExt, StmtExt, StmtLike, Value};
+use swc_ecma_utils::{extract_var_ids, ExprCtx, ExprExt, StmtExt, StmtLike, Value};
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 
 use super::Pure;
@@ -77,12 +77,15 @@ impl Pure<'_> {
                             let mut cons = bs.take();
                             cons.stmts.remove(0);
 
-                            ls.body = Box::new(Stmt::If(IfStmt {
-                                span: ls.span,
-                                test,
-                                cons: Box::new(Stmt::Block(cons)),
-                                alt: None,
-                            }));
+                            ls.body = Box::new(
+                                IfStmt {
+                                    span: ls.span,
+                                    test,
+                                    cons: Box::new(Stmt::Block(cons)),
+                                    alt: None,
+                                }
+                                .into(),
+                            );
                             return None;
                         }
                     }
@@ -112,12 +115,15 @@ impl Pure<'_> {
                             let mut new_cons = bs.take();
                             new_cons.stmts[0] = cons;
 
-                            ls.body = Box::new(Stmt::If(IfStmt {
-                                span: ls.span,
-                                test,
-                                cons: Box::new(Stmt::Block(new_cons)),
-                                alt: None,
-                            }));
+                            ls.body = Box::new(
+                                IfStmt {
+                                    span: ls.span,
+                                    test,
+                                    cons: Box::new(Stmt::Block(new_cons)),
+                                    alt: None,
+                                }
+                                .into(),
+                            );
                             return None;
                         }
                     }
@@ -240,7 +246,7 @@ impl Pure<'_> {
                 |(mut decls, mut hoisted_fns, mut new_stmts), stmt| {
                     match stmt.take().try_into_stmt() {
                         Ok(Stmt::Decl(Decl::Fn(f))) => {
-                            hoisted_fns.push(Stmt::Decl(Decl::Fn(f)).into());
+                            hoisted_fns.push(T::from(Stmt::from(f)));
                         }
                         Ok(t) => {
                             let ids = extract_var_ids(&t).into_iter().map(|i| VarDeclarator {
@@ -258,15 +264,13 @@ impl Pure<'_> {
             );
 
             if !decls.is_empty() {
-                new_stmts.push(
-                    Stmt::from(VarDecl {
-                        span: DUMMY_SP,
-                        kind: VarDeclKind::Var,
-                        decls,
-                        declare: false,
-                    })
-                    .into(),
-                );
+                new_stmts.push(T::from(Stmt::from(VarDecl {
+                    span: DUMMY_SP,
+                    kind: VarDeclKind::Var,
+                    decls,
+                    declare: false,
+                    ..Default::default()
+                })));
             }
 
             new_stmts.extend(stmts.drain(..=idx));
@@ -285,14 +289,15 @@ impl Pure<'_> {
             _ => return,
         };
 
-        fn drop<T: StmtLike>(stmt: &mut T, last: &Stmt, need_break: bool) -> bool {
+        fn drop<T: StmtLike>(stmt: &mut T, last: &Stmt, need_break: bool, ctx: &ExprCtx) -> bool {
             match stmt.as_stmt_mut() {
                 Some(s) if s.eq_ignore_span(last) => {
                     if need_break {
-                        *s = Stmt::Break(BreakStmt {
+                        *s = BreakStmt {
                             label: None,
                             span: s.span(),
-                        });
+                        }
+                        .into();
                     } else {
                         s.take();
                     }
@@ -300,26 +305,37 @@ impl Pure<'_> {
                 }
                 Some(Stmt::If(i)) => {
                     let mut changed = false;
-                    changed |= drop(&mut *i.cons, last, need_break);
+                    changed |= drop(&mut *i.cons, last, need_break, ctx);
                     if let Some(alt) = i.alt.as_mut() {
-                        changed |= drop(&mut **alt, last, need_break);
+                        changed |= drop(&mut **alt, last, need_break, ctx);
                     }
                     changed
                 }
-                Some(Stmt::Try(t)) if !last.is_throw() => {
+                Some(Stmt::Try(t)) => {
                     let mut changed = false;
-                    if let Some(stmt) = t.block.stmts.last_mut() {
-                        changed |= drop(stmt, last, need_break)
-                    }
                     // TODO: let chain
+                    if let Some(stmt) = t.block.stmts.last_mut() {
+                        let side_effect = match last {
+                            Stmt::Break(_) | Stmt::Continue(_) => false,
+                            Stmt::Return(ReturnStmt { arg: None, .. }) => false,
+                            Stmt::Return(ReturnStmt { arg: Some(arg), .. }) => {
+                                arg.may_have_side_effects(ctx)
+                            }
+                            Stmt::Throw(_) => true,
+                            _ => unreachable!(),
+                        };
+                        if t.finalizer.is_none() && !side_effect {
+                            changed |= drop(stmt, last, need_break, ctx)
+                        }
+                    }
                     if let Some(h) = t.handler.as_mut() {
                         if let Some(stmt) = h.body.stmts.last_mut() {
-                            changed |= drop(stmt, last, need_break);
+                            changed |= drop(stmt, last, need_break, ctx);
                         }
                     }
                     if let Some(f) = t.finalizer.as_mut() {
                         if let Some(stmt) = f.stmts.last_mut() {
-                            changed |= drop(stmt, last, need_break);
+                            changed |= drop(stmt, last, need_break, ctx);
                         }
                     }
                     changed
@@ -328,7 +344,7 @@ impl Pure<'_> {
                     let mut changed = false;
                     for case in s.cases.iter_mut() {
                         for stmt in case.cons.iter_mut() {
-                            changed |= drop(stmt, last, true);
+                            changed |= drop(stmt, last, true, ctx);
                         }
                     }
 
@@ -344,16 +360,16 @@ impl Pure<'_> {
                     if let Stmt::Block(b) = &mut **body {
                         let mut changed = false;
                         for stmt in b.stmts.iter_mut() {
-                            changed |= drop(stmt, last, true);
+                            changed |= drop(stmt, last, true, ctx);
                         }
                         changed
                     } else {
-                        drop(&mut **body, last, true)
+                        drop(&mut **body, last, true, ctx)
                     }
                 }
                 Some(Stmt::Block(b)) => {
                     if let Some(stmt) = b.stmts.last_mut() {
-                        drop(stmt, last, need_break)
+                        drop(stmt, last, need_break, ctx)
                     } else {
                         false
                     }
@@ -363,7 +379,7 @@ impl Pure<'_> {
         }
 
         if let Some(before_last) = stmts.last_mut() {
-            if drop(before_last, last, false) {
+            if drop(before_last, last, false, &self.expr_ctx) {
                 self.changed = true;
 
                 report_change!("Dropping control keyword in nested block");
@@ -406,11 +422,11 @@ impl Pure<'_> {
                             Stmt::Block(v) if is_ok(&v) => {
                                 let stmts = v.stmts;
                                 maybe_par!(
-                                    stmts.into_iter().map(T::from_stmt).collect(),
+                                    stmts.into_iter().map(T::from).collect(),
                                     *crate::LIGHT_TASK_PARALLELS
                                 )
                             }
-                            _ => vec![T::from_stmt(v)],
+                            _ => vec![T::from(v)],
                         },
                         Err(v) => vec![v],
                     })
@@ -425,11 +441,11 @@ impl Pure<'_> {
                             Stmt::Block(v) if is_ok(&v) => {
                                 let stmts = v.stmts;
                                 maybe_par!(
-                                    stmts.into_iter().map(T::from_stmt).collect(),
+                                    stmts.into_iter().map(T::from).collect(),
                                     *crate::LIGHT_TASK_PARALLELS
                                 )
                             }
-                            _ => vec![T::from_stmt(v)],
+                            _ => vec![T::from(v)],
                         },
                         Err(v) => vec![v],
                     })
@@ -442,9 +458,9 @@ impl Pure<'_> {
                 .for_each(|stmt| match stmt.try_into_stmt() {
                     Ok(v) => match v {
                         Stmt::Block(v) if is_ok(&v) => {
-                            new.extend(v.stmts.into_iter().map(T::from_stmt));
+                            new.extend(v.stmts.into_iter().map(T::from));
                         }
-                        _ => new.push(T::from_stmt(v)),
+                        _ => new.push(T::from(v)),
                     },
                     Err(v) => new.push(v),
                 });
@@ -463,10 +479,11 @@ impl Pure<'_> {
             {
                 report_change!("unused: Removing `return void` in end of a function");
                 self.changed = true;
-                *s = Stmt::Expr(ExprStmt {
+                *s = ExprStmt {
                     span: *span,
                     expr: arg.take(),
-                });
+                }
+                .into();
             }
         }
     }
@@ -500,11 +517,14 @@ impl Pure<'_> {
                 Ok(stmt) => match stmt {
                     Stmt::If(mut s) => {
                         if let Value::Known(v) = s.test.cast_to_bool(&self.expr_ctx).1 {
-                            let mut var_ids = vec![];
-                            new.push(T::from_stmt(Stmt::Expr(ExprStmt {
-                                span: DUMMY_SP,
-                                expr: s.test.take(),
-                            })));
+                            let mut var_ids = Vec::new();
+                            new.push(T::from(
+                                ExprStmt {
+                                    span: DUMMY_SP,
+                                    expr: s.test.take(),
+                                }
+                                .into(),
+                            ));
 
                             if v {
                                 if let Some(alt) = s.alt.take() {
@@ -513,24 +533,25 @@ impl Pure<'_> {
                                         .into_iter()
                                         .map(|name| VarDeclarator {
                                             span: DUMMY_SP,
-                                            name: Pat::Ident(name.into()),
+                                            name: name.into(),
                                             init: None,
                                             definite: Default::default(),
                                         })
                                         .collect();
                                 }
                                 if !var_ids.is_empty() {
-                                    new.push(T::from_stmt(
+                                    new.push(T::from(
                                         VarDecl {
                                             span: DUMMY_SP,
                                             kind: VarDeclKind::Var,
                                             declare: Default::default(),
                                             decls: var_ids,
+                                            ..Default::default()
                                         }
                                         .into(),
                                     ))
                                 }
-                                new.push(T::from_stmt(*s.cons.take()));
+                                new.push(T::from(*s.cons.take()));
                             } else {
                                 var_ids = s
                                     .cons
@@ -538,31 +559,32 @@ impl Pure<'_> {
                                     .into_iter()
                                     .map(|name| VarDeclarator {
                                         span: DUMMY_SP,
-                                        name: Pat::Ident(name.into()),
+                                        name: name.into(),
                                         init: None,
                                         definite: Default::default(),
                                     })
                                     .collect();
                                 if !var_ids.is_empty() {
-                                    new.push(T::from_stmt(
+                                    new.push(T::from(
                                         VarDecl {
                                             span: DUMMY_SP,
                                             kind: VarDeclKind::Var,
                                             declare: Default::default(),
                                             decls: var_ids,
+                                            ..Default::default()
                                         }
                                         .into(),
                                     ))
                                 }
                                 if let Some(alt) = s.alt.take() {
-                                    new.push(T::from_stmt(*alt));
+                                    new.push(T::from(*alt));
                                 }
                             }
                         } else {
-                            new.push(T::from_stmt(Stmt::If(s)));
+                            new.push(T::from(s.into()));
                         }
                     }
-                    _ => new.push(T::from_stmt(stmt)),
+                    _ => new.push(T::from(stmt)),
                 },
                 Err(stmt) => new.push(stmt),
             });
@@ -591,24 +613,18 @@ impl Visit for LabelFinder<'_> {
     noop_visit_type!();
 
     fn visit_break_stmt(&mut self, s: &BreakStmt) {
-        match &s.label {
-            Some(label) => {
-                if label.sym == self.label.sym {
-                    self.found = true;
-                }
+        if let Some(label) = &s.label {
+            if label.sym == self.label.sym {
+                self.found = true;
             }
-            None => {}
         }
     }
 
     fn visit_continue_stmt(&mut self, s: &ContinueStmt) {
-        match &s.label {
-            Some(label) => {
-                if label.sym == self.label.sym {
-                    self.found = true;
-                }
+        if let Some(label) = &s.label {
+            if label.sym == self.label.sym {
+                self.found = true;
             }
-            None => {}
         }
     }
 }

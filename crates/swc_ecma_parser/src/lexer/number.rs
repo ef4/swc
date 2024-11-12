@@ -2,17 +2,14 @@
 //!
 //!
 //! See https://tc39.github.io/ecma262/#sec-literals-numeric-literals
-use std::{borrow::Cow, fmt::Write};
+use std::borrow::Cow;
 
 use either::Either;
 use num_bigint::BigInt as BigIntValue;
 use num_traits::{Num as NumTrait, ToPrimitive};
-use smartstring::{LazyCompact, SmartString};
-use swc_common::SyntaxContext;
 use tracing::trace;
 
 use super::*;
-use crate::error::SyntaxError;
 
 struct LazyBigInt<const RADIX: u8> {
     value: String,
@@ -30,7 +27,7 @@ impl<const RADIX: u8> LazyBigInt<RADIX> {
     }
 }
 
-impl<'a> Lexer<'a> {
+impl Lexer<'_> {
     /// Reads an integer, octal integer, or floating-point number
     pub(super) fn read_number(
         &mut self,
@@ -47,8 +44,6 @@ impl<'a> Lexer<'a> {
         }
 
         let start = self.cur_pos();
-        let mut raw_val = SmartString::<LazyCompact>::new();
-        let mut raw_str = SmartString::<LazyCompact>::new();
 
         let val = if starts_with_dot {
             // first char is '.'
@@ -57,20 +52,20 @@ impl<'a> Lexer<'a> {
             let starts_with_zero = self.cur().unwrap() == '0';
 
             // Use read_number_no_dot to support long numbers.
-            let (val, s, mut raw, not_octal) = self.read_number_no_dot_as_str::<10>()?;
+            let (val, s, not_octal) = self.read_number_no_dot_as_str::<10>()?;
 
             if self.eat(b'n') {
-                raw.push('n');
+                let end = self.cur_pos();
+                let raw = unsafe {
+                    // Safety: We got both start and end position from `self.input`
+                    self.input.slice(start, end)
+                };
 
                 return Ok(Either::Right((
                     Box::new(s.into_value()),
-                    self.atoms.borrow_mut().intern(&*raw),
+                    self.atoms.atom(raw),
                 )));
             }
-
-            write!(raw_val, "{}", &s.value).unwrap();
-
-            raw_str.push_str(&raw);
 
             if starts_with_zero {
                 // TODO: I guess it would be okay if I don't use -ffast-math
@@ -84,9 +79,16 @@ impl<'a> Lexer<'a> {
                     // e.g. `000` is octal
                     if start.0 != self.last_pos().0 - 1 {
                         // `-1` is utf 8 length of `0`
-                        return self.make_legacy_octal(start, 0f64).map(|value| {
-                            Either::Left((value, self.atoms.borrow_mut().intern(&*raw)))
-                        });
+
+                        let end = self.cur_pos();
+                        let raw = unsafe {
+                            // Safety: We got both start and end position from `self.input`
+                            self.input.slice(start, end)
+                        };
+                        let raw = self.atoms.atom(raw);
+                        return self
+                            .make_legacy_octal(start, 0f64)
+                            .map(|value| Either::Left((value, raw)));
                     }
                 } else {
                     // strict mode hates non-zero decimals starting with zero.
@@ -113,9 +115,16 @@ impl<'a> Lexer<'a> {
                                     panic!("failed to parse {} into float using BigInt", val_str)
                                 });
 
-                            return self.make_legacy_octal(start, val).map(|value| {
-                                Either::Left((value, self.atoms.borrow_mut().intern(&*raw)))
-                            });
+                            let end = self.cur_pos();
+                            let raw = unsafe {
+                                // Safety: We got both start and end position from `self.input`
+                                self.input.slice(start, end)
+                            };
+                            let raw = self.atoms.atom(raw);
+
+                            return self
+                                .make_legacy_octal(start, val)
+                                .map(|value| Either::Left((value, raw)));
                         }
                     }
                 }
@@ -132,9 +141,6 @@ impl<'a> Lexer<'a> {
         //
         // `.1.a`, `.1e-4.a` are valid,
         if self.cur() == Some('.') {
-            raw_val.push('.');
-            raw_str.push('.');
-
             self.bump();
 
             if starts_with_dot {
@@ -142,22 +148,21 @@ impl<'a> Lexer<'a> {
                 debug_assert!(self.cur().unwrap().is_ascii_digit());
             }
 
-            let mut raw = Raw(Some(Default::default()));
             // Read numbers after dot
-            let dec_val = self.read_int::<10>(0, &mut raw)?;
-
-            raw_str.push_str(raw.0.as_ref().unwrap());
+            self.read_int::<10>(0)?;
 
             val = {
-                if dec_val.is_some() {
-                    raw_val.push_str(raw.0.as_ref().unwrap());
-                }
+                let end = self.cur_pos();
+                let raw = unsafe {
+                    // Safety: We got both start and end position from `self.input`
+                    self.input.slice(start, end)
+                };
 
                 // Remove number separator from number
-                if raw_val.contains('_') {
-                    Cow::Owned(raw_val.replace('_', ""))
+                if raw.contains('_') {
+                    Cow::Owned(raw.replace('_', ""))
                 } else {
-                    Cow::Borrowed(&*raw_val)
+                    Cow::Borrowed(raw)
                 }
                 .parse()
                 .expect("failed to parse float using rust's impl")
@@ -171,7 +176,7 @@ impl<'a> Lexer<'a> {
         // 1e+2 = 100
         // 1e-2 = 0.01
         match self.cur() {
-            Some(e @ 'e') | Some(e @ 'E') => {
+            Some('e') | Some('E') => {
                 self.bump();
 
                 let next = match self.cur() {
@@ -182,23 +187,15 @@ impl<'a> Lexer<'a> {
                     }
                 };
 
-                raw_val.push('e');
-                raw_str.push(e);
-
                 let positive = if next == '+' || next == '-' {
                     self.bump(); // remove '+', '-'
-
-                    raw_str.push(next);
 
                     next == '+'
                 } else {
                     true
                 };
 
-                let mut raw = Raw(Some(Default::default()));
-                let exp = self.read_number_no_dot::<10>(&mut raw)?;
-
-                raw_str.push_str(&raw.0.take().unwrap());
+                let exp = self.read_number_no_dot::<10>()?;
 
                 val = if exp == f64::INFINITY {
                     if positive && val != 0.0 {
@@ -207,16 +204,16 @@ impl<'a> Lexer<'a> {
                         0.0
                     }
                 } else {
-                    let flag = if positive { '+' } else { '-' };
+                    let end = self.cur_pos();
+                    let raw = unsafe {
+                        // Safety: We got both start and end position from `self.input`
+                        self.input.slice(start, end)
+                    };
 
-                    raw_val.push(flag);
-
-                    write!(raw_val, "{}", exp).unwrap();
-
-                    if raw_val.contains('_') {
-                        Cow::Owned(raw_val.replace('_', ""))
+                    if raw.contains('_') {
+                        Cow::Owned(raw.replace('_', ""))
                     } else {
-                        Cow::Borrowed(&*raw_val)
+                        Cow::Borrowed(raw)
                     }
                     .parse()
                     .expect("failed to parse float literal")
@@ -227,10 +224,12 @@ impl<'a> Lexer<'a> {
 
         self.ensure_not_ident()?;
 
-        Ok(Either::Left((
-            val,
-            self.atoms.borrow_mut().intern(&*raw_str),
-        )))
+        let end = self.cur_pos();
+        let raw_str = unsafe {
+            // Safety: We got both start and end position from `self.input`
+            self.input.slice(start, end)
+        };
+        Ok(Either::Left((val, raw_str.into())))
     }
 
     /// Returns `Left(value)` or `Right(BigInt)`
@@ -244,46 +243,48 @@ impl<'a> Lexer<'a> {
         );
         debug_assert_eq!(self.cur(), Some('0'));
 
-        self.with_buf(|l, buf| {
-            l.bump();
+        let start = self.cur_pos();
 
-            buf.push('0');
+        self.bump();
 
-            let c = match l.input.cur() {
-                Some(c) => {
-                    l.bump();
+        match self.input.cur() {
+            Some(..) => {
+                self.bump();
+            }
+            _ => {
+                unreachable!();
+            }
+        }
 
-                    c
-                }
-                _ => {
-                    unreachable!();
-                }
+        let (val, s, _) = self.read_number_no_dot_as_str::<RADIX>()?;
+
+        if self.eat(b'n') {
+            let end = self.cur_pos();
+            let raw = unsafe {
+                // Safety: We got both start and end position from `self.input`
+                self.input.slice(start, end)
             };
 
-            buf.push(c);
+            return Ok(Either::Right((
+                Box::new(s.into_value()),
+                self.atoms.atom(raw),
+            )));
+        }
 
-            let (val, s, raw, _) = l.read_number_no_dot_as_str::<RADIX>()?;
+        self.ensure_not_ident()?;
 
-            buf.push_str(&raw);
+        let end = self.cur_pos();
+        let raw = unsafe {
+            // Safety: We got both start and end position from `self.input`
+            self.input.slice(start, end)
+        };
 
-            if l.eat(b'n') {
-                buf.push('n');
-
-                return Ok(Either::Right((
-                    Box::new(s.into_value()),
-                    l.atoms.borrow_mut().intern(&**buf),
-                )));
-            }
-
-            l.ensure_not_ident()?;
-
-            Ok(Either::Left((val, l.atoms.borrow_mut().intern(&**buf))))
-        })
+        Ok(Either::Left((val, self.atoms.atom(raw))))
     }
 
     /// This can read long integers like
     /// "13612536612375123612312312312312312312312".
-    fn read_number_no_dot<const RADIX: u8>(&mut self, raw: &mut Raw) -> LexResult<f64> {
+    fn read_number_no_dot<const RADIX: u8>(&mut self) -> LexResult<f64> {
         debug_assert!(
             RADIX == 2 || RADIX == 8 || RADIX == 10 || RADIX == 16,
             "radix for read_number_no_dot should be one of 2, 8, 10, 16, but got {}",
@@ -299,7 +300,6 @@ impl<'a> Lexer<'a> {
 
                 Ok((f64::mul_add(total, radix as f64, v as f64), true))
             },
-            raw,
             true,
         );
 
@@ -312,11 +312,10 @@ impl<'a> Lexer<'a> {
     /// This can read long integers like
     /// "13612536612375123612312312312312312312312".
     ///
-    ///
-    /// Returned bool is `true` is there was `8` or `9`.
+    /// - Returned `bool` is `true` is there was `8` or `9`.
     fn read_number_no_dot_as_str<const RADIX: u8>(
         &mut self,
-    ) -> LexResult<(f64, LazyBigInt<RADIX>, SmartString<LazyCompact>, bool)> {
+    ) -> LexResult<(f64, LazyBigInt<RADIX>, bool)> {
         debug_assert!(
             RADIX == 2 || RADIX == 8 || RADIX == 10 || RADIX == 16,
             "radix for read_number_no_dot should be one of 2, 8, 10, 16, but got {}",
@@ -326,8 +325,6 @@ impl<'a> Lexer<'a> {
 
         let mut non_octal = false;
         let mut read_any = false;
-
-        let mut raw = Raw(Some(Default::default()));
 
         self.read_digits::<_, f64, RADIX>(
             |total, radix, v| {
@@ -339,7 +336,6 @@ impl<'a> Lexer<'a> {
 
                 Ok((f64::mul_add(total, radix as f64, v as f64), true))
             },
-            &mut raw,
             true,
         )?;
 
@@ -347,19 +343,18 @@ impl<'a> Lexer<'a> {
             self.error(start, SyntaxError::ExpectedDigit { radix: RADIX })?;
         }
 
-        let raw_str = raw.0.take().unwrap();
+        let end = self.cur_pos();
+        let raw = unsafe {
+            // Safety: We got both start and end position from `self.input`
+            self.input.slice(start, end)
+        };
         // Remove number separator from number
-        let raw_number_str = raw_str.replace('_', "");
+        let raw_number_str = raw.replace('_', "");
         let parsed_float = BigIntValue::from_str_radix(&raw_number_str, RADIX as u32)
             .expect("failed to parse float using BigInt")
             .to_f64()
             .expect("failed to parse float using BigInt");
-        Ok((
-            parsed_float,
-            LazyBigInt::new(raw_number_str),
-            raw_str,
-            non_octal,
-        ))
+        Ok((parsed_float, LazyBigInt::new(raw_number_str), non_octal))
     }
 
     /// Ensure that ident cannot directly follow numbers.
@@ -377,11 +372,7 @@ impl<'a> Lexer<'a> {
     /// were read, the integer value otherwise.
     /// When `len` is not zero, this
     /// will return `None` unless the integer has exactly `len` digits.
-    pub(super) fn read_int<const RADIX: u8>(
-        &mut self,
-        len: u8,
-        raw: &mut Raw,
-    ) -> LexResult<Option<f64>> {
+    pub(super) fn read_int<const RADIX: u8>(&mut self, len: u8) -> LexResult<Option<f64>> {
         let mut count = 0u16;
         let v = self.read_digits::<_, Option<f64>, RADIX>(
             |opt: Option<f64>, radix, val| {
@@ -390,7 +381,6 @@ impl<'a> Lexer<'a> {
 
                 Ok((Some(total), count != len as u16))
             },
-            raw,
             true,
         )?;
         if len != 0 && count != len as u16 {
@@ -400,11 +390,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub(super) fn read_int_u32<const RADIX: u8>(
-        &mut self,
-        len: u8,
-        raw: &mut Raw,
-    ) -> LexResult<Option<u32>> {
+    pub(super) fn read_int_u32<const RADIX: u8>(&mut self, len: u8) -> LexResult<Option<u32>> {
         let start = self.state.start;
 
         let mut count = 0;
@@ -417,13 +403,12 @@ impl<'a> Lexer<'a> {
                     .checked_mul(radix as u32)
                     .and_then(|v| v.checked_add(val))
                     .ok_or_else(|| {
-                        let span = Span::new(start, start, SyntaxContext::empty());
+                        let span = Span::new(start, start);
                         Error::new(span, SyntaxError::InvalidUnicodeEscape)
                     })?;
 
                 Ok((Some(total), count != len))
             },
-            raw,
             true,
         )?;
         if len != 0 && count != len {
@@ -437,7 +422,6 @@ impl<'a> Lexer<'a> {
     fn read_digits<F, Ret, const RADIX: u8>(
         &mut self,
         mut op: F,
-        raw: &mut Raw,
         allow_num_separator: bool,
     ) -> LexResult<Ret>
     where
@@ -495,7 +479,6 @@ impl<'a> Lexer<'a> {
                     // Safety: cur() returns Some(c) where c is a valid char
                     self.input.bump();
                 }
-                raw.push(c);
 
                 continue;
             }
@@ -506,8 +489,6 @@ impl<'a> Lexer<'a> {
             } else {
                 return Ok(total);
             };
-
-            raw.push(c);
 
             self.bump();
 
@@ -540,7 +521,7 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{f64::INFINITY, panic};
+    use std::panic;
 
     use super::*;
 
@@ -570,7 +551,7 @@ mod tests {
 
     fn int<const RADIX: u8>(s: &'static str) -> u32 {
         lex(s, |l| {
-            l.read_int_u32::<RADIX>(0, &mut Raw(None))
+            l.read_int_u32::<RADIX>(0)
                 .unwrap()
                 .expect("read_int returned None")
         })
@@ -580,7 +561,7 @@ mod tests {
                         0000000000000000000000000000000000000000000000000000";
     #[test]
     fn num_inf() {
-        assert_eq!(num(LONG), (INFINITY, LONG.into()));
+        assert_eq!(num(LONG), (f64::INFINITY, LONG.into()));
     }
 
     /// Number >= 2^53
@@ -629,7 +610,7 @@ mod tests {
 
         assert_eq!(
             num(LARGE_POSITIVE_EXP),
-            (INFINITY, LARGE_POSITIVE_EXP.into())
+            (f64::INFINITY, LARGE_POSITIVE_EXP.into())
         );
         assert_eq!(num(LARGE_NEGATIVE_EXP), (0.0, LARGE_NEGATIVE_EXP.into()));
         assert_eq!(
@@ -826,7 +807,7 @@ mod tests {
                 assert_eq!(expected, value);
             } else if let Ok(vec) = vec {
                 assert_ne!(
-                    vec![Num {
+                    vec![Token::Num {
                         value: expected,
                         raw: expected.to_string().into()
                     }],

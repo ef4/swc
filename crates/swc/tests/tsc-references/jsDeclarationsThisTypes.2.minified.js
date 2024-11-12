@@ -1,22 +1,19 @@
 //// [index.js]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
-export var A = function() {
+export var A = /*#__PURE__*/ function() {
     function A() {
         _class_call_check(this, A);
     }
-    return(/** @returns {this} */ A.prototype.method = function() {
+    return A.prototype.method = function() {
         return this;
-    }, A);
+    }, A;
 }();
-var Base = function(A) {
-    _inherits(Base, A);
-    var _super = _create_super(Base);
+var Base = /*#__PURE__*/ function(A) {
     function Base() {
-        return _class_call_check(this, Base), _super.apply(this, arguments);
+        return _class_call_check(this, Base), _call_super(this, Base, arguments);
     }
-    return(// This method is required to reproduce #35932
-    Base.prototype.verify = function() {}, Base);
+    return _inherits(Base, A), Base.prototype.verify = function() {}, Base;
 }(A);
 export { Base as default };

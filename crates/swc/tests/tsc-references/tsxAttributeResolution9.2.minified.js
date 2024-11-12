@@ -20,11 +20,10 @@ define([
             return MyComponent;
         }
     });
-    var MyComponent = function() {
+    var MyComponent = /*#__PURE__*/ function() {
         function MyComponent() {
             _class_call_check._(this, MyComponent);
         }
         return MyComponent.prototype.render = function() {}, MyComponent;
     }();
 });
- // should be an error

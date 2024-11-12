@@ -1,56 +1,55 @@
 //! Copied from https://github.com/google/closure-compiler/blob/6ca3b62990064488074a1a8931b9e8dc39b148b3/test/com/google/javascript/jscomp/InlineVariablesTest.java
 
-use swc_common::{chain, Mark};
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_common::Mark;
+use swc_ecma_ast::Pass;
+use swc_ecma_parser::{Syntax, TsSyntax};
 use swc_ecma_transforms_base::resolver;
 use swc_ecma_transforms_compat::es2022::class_properties;
 use swc_ecma_transforms_optimization::simplify::inlining::inlining;
 use swc_ecma_transforms_testing::test;
 use swc_ecma_transforms_typescript::typescript;
-use swc_ecma_visit::Fold;
 
-fn simple_strip(top_level_mark: Mark) -> impl Fold {
+fn simple_strip(unresolved_mark: Mark, top_level_mark: Mark) -> impl Pass {
     typescript(
         typescript::Config {
             no_empty_export: true,
             ..Default::default()
         },
+        unresolved_mark,
         top_level_mark,
     )
 }
 
 macro_rules! to {
-    ($name:ident, $src:expr, $expected:expr) => {
+    ($name:ident, $src:expr) => {
         test!(
             Default::default(),
-            |_| chain!(
+            |_| (
                 resolver(Mark::new(), Mark::new(), false),
                 inlining(Default::default())
             ),
             $name,
-            $src,
-            $expected
+            $src
         );
     };
 
-    (ignore, $name:ident, $src:expr, $expected:expr) => {
+    (ignore, $name:ident, $src:expr) => {
         test!(
             ignore,
             Default::default(),
-            |_| chain!(
+            |_| (
                 resolver(Mark::new(), Mark::new(), false),
                 inlining(Default::default())
             ),
             $name,
-            $src,
-            $expected
+            $src
         );
     };
 }
 
 macro_rules! identical {
     ($name:ident, $src:expr) => {
-        to!($name, $src, $src);
+        to!($name, $src);
     };
 }
 
@@ -58,18 +57,18 @@ macro_rules! identical {
 fn test(src: &str, expected: &str) {
     swc_ecma_transforms_testing::test_transform(
         ::swc_ecma_parser::Syntax::default(),
+        None,
         |_| {
             let unresolved_mark = Mark::new();
             let top_level_mark = Mark::new();
 
-            chain!(
+            (
                 resolver(unresolved_mark, top_level_mark, false),
-                inlining(Default::default())
+                inlining(Default::default()),
             )
         },
         src,
         expected,
-        true,
     )
 }
 
@@ -78,20 +77,13 @@ fn test_same(s: &str) {
     test(s, s)
 }
 
-to!(
-    top_level_simple_var,
-    "var a = 1; var b = a;",
-    "var a; var b;"
-);
+to!(top_level_simple_var, "var a = 1; var b = a;");
 
 to!(
     function_scope_simple_var,
     "var a = 1;
     var b = a;
-    use(b);",
-    "var a;
-    var b;
-    use(1);"
+    use(b);"
 );
 
 identical!(top_level_increment, "var x = 1; x++;");
@@ -100,18 +92,13 @@ identical!(top_level_decrement, "var x = 1; x--;");
 
 identical!(top_level_assign_op, "var x = 1; x += 3;");
 
-to!(
-    simple_inline_in_fn,
-    "var x = 1; var z = x; use(z)",
-    "var x; var z; use(1)"
-);
+to!(simple_inline_in_fn, "var x = 1; var z = x; use(z)");
 
 to!(
     ignore,
     unresolved_inline_in_fn,
     "var a = new obj();
-    result = a;",
-    "result = new obj()"
+    result = a;"
 );
 
 // GitHub issue #1234: https://github.com/google/closure-compiler/issues/1234
@@ -136,13 +123,6 @@ to!(
             y;
             y;
         }
-    }",
-    "function f(x) {
-      if (true) {
-        let y;
-        x;
-        x;
-      }
     }"
 );
 
@@ -154,13 +134,6 @@ to!(
             y;
             y;
         }
-    }",
-    "function f(x) {
-      if (true) {
-        const y = x;
-        x;
-        x;
-      }
     }"
 );
 
@@ -172,13 +145,7 @@ to!(
         y;
     }
     y;
-",
-    "let y;
-    {
-        let y;
-        x;
-    }
-    y;"
+"
 );
 
 to!(
@@ -187,10 +154,6 @@ to!(
     const g = 3;
     let y = g;
     y;
-",
-    "const g = 3;
-    let y;
-    3;
 "
 );
 
@@ -206,30 +169,14 @@ to!(
     }
     y;
     g;
-",
-    "let y;
-    x;
-    const g = 2;
-    {
-        const g = 3;
-        let y;
-        3;
-    }
-    x;
-    2;
-    "
+"
 );
 
-to!(
-    regex,
-    "var b;b=/ab/;(b)?x=1:x=2;",
-    "var b;b=/ab/;/ab/?x=1:x=2;"
-);
+to!(regex, "var b;b=/ab/;(b)?x=1:x=2;");
 
 to!(
     generator_let_yield,
-    "function* f() {  let x = 1; yield x; }",
-    "function* f() {  let x; yield 1; }"
+    "function* f() {  let x = 1; yield x; }"
 );
 
 // TODO: Inline single use
@@ -242,23 +189,14 @@ identical!(for_of_1, "var i = 0; for(i of n) {}");
 
 identical!(for_of_2, "for( var i of n) { var x = i; }");
 
-to!(
-    tpl_lit_1,
-    "var name = 'Foo'; `Hello ${name}`",
-    "var name; `Hello ${'Foo'}`"
-);
+to!(tpl_lit_1, "var name = 'Foo'; `Hello ${name}`");
 
 to!(
     tpl_lit_2,
-    "var name = 'Foo'; var foo = name; `Hello ${foo}`",
-    "var name; var foo; `Hello ${'Foo'}`"
+    "var name = 'Foo'; var foo = name; `Hello ${foo}`"
 );
 
-to!(
-    tpl_lit_3,
-    "var age = 3; `Age: ${age}`",
-    "var age; `Age: ${3}`"
-);
+to!(tpl_lit_3, "var age = 3; `Age: ${age}`");
 
 to!(
     ignore,
@@ -274,16 +212,6 @@ to!(
         "  }",
         "}",
         "var output = myTag`My name is ${name} ${3}`;",
-    ),
-    concat!(
-        "var output = function myTag(strings, nameExp, numExp) {",
-        "  var modStr;",
-        "  if (numExp > 2) {",
-        "    modStr = nameExp + 'Bar'",
-        "  } else { ",
-        "    modStr = nameExp + 'BarBar'",
-        "  }",
-        "}`My name is ${'Foo'} ${3}`;",
     )
 );
 
@@ -301,19 +229,6 @@ to!(
         "}",
         "var output = myTag`My name is ${name} ${3}`;",
         "output = myTag`My name is ${name} ${2}`;",
-    ),
-    concat!(
-        "var name;",
-        "function myTag(strings, nameExp, numExp) {",
-        "  var modStr;",
-        "  if (numExp > 2) {",
-        "    modStr = nameExp + 'Bar'",
-        "  } else { ",
-        "    modStr = nameExp + 'BarBar'",
-        "  }",
-        "}",
-        "var output = myTag`My name is ${'Foo'} ${3}`;",
-        "output = myTag`My name is ${'Foo'} ${2}`;",
     )
 );
 
@@ -358,18 +273,7 @@ let c;
 if (a) {
     c = 3;
 }
-",
-    "let b;
-
-let a = 1;
-if (2) {
-    a = 2;
-}
-
-let c;
-if (a) {
-    c = 3;
-}"
+"
 );
 
 to!(
@@ -380,24 +284,14 @@ let a = 1;
 a = 2;
 
 let c;
-if (a) c = 3",
-    "let b;
-
-let a;
-a = 2;
-
-let c;
-if (2) c = 3"
+if (a) c = 3"
 );
 
 to!(
     custom_loop_3,
     "let c;
 c = 3;
-console.log(c);",
-    "let c;
-c = 3;
-console.log(3);"
+console.log(c);"
 );
 
 #[test]
@@ -2164,24 +2058,24 @@ fn test_tagged_template_literals() {
 }
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
-    |t| {
+    |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::fresh(Mark::root());
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            simple_strip(top_level_mark),
+            simple_strip(unresolved_mark, top_level_mark),
             class_properties(
-                Some(t.comments.clone()),
                 class_properties::Config {
                     set_public_fields: true,
                     ..Default::default()
-                }
+                },
+                unresolved_mark,
             ),
-            inlining(Default::default())
+            inlining(Default::default()),
         )
     },
     issue_1156_1,
@@ -2198,40 +2092,28 @@ test!(
         });
         return Object.assign(promise, methods);
     }
-    ",
-    "
-    export function d() {
-        let methods;
-        const promise = new Promise((resolve, reject)=>{
-            methods = {
-                resolve,
-                reject
-            };
-        });
-        return Object.assign(promise, methods);
-    }
     "
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
-    |t| {
+    |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            simple_strip(top_level_mark),
+            simple_strip(unresolved_mark, top_level_mark),
             class_properties(
-                Some(t.comments.clone()),
                 class_properties::Config {
                     set_public_fields: true,
                     ..Default::default()
-                }
+                },
+                unresolved_mark,
             ),
-            inlining(Default::default())
+            inlining(Default::default()),
         )
     },
     issue_1156_2,
@@ -2262,45 +2144,21 @@ test!(
     }
 
     new A();
-    ",
-    "
-    function d() {
-        let methods;
-        const promise = new Promise((resolve, reject)=>{
-            methods = {
-                resolve,
-                reject
-            };
-        });
-        return Object.assign(promise, methods);
-    }
-    class A {
-        a() {
-            this.s.resolve();
-        }
-        b() {
-            this.s = d();
-        }
-        constructor(){
-            this.s = d();
-        }
-    }
-    new A();
     "
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            simple_strip(top_level_mark),
-            inlining(Default::default())
+            simple_strip(unresolved_mark, top_level_mark),
+            inlining(Default::default()),
         )
     },
     deno_8180_1,
@@ -2320,39 +2178,21 @@ const STATUS_TEXT = new Map([
         "Switching Protocols"
     ]
 ]);
-    "#,
-    r#"
-    var Status;
-    (function(Status) {
-        Status[Status["Continue"] = 100] = "Continue";
-        Status[Status["SwitchingProtocols"] = 101] = "SwitchingProtocols";
-    })(Status || (Status = {
-    }));
-    const STATUS_TEXT = new Map([
-        [
-            Status.Continue,
-            "Continue"
-        ],
-        [
-            Status.SwitchingProtocols,
-            "Switching Protocols"
-        ]
-    ]);
     "#
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    Syntax::Typescript(TsSyntax {
         decorators: true,
         ..Default::default()
     }),
     |_| {
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
-            simple_strip(top_level_mark),
-            inlining(Default::default())
+            simple_strip(unresolved_mark, top_level_mark),
+            inlining(Default::default()),
         )
     },
     deno_8189_1,
@@ -2361,13 +2201,6 @@ test!(
     function g() {
         return null !== I && I.buffer === A.memory.buffer || (I = new \
      Uint8Array(A.memory.buffer)), I
-    }
-    ",
-    "
-    let A, I = null;
-    function g() {
-        return null !== I && I.buffer === A.memory.buffer || (I = new \
-     Uint8Array(A.memory.buffer)), I;
     }
     "
 );

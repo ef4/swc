@@ -1,9 +1,9 @@
 use std::num::FpCategory;
 
-use swc_atoms::{atom, js_word};
+use swc_atoms::atom;
 use swc_common::{util::take::Take, Spanned, SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
-use swc_ecma_utils::{undefined, ExprExt, Value::Known};
+use swc_ecma_utils::{ExprExt, Value::Known};
 
 use super::Optimizer;
 use crate::{compress::util::eval_as_number, maybe_par, DISABLE_BUGGY_PASSES};
@@ -49,22 +49,24 @@ impl Optimizer<'_> {
                         "length" => {
                             report_change!("evaluate: function.length");
 
-                            *e = Expr::Lit(Lit::Num(Number {
+                            *e = Lit::Num(Number {
                                 span: *span,
                                 value: metadata.len as _,
                                 raw: None,
-                            }));
+                            })
+                            .into();
                             self.changed = true;
                         }
 
                         "name" => {
                             report_change!("evaluate: function.name");
 
-                            *e = Expr::Lit(Lit::Str(Str {
+                            *e = Lit::Str(Str {
                                 span: *span,
                                 value: obj.sym.clone(),
                                 raw: None,
-                            }));
+                            })
+                            .into();
                             self.changed = true;
                         }
 
@@ -104,37 +106,32 @@ impl Optimizer<'_> {
         }
 
         match e {
-            Expr::Ident(Ident {
-                span,
-                sym: js_word!("undefined"),
-                ..
-            }) => {
+            Expr::Ident(Ident { span, sym, .. }) if &**sym == "undefined" => {
                 report_change!("evaluate: `undefined` -> `void 0`");
                 self.changed = true;
-                *e = *undefined(*span);
+                *e = *Expr::undefined(*span);
             }
 
-            Expr::Ident(Ident {
-                span,
-                sym: js_word!("Infinity"),
-                ..
-            }) => {
+            Expr::Ident(Ident { span, sym, .. }) if &**sym == "Infinity" => {
                 report_change!("evaluate: `Infinity` -> `1 / 0`");
                 self.changed = true;
-                *e = Expr::Bin(BinExpr {
+                *e = BinExpr {
                     span: *span,
                     op: op!("/"),
-                    left: Box::new(Expr::Lit(Lit::Num(Number {
+                    left: Lit::Num(Number {
                         span: DUMMY_SP,
                         value: 1.0,
                         raw: None,
-                    }))),
-                    right: Box::new(Expr::Lit(Lit::Num(Number {
+                    })
+                    .into(),
+                    right: Lit::Num(Number {
                         span: DUMMY_SP,
                         value: 0.0,
                         raw: None,
-                    }))),
-                });
+                    })
+                    .into(),
+                }
+                .into();
             }
 
             _ => {}
@@ -166,16 +163,13 @@ impl Optimizer<'_> {
         //
 
         for arg in &*args {
-            if arg.spread.is_some() || arg.expr.may_have_side_effects(&self.expr_ctx) {
+            if arg.spread.is_some() || arg.expr.may_have_side_effects(&self.ctx.expr_ctx) {
                 return;
             }
         }
 
         match &**callee {
-            Expr::Ident(Ident {
-                sym: js_word!("RegExp"),
-                ..
-            }) if self.options.unsafe_regexp => {
+            Expr::Ident(Ident { sym, .. }) if &**sym == "RegExp" && self.options.unsafe_regexp => {
                 if !args.is_empty() {
                     self.optimize_expr_in_str_ctx(&mut args[0].expr);
                 }
@@ -198,11 +192,12 @@ impl Optimizer<'_> {
                                 exp.value
                             );
 
-                            *e = Expr::Lit(Lit::Regex(Regex {
+                            *e = Lit::Regex(Regex {
                                 span,
                                 exp: exp.value.as_ref().into(),
                                 flags: atom!(""),
-                            }));
+                            })
+                            .into();
                         }
                     }
                     _ => {
@@ -216,11 +211,12 @@ impl Optimizer<'_> {
                                 flags.value
                             );
 
-                            *e = Expr::Lit(Lit::Regex(Regex {
+                            *e = Lit::Regex(Regex {
                                 span,
                                 exp: exp.value.as_ref().into(),
                                 flags: flags.value.as_ref().into(),
-                            }));
+                            })
+                            .into();
                         }
                     }
                 }
@@ -231,16 +227,13 @@ impl Optimizer<'_> {
                 prop: MemberProp::Ident(prop),
                 ..
             }) => match &**obj {
-                Expr::Ident(Ident {
-                    sym: js_word!("String"),
-                    ..
-                }) => {
+                Expr::Ident(Ident { sym, .. }) if &**sym == "String" => {
                     if &*prop.sym == "fromCharCode" {
                         if args.len() != 1 {
                             return;
                         }
 
-                        if let Known(char_code) = args[0].expr.as_pure_number(&self.expr_ctx) {
+                        if let Known(char_code) = args[0].expr.as_pure_number(&self.ctx.expr_ctx) {
                             let v = char_code.floor() as u32;
 
                             if let Some(v) = char::from_u32(v) {
@@ -256,20 +249,18 @@ impl Optimizer<'_> {
 
                                 let value = v.to_string();
 
-                                *e = Expr::Lit(Lit::Str(Str {
+                                *e = Lit::Str(Str {
                                     span: e.span(),
                                     raw: None,
                                     value: value.into(),
-                                }));
+                                })
+                                .into();
                             }
                         }
                     }
                 }
 
-                Expr::Ident(Ident {
-                    sym: js_word!("Object"),
-                    ..
-                }) => {
+                Expr::Ident(Ident { sym, .. }) if &**sym == "Object" => {
                     if &*prop.sym == "keys" {
                         if args.len() != 1 {
                             return;
@@ -280,7 +271,7 @@ impl Optimizer<'_> {
                             _ => return,
                         };
 
-                        let mut keys = vec![];
+                        let mut keys = Vec::new();
 
                         for prop in &obj.props {
                             match prop {
@@ -289,28 +280,30 @@ impl Optimizer<'_> {
                                     Prop::Shorthand(p) => {
                                         keys.push(Some(ExprOrSpread {
                                             spread: None,
-                                            expr: Box::new(Expr::Lit(Lit::Str(Str {
+                                            expr: Lit::Str(Str {
                                                 span: p.span,
                                                 raw: None,
                                                 value: p.sym.clone(),
-                                            }))),
+                                            })
+                                            .into(),
                                         }));
                                     }
                                     Prop::KeyValue(p) => match &p.key {
                                         PropName::Ident(key) => {
                                             keys.push(Some(ExprOrSpread {
                                                 spread: None,
-                                                expr: Box::new(Expr::Lit(Lit::Str(Str {
+                                                expr: Lit::Str(Str {
                                                     span: key.span,
                                                     raw: None,
                                                     value: key.sym.clone(),
-                                                }))),
+                                                })
+                                                .into(),
                                             }));
                                         }
                                         PropName::Str(key) => {
                                             keys.push(Some(ExprOrSpread {
                                                 spread: None,
-                                                expr: Box::new(Expr::Lit(Lit::Str(key.clone()))),
+                                                expr: Lit::Str(key.clone()).into(),
                                             }));
                                         }
                                         _ => return,
@@ -320,7 +313,7 @@ impl Optimizer<'_> {
                             }
                         }
 
-                        *e = Expr::Array(ArrayLit { span, elems: keys })
+                        *e = ArrayLit { span, elems: keys }.into()
                     }
                 }
 
@@ -348,43 +341,63 @@ impl Optimizer<'_> {
         }
 
         if let Expr::Call(..) = e {
-            if let Some(value) = eval_as_number(&self.expr_ctx, e) {
+            if let Some(value) = eval_as_number(&self.ctx.expr_ctx, e) {
                 self.changed = true;
                 report_change!("evaluate: Evaluated an expression as `{}`", value);
 
-                *e = Expr::Lit(Lit::Num(Number {
+                if value.is_nan() {
+                    *e = Ident::new(
+                        "NaN".into(),
+                        e.span(),
+                        SyntaxContext::empty().apply_mark(self.marks.unresolved_mark),
+                    )
+                    .into();
+                    return;
+                }
+
+                *e = Lit::Num(Number {
                     span: e.span(),
                     value,
                     raw: None,
-                }));
+                })
+                .into();
                 return;
             }
         }
 
         match e {
             Expr::Bin(bin @ BinExpr { op: op!("**"), .. }) => {
-                let l = bin.left.as_pure_number(&self.expr_ctx);
-                let r = bin.right.as_pure_number(&self.expr_ctx);
+                let l = bin.left.as_pure_number(&self.ctx.expr_ctx);
+                let r = bin.right.as_pure_number(&self.ctx.expr_ctx);
 
                 if let Known(l) = l {
                     if let Known(r) = r {
                         self.changed = true;
                         report_change!("evaluate: Evaluated `{:?} ** {:?}`", l, r);
 
-                        let value = l.powf(r);
-                        *e = Expr::Lit(Lit::Num(Number {
-                            span: bin.span,
-                            value,
-                            raw: None,
-                        }));
+                        if l.is_nan() || r.is_nan() {
+                            *e = Ident::new(
+                                "NaN".into(),
+                                bin.span,
+                                SyntaxContext::empty().apply_mark(self.marks.unresolved_mark),
+                            )
+                            .into();
+                        } else {
+                            *e = Lit::Num(Number {
+                                span: bin.span,
+                                value: l.powf(r),
+                                raw: None,
+                            })
+                            .into();
+                        };
                     }
                 }
             }
 
             Expr::Bin(bin @ BinExpr { op: op!("/"), .. }) => {
-                let ln = bin.left.as_pure_number(&self.expr_ctx);
+                let ln = bin.left.as_pure_number(&self.ctx.expr_ctx);
 
-                let rn = bin.right.as_pure_number(&self.expr_ctx);
+                let rn = bin.right.as_pure_number(&self.ctx.expr_ctx);
                 if let (Known(ln), Known(rn)) = (ln, rn) {
                     // Prefer `0/0` over NaN.
                     if ln == 0.0 && rn == 0.0 {
@@ -401,8 +414,7 @@ impl Optimizer<'_> {
                             // If a variable named `NaN` is in scope, don't convert e into NaN.
                             let data = &self.data.vars;
                             if maybe_par!(
-                                data.iter()
-                                    .any(|(name, v)| v.declared && name.0 == js_word!("NaN")),
+                                data.iter().any(|(name, v)| v.declared && name.0 == "NaN"),
                                 *crate::LIGHT_TASK_PARALLELS
                             ) {
                                 return;
@@ -412,12 +424,12 @@ impl Optimizer<'_> {
                             report_change!("evaluate: `0 / 0` => `NaN`");
 
                             // Sign does not matter for NaN
-                            *e = Expr::Ident(Ident::new(
-                                js_word!("NaN"),
-                                bin.span.with_ctxt(
-                                    SyntaxContext::empty().apply_mark(self.marks.unresolved_mark),
-                                ),
-                            ));
+                            *e = Ident::new(
+                                "NaN".into(),
+                                bin.span,
+                                SyntaxContext::empty().apply_mark(self.marks.unresolved_mark),
+                            )
+                            .into();
                         }
                         (FpCategory::Normal, FpCategory::Zero) => {
                             self.changed = true;
@@ -425,19 +437,14 @@ impl Optimizer<'_> {
 
                             // Sign does not matter for NaN
                             *e = if ln.is_sign_positive() == rn.is_sign_positive() {
-                                Expr::Ident(Ident::new(
-                                    js_word!("Infinity"),
-                                    bin.span.with_ctxt(SyntaxContext::empty()),
-                                ))
+                                Ident::new_no_ctxt("Infinity".into(), bin.span).into()
                             } else {
-                                Expr::Unary(UnaryExpr {
+                                UnaryExpr {
                                     span: bin.span,
                                     op: op!(unary, "-"),
-                                    arg: Box::new(Expr::Ident(Ident::new(
-                                        js_word!("Infinity"),
-                                        bin.span.with_ctxt(SyntaxContext::empty()),
-                                    ))),
-                                })
+                                    arg: Ident::new_no_ctxt("Infinity".into(), bin.span).into(),
+                                }
+                                .into()
                             };
                         }
                         _ => {}
@@ -470,7 +477,7 @@ impl Optimizer<'_> {
             }
             // Remove rhs of lhs if possible.
 
-            let v = left.right.as_pure_bool(&self.expr_ctx);
+            let v = left.right.as_pure_bool(&self.ctx.expr_ctx);
             if let Known(v) = v {
                 // As we used as_pure_bool, we can drop it.
                 if v && e.op == op!("&&") {

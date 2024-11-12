@@ -1,5 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub extern crate swc_allocator as alloc;
+
+#[cfg(feature = "swc_atoms")]
+#[cfg_attr(docsrs, doc(cfg(feature = "swc_atoms")))]
+pub use swc_atoms as atoms;
+
 // Quote
 #[cfg(feature = "ecma_quote")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ecma_quote")))]
@@ -47,9 +53,7 @@ pub mod ecma {
     )]
     pub mod transforms {
         pub mod base {
-            pub use swc_ecma_transforms_base::{
-                assumptions::Assumptions, feature, fixer, helpers, hygiene, pass, perf, resolver,
-            };
+            pub use swc_ecma_transforms_base::*;
         }
         #[cfg(feature = "ecma_transforms_optimization")]
         #[cfg_attr(docsrs, doc(cfg(feature = "transforms_optimization")))]
@@ -126,6 +130,13 @@ pub mod ecma {
     }
 
     // visit* interfaces
+    #[cfg(feature = "ecma_lints")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ecma_lints")))]
+    pub mod lints {
+        pub use swc_ecma_lints::*;
+    }
+
+    // visit* interfaces
     #[cfg(feature = "__visit")]
     #[cfg_attr(docsrs, doc(cfg(feature = "__visit")))]
     pub mod visit {
@@ -165,6 +176,18 @@ pub mod plugin_runner {
 #[cfg_attr(docsrs, doc(cfg(feature = "trace_macro")))]
 pub mod trace_macro {
     pub use swc_trace_macro::*;
+}
+
+#[cfg(feature = "transform_common")]
+#[cfg_attr(docsrs, doc(cfg(feature = "transform_common")))]
+pub mod transform_common {
+    pub use swc_transform_common::*;
+}
+
+#[cfg(feature = "typescript")]
+#[cfg_attr(docsrs, doc(cfg(feature = "typescript")))]
+pub mod typescript {
+    pub use swc_typescript::*;
 }
 
 // swc_bundler
@@ -270,7 +293,7 @@ pub mod testing {
 
 #[cfg(feature = "allocator_node")]
 #[cfg_attr(docsrs, doc(cfg(feature = "allocator_node")))]
-extern crate swc_node_base;
+extern crate swc_malloc;
 
 pub static SWC_CORE_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/core_pkg_version.txt"));
 

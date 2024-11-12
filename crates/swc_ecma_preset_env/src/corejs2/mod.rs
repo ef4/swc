@@ -1,7 +1,7 @@
 use indexmap::IndexSet;
 use preset_env_base::{version::should_enable, Versions};
-use swc_atoms::{js_word, JsWord};
-use swc_common::{collections::ARandomState, DUMMY_SP};
+use swc_atoms::JsWord;
+use swc_common::collections::ARandomState;
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 
@@ -24,7 +24,7 @@ pub(crate) struct UsageVisitor {
 
 impl UsageVisitor {
     pub fn new(target: Versions) -> Self {
-        //        let mut v = Self { required: vec![] };
+        //        let mut v = Self { required: Vec::new() };
         //
         //
         //        let is_web_target = target
@@ -124,7 +124,7 @@ impl UsageVisitor {
 
 /// Detects usage of types
 impl Visit for UsageVisitor {
-    noop_visit_type!();
+    noop_visit_type!(fail);
 
     fn visit_ident(&mut self, node: &Ident) {
         node.visit_children_with(self);
@@ -144,17 +144,15 @@ impl Visit for UsageVisitor {
                 self.visit_object_pat_props(init, &o.props)
             }
         } else if let Pat::Object(ref o) = d.name {
-            self.visit_object_pat_props(&Expr::Ident(Ident::new(js_word!(""), DUMMY_SP)), &o.props)
+            self.visit_object_pat_props(&Ident::default().into(), &o.props)
         }
     }
 
     fn visit_assign_expr(&mut self, e: &AssignExpr) {
         e.visit_children_with(self);
 
-        if let PatOrExpr::Pat(pat) = &e.left {
-            if let Pat::Object(ref o) = &**pat {
-                self.visit_object_pat_props(&e.right, &o.props)
-            }
+        if let AssignTarget::Pat(AssignTargetPat::Object(o)) = &e.left {
+            self.visit_object_pat_props(&e.right, &o.props)
         }
     }
 
@@ -303,7 +301,6 @@ impl Visit for UsageVisitor {
 
     ///
     /// - `Symbol.iterator in arr`
-
     fn visit_bin_expr(&mut self, e: &BinExpr) {
         e.visit_children_with(self);
 
@@ -326,21 +323,9 @@ impl Visit for UsageVisitor {
 
 fn is_symbol_iterator(e: &Expr) -> bool {
     match e {
-        Expr::Member(MemberExpr {
-            obj,
-            prop:
-                MemberProp::Ident(Ident {
-                    sym: js_word!("iterator"),
-                    ..
-                }),
-            ..
-        }) => matches!(
-            &**obj,
-            Expr::Ident(Ident {
-                sym: js_word!("Symbol"),
-                ..
-            })
-        ),
+        Expr::Member(MemberExpr { obj, prop, .. }) if prop.is_ident_with("iterator") => {
+            obj.is_ident_ref_to("Symbol")
+        }
         _ => false,
     }
 }

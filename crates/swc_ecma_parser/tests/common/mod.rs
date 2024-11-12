@@ -25,16 +25,17 @@ impl Fold for Normalizer {
 
         match e {
             Expr::Paren(ParenExpr { expr, .. }) if self.is_test262 => *expr,
-            Expr::New(n @ NewExpr { args: None, .. }) if self.is_test262 => Expr::New(NewExpr {
-                args: Some(vec![]),
+            Expr::New(n @ NewExpr { args: None, .. }) if self.is_test262 => NewExpr {
+                args: Some(Vec::new()),
                 ..n
-            }),
+            }
+            .into(),
             // Flatten comma expressions.
             Expr::Seq(SeqExpr { mut exprs, span }) => {
                 let need_work = exprs.iter().any(|n| matches!(**n, Expr::Seq(..)));
 
                 if need_work {
-                    exprs = exprs.into_iter().fold(vec![], |mut v, e| {
+                    exprs = exprs.into_iter().fold(Vec::new(), |mut v, e| {
                         match *e {
                             Expr::Seq(SeqExpr { exprs, .. }) => v.extend(exprs),
                             _ => v.push(e),
@@ -42,7 +43,7 @@ impl Fold for Normalizer {
                         v
                     });
                 }
-                Expr::Seq(SeqExpr { exprs, span })
+                SeqExpr { exprs, span }.into()
             }
             _ => e,
         }
@@ -84,29 +85,14 @@ impl Fold for Normalizer {
 
         if let Pat::Expr(expr) = node {
             match *expr {
-                Expr::Ident(i) => return Pat::Ident(i.into()),
+                Expr::Ident(i) => return i.into(),
                 _ => {
-                    node = Pat::Expr(expr);
+                    node = expr.into();
                 }
             }
         }
 
         node
-    }
-
-    fn fold_pat_or_expr(&mut self, node: PatOrExpr) -> PatOrExpr {
-        let node = node.fold_children_with(self);
-
-        match node {
-            PatOrExpr::Expr(expr) => match *expr {
-                Expr::Ident(i) => PatOrExpr::Pat(Box::new(Pat::Ident(i.into()))),
-                _ => PatOrExpr::Expr(expr),
-            },
-            PatOrExpr::Pat(pat) => match *pat {
-                Pat::Expr(expr) => PatOrExpr::Expr(expr),
-                _ => PatOrExpr::Pat(pat),
-            },
-        }
     }
 
     fn fold_prop_name(&mut self, n: PropName) -> PropName {
@@ -117,7 +103,7 @@ impl Fold for Normalizer {
         }
 
         match n {
-            PropName::Ident(Ident { span, sym, .. }) => PropName::Str(Str {
+            PropName::Ident(IdentName { span, sym, .. }) => PropName::Str(Str {
                 span,
                 value: sym,
                 raw: None,
@@ -150,6 +136,21 @@ impl Fold for Normalizer {
             }
         } else {
             Str { span, ..s }
+        }
+    }
+
+    fn fold_simple_assign_target(&mut self, n: SimpleAssignTarget) -> SimpleAssignTarget {
+        let n = n.fold_children_with(self);
+
+        if self.is_test262 {
+            match n {
+                SimpleAssignTarget::Paren(ParenExpr { expr, .. }) => {
+                    SimpleAssignTarget::try_from(expr).unwrap()
+                }
+                _ => n,
+            }
+        } else {
+            n
         }
     }
 }

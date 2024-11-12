@@ -6,8 +6,8 @@ use std::{
 use anyhow::{Context, Error};
 use glob::glob;
 use once_cell::sync::Lazy;
-use pmutil::{q, Quote};
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
+use quote::quote;
 use regex::Regex;
 use relative_path::RelativePath;
 use syn::{
@@ -79,7 +79,7 @@ impl Parse for Config {
 
         let mut config = Self {
             pattern,
-            exclude_patterns: vec![],
+            exclude_patterns: Vec::new(),
         };
 
         let comma: Option<Token![,]> = input.parse()?;
@@ -92,7 +92,7 @@ impl Parse for Config {
     }
 }
 
-pub fn expand(callee: &Ident, attr: Config) -> Result<Vec<Quote>, Error> {
+pub fn expand(callee: &Ident, attr: Config) -> Result<Vec<TokenStream>, Error> {
     let base_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(
         "#[fixture] requires CARGO_MANIFEST_DIR because it's relative to cargo manifest directory",
     ));
@@ -101,7 +101,7 @@ pub fn expand(callee: &Ident, attr: Config) -> Result<Vec<Quote>, Error> {
 
     let paths =
         glob(&pattern).with_context(|| format!("glob failed for whole path: `{}`", pattern))?;
-    let mut test_fns = vec![];
+    let mut test_fns = Vec::new();
     // Allow only alphanumeric and underscore characters for the test_name.
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^A-Za-z0-9_]").unwrap());
 
@@ -148,30 +148,19 @@ pub fn expand(callee: &Ident, attr: Config) -> Result<Vec<Quote>, Error> {
         .replace("___", "__");
         let test_ident = Ident::new(&test_name, Span::call_site());
 
-        let ignored_attr = if ignored {
-            q!(Vars {}, { #[ignore] })
-        } else {
-            Quote::new_call_site()
-        };
+        let ignored_attr = if ignored { quote!(#[ignore]) } else { quote!() };
 
-        let f = q!(
-            Vars {
-                test_ident,
-                path_str: &abs_path.to_string_lossy(),
-                callee,
-                ignored_attr,
-            },
-            {
-                #[test]
-                #[inline(never)]
-                #[doc(hidden)]
-                #[allow(non_snake_case)]
-                ignored_attr
-                fn test_ident() {
-                    eprintln!("Input: {}", path_str);
+        let path_str = abs_path.to_string_lossy();
+        let f = quote!(
+            #[test]
+            #[inline(never)]
+            #[doc(hidden)]
+            #[allow(non_snake_case)]
+            #ignored_attr
+            fn #test_ident() {
+                eprintln!("Input: {}", #path_str);
 
-                    callee(::std::path::PathBuf::from(path_str));
-                }
+                #callee(::std::path::PathBuf::from(#path_str));
             }
         );
 

@@ -1,4 +1,5 @@
 //// [typeGuardOfFormTypeOfFunction.ts]
+import { _ as _type_of } from "@swc/helpers/_/_type_of";
 function f1(x) {
     if (typeof x === "function") {
         x; // any
@@ -57,7 +58,7 @@ function f100(obj, keys) {
         for(var _iterator = keys[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true){
             var k = _step.value;
             var item = obj[k];
-            if (typeof item == "function") item.call(obj);
+            if (typeof item == 'function') item.call(obj);
         }
     } catch (err) {
         _didIteratorError = true;
@@ -77,10 +78,10 @@ function f100(obj, keys) {
 // Repro from #49316
 function configureStore(reducer) {
     var rootReducer;
-    if (typeof reducer === "function") {
+    if (typeof reducer === 'function') {
         rootReducer = reducer;
     }
 }
 function f101(x) {
-    return typeof x === "object" && x.anything;
+    return (typeof x === "undefined" ? "undefined" : _type_of(x)) === "object" && x.anything;
 }

@@ -1,7 +1,4 @@
 //// [parserRealSource6.ts]
-// Copyright (c) Microsoft. All rights reserved. Licensed under the Apache License, Version 2.0. 
-// See LICENSE.txt in the project root for complete license information.
-///<reference path='typescript.ts' />
 var TypeScript;
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 !function(TypeScript) {
@@ -10,7 +7,7 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
     }, TypeScript.MemberScopeContext = function MemberScopeContext(flow, pos, matchFlag) {
         _class_call_check(this, MemberScopeContext), this.flow = flow, this.pos = pos, this.matchFlag = matchFlag, this.type = null, this.ast = null, this.options = new AstWalkOptions();
     };
-    var EnclosingScopeContext = function() {
+    var EnclosingScopeContext = /*#__PURE__*/ function() {
         function EnclosingScopeContext(logger, script, text, pos, isMemberCompletion) {
             _class_call_check(this, EnclosingScopeContext), this.logger = logger, this.script = script, this.text = text, this.pos = pos, this.isMemberCompletion = isMemberCompletion, this.scopeGetter = null, this.objectLiteralScopeGetter = null, this.scopeStartAST = null, this.skipNextFuncDeclForClass = !1, this.deepestModuleDecl = null, this.enclosingClassDecl = null, this.enclosingObjectLit = null, this.publicsOnly = !0, this.useFullAst = !1;
         }
@@ -50,7 +47,6 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
                     }, context.scopeStartAST = ast, context.enclosingClassDecl = ast;
                     break;
                 case NodeType.ObjectLit:
-                    // Only consider target-typed object literals
                     ast.targetType && (context.scopeGetter = function() {
                         return ast.targetType.containedScope;
                     }, context.objectLiteralScopeGetter = function() {
@@ -69,8 +65,7 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
                     break;
                 case NodeType.FuncDecl:
                     context.skipNextFuncDeclForClass ? context.skipNextFuncDeclForClass = !1 : (context.scopeGetter = function() {
-                        return(// The scope of a class constructor is hidden somewhere we don't expect :-S
-                        ast.isConstructor && hasFlag(ast.fncFlags, FncFlags.ClassMethod) && ast.type && ast.type.enclosingType ? ast.type.enclosingType.constructorScope : ast.scopeType ? ast.scopeType.containedScope : ast.type ? ast.type.containedScope : null);
+                        return ast.isConstructor && hasFlag(ast.fncFlags, FncFlags.ClassMethod) && ast.type && ast.type.enclosingType ? ast.type.enclosingType.constructorScope : ast.scopeType ? ast.scopeType.containedScope : ast.type ? ast.type.containedScope : null;
                     }, context.scopeStartAST = ast);
             }
             walker.options.goChildren = !0;

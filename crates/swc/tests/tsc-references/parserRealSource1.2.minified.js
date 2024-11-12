@@ -1,7 +1,4 @@
 //// [parserRealSource1.ts]
-// Copyright (c) Microsoft. All rights reserved. Licensed under the Apache License, Version 2.0. 
-// See LICENSE.txt in the project root for complete license information.
-///<reference path='typescript.ts' />
 var TypeScript, TypeScript1, NullLogger, LoggerAdapter, BufferedLogger;
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 !function(CompilerDiagnostics) {
@@ -13,7 +10,7 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
     }, CompilerDiagnostics.assert = function(condition, s) {
         CompilerDiagnostics.debug && !condition && Alert(s);
     };
-}((TypeScript1 = TypeScript || (TypeScript = {})).CompilerDiagnostics || (TypeScript1.CompilerDiagnostics = {})), NullLogger = function() {
+}((TypeScript1 = TypeScript || (TypeScript = {})).CompilerDiagnostics || (TypeScript1.CompilerDiagnostics = {})), NullLogger = /*#__PURE__*/ function() {
     function NullLogger() {
         _class_call_check(this, NullLogger);
     }
@@ -29,7 +26,7 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
     }, _proto.fatal = function() {
         return !1;
     }, _proto.log = function(s) {}, NullLogger;
-}(), TypeScript1.NullLogger = NullLogger, LoggerAdapter = function() {
+}(), TypeScript1.NullLogger = NullLogger, LoggerAdapter = /*#__PURE__*/ function() {
     function LoggerAdapter(logger) {
         _class_call_check(this, LoggerAdapter), this.logger = logger, this._information = this.logger.information(), this._debug = this.logger.debug(), this._warning = this.logger.warning(), this._error = this.logger.error(), this._fatal = this.logger.fatal();
     }
@@ -47,7 +44,7 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
     }, _proto.log = function(s) {
         this.logger.log(s);
     }, LoggerAdapter;
-}(), TypeScript1.LoggerAdapter = LoggerAdapter, BufferedLogger = function() {
+}(), TypeScript1.LoggerAdapter = LoggerAdapter, BufferedLogger = /*#__PURE__*/ function() {
     function BufferedLogger() {
         _class_call_check(this, BufferedLogger), this.logContents = [];
     }
@@ -87,10 +84,10 @@ import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
                 result += "\\r";
                 break;
             case 0x22:
-                result += '\\"';
+                result += "\\\"";
                 break;
             case 0x27:
-                result += "\\'";
+                result += "\\\'";
                 break;
             case 0x5c:
                 result += "\\";

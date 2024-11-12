@@ -1,11 +1,12 @@
 use std::{
     env, fmt,
-    fs::{create_dir_all, File},
+    fs::{self, create_dir_all, File},
     io::Read,
     ops::Deref,
     path::Path,
 };
 
+use serde::Serialize;
 use tracing::debug;
 
 use crate::paths;
@@ -34,7 +35,7 @@ pub struct Diff {
 ///
 /// - The `CARGO_MANIFEST_DIR` directory is replaced with `$DIR`.
 /// - All backslashes (\) within same line as `$DIR` are converted to forward
-/// slashes (/) (for Windows) - All CR LF newlines are converted to LF
+///   slashes (/) (for Windows) - All CR LF newlines are converted to LF
 ///
 /// - `normalize-stdout` is not implemented (yet?).
 #[derive(Clone, Ord, PartialOrd, PartialEq, Eq, Default, Hash)]
@@ -100,6 +101,28 @@ impl NormalizedOutput {
         }
 
         NormalizedOutput(normalize_input(s, true))
+    }
+
+    pub fn compare_json_to_file<T>(actual: &T, path: &Path)
+    where
+        T: Serialize,
+    {
+        let actual_value =
+            serde_json::to_value(actual).expect("failed to serialize the actual value to json");
+
+        if let Ok(expected) = fs::read_to_string(path) {
+            let expected_value = serde_json::from_str::<serde_json::Value>(&expected)
+                .expect("failed to deserialize the expected value from json");
+
+            if expected_value == actual_value {
+                return;
+            }
+        }
+
+        let actual_json_string = serde_json::to_string_pretty(&actual_value)
+            .expect("failed to serialize the actual value to json");
+
+        let _ = NormalizedOutput::from(actual_json_string).compare_to_file(path);
     }
 
     /// If output differs, prints actual stdout/stderr to
@@ -186,7 +209,6 @@ impl Deref for NormalizedOutput {
     }
 }
 
-///
 pub type StdOut = NormalizedOutput;
 
 impl<R> TestOutput<Option<R>> {

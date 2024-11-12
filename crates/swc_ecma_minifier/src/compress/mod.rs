@@ -1,24 +1,18 @@
 #[cfg(feature = "debug")]
+use std::fmt::{self, Debug, Display, Formatter};
+#[cfg(feature = "debug")]
 use std::thread;
-use std::{
-    borrow::Cow,
-    fmt,
-    fmt::{Debug, Display, Formatter, Write},
-    time::Instant,
-};
+use std::{borrow::Cow, fmt::Write, time::Instant};
 
 #[cfg(feature = "pretty_assertions")]
 use pretty_assertions::assert_eq;
-use swc_common::{
-    chain,
-    pass::{CompilerPass, Optional, Repeated},
-};
+use swc_common::pass::{CompilerPass, Optional, Repeated};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_optimization::simplify::{
     dead_branch_remover, expr_simplifier, ExprSimplifierConfig,
 };
 use swc_ecma_usage_analyzer::{analyzer::UsageAnalyzer, marks::Marks};
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, VisitMut, VisitMutWith, VisitWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith, VisitWith};
 use swc_timer::timer;
 use tracing::{debug, error};
 
@@ -28,7 +22,7 @@ use crate::{
     compress::hoist_decls::decl_hoister,
     debug::{dump, AssertValid},
     mode::Mode,
-    option::CompressOptions,
+    option::{CompressOptions, MangleOptions},
     program_data::{analyze, ProgramData},
     util::{now, unit::CompileUnit},
 };
@@ -41,6 +35,7 @@ mod util;
 pub(crate) fn compressor<'a, M>(
     marks: Marks,
     options: &'a CompressOptions,
+    mangle_options: Option<&'a MangleOptions>,
     mode: &'a M,
 ) -> impl 'a + VisitMut
 where
@@ -49,27 +44,29 @@ where
     let compressor = Compressor {
         marks,
         options,
+        mangle_options,
         changed: false,
         pass: 1,
         dump_for_infinite_loop: Default::default(),
         mode,
     };
 
-    chain!(
-        as_folder(compressor),
+    (
+        visit_mut_pass(compressor),
         Optional {
             enabled: options.evaluate || options.side_effects,
-            visitor: as_folder(expr_simplifier(
+            visitor: visit_mut_pass(expr_simplifier(
                 marks.unresolved_mark,
-                ExprSimplifierConfig {}
-            ))
-        }
+                ExprSimplifierConfig {},
+            )),
+        },
     )
 }
 
 struct Compressor<'a> {
     marks: Marks,
     options: &'a CompressOptions,
+    mangle_options: Option<&'a MangleOptions>,
     changed: bool,
     pass: usize,
 
@@ -79,7 +76,7 @@ struct Compressor<'a> {
 }
 
 impl CompilerPass for Compressor<'_> {
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         "compressor".into()
     }
 }
@@ -188,6 +185,9 @@ impl Compressor<'_> {
 
             let start_time = now();
 
+            #[cfg(feature = "debug")]
+            let start = n.dump();
+
             let mut visitor = expr_simplifier(self.marks.unresolved_mark, ExprSimplifierConfig {});
             n.apply(&mut visitor);
 
@@ -196,7 +196,10 @@ impl Compressor<'_> {
                 debug!("compressor: Simplified expressions");
                 #[cfg(feature = "debug")]
                 {
-                    debug!("===== Simplified =====\n{}", dump(&*n, false));
+                    debug!(
+                        "===== Simplified =====\n{start}===== ===== ===== =====\n{}",
+                        n.dump()
+                    );
                 }
             }
 
@@ -229,7 +232,6 @@ impl Compressor<'_> {
 
             let mut visitor = pure_optimizer(
                 self.options,
-                None,
                 self.marks,
                 PureOptimizerConfig {
                     enable_join_vars: self.pass > 1,
@@ -269,6 +271,7 @@ impl Compressor<'_> {
             let mut visitor = optimizer(
                 self.marks,
                 self.options,
+                self.mangle_options,
                 &mut data,
                 self.mode,
                 !self.dump_for_infinite_loop.is_empty(),
@@ -353,10 +356,12 @@ impl VisitMut for Compressor<'_> {
     }
 }
 
+#[cfg(feature = "debug")]
 #[derive(PartialEq, Eq)]
 struct DebugUsingDisplay<'a>(pub &'a str);
 
-impl<'a> Debug for DebugUsingDisplay<'a> {
+#[cfg(feature = "debug")]
+impl Debug for DebugUsingDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self.0, f)
     }

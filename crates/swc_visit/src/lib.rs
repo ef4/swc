@@ -18,7 +18,7 @@
 //! # `Fold`
 //!
 //! > WARNING: `Fold` is slow, and it's recommended to use VisitMut if you are
-//! experienced.
+//! > experienced.
 //!
 //!
 //! `Fold` takes ownership of value, which means you have to return the new
@@ -95,7 +95,6 @@
 use std::ops::{Deref, DerefMut};
 
 pub use either::Either;
-pub use swc_visit_macros::define;
 
 pub mod util;
 
@@ -130,38 +129,108 @@ pub trait Repeated {
     fn reset(&mut self);
 }
 
-/// A visitor which applies `A` and then `B`.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct AndThen<A, B> {
-    pub first: A,
-    pub second: B,
-}
+macro_rules! impl_repeated_for_tuple {
+    (
+        [$idx:tt, $name:ident], $([$idx_rest:tt, $name_rest:ident]),*
+    ) => {
+        impl<$name, $($name_rest),*> Repeated for ($name, $($name_rest),*)
+        where
+            $name: Repeated,
+            $($name_rest: Repeated),*
+        {
+            fn changed(&self) -> bool {
+                self.$idx.changed() || $(self.$idx_rest.changed() ||)* false
+            }
 
-/// Chains multiple visitor.
-#[macro_export]
-macro_rules! chain {
-    ($a:expr, $b:expr) => {{
-        use $crate::AndThen;
-
-        AndThen {
-            first: $a,
-            second: $b,
+            fn reset(&mut self) {
+                self.$idx.reset();
+                $(self.$idx_rest.reset();)*
+            }
         }
-    }};
-
-    ($a:expr, $b:expr,) => {
-        chain!($a, $b)
     };
-
-    ($a:expr, $b:expr,  $($rest:tt)+) => {{
-        use $crate::AndThen;
-
-        AndThen{
-            first: $a,
-            second: chain!($b, $($rest)*),
-        }
-    }};
 }
+
+impl_repeated_for_tuple!([0, A], [1, B]);
+impl_repeated_for_tuple!([0, A], [1, B], [2, C]);
+impl_repeated_for_tuple!([0, A], [1, B], [2, C], [3, D]);
+impl_repeated_for_tuple!([0, A], [1, B], [2, C], [3, D], [4, E]);
+impl_repeated_for_tuple!([0, A], [1, B], [2, C], [3, D], [4, E], [5, F]);
+impl_repeated_for_tuple!([0, A], [1, B], [2, C], [3, D], [4, E], [5, F], [6, G]);
+impl_repeated_for_tuple!(
+    [0, A],
+    [1, B],
+    [2, C],
+    [3, D],
+    [4, E],
+    [5, F],
+    [6, G],
+    [7, H]
+);
+impl_repeated_for_tuple!(
+    [0, A],
+    [1, B],
+    [2, C],
+    [3, D],
+    [4, E],
+    [5, F],
+    [6, G],
+    [7, H],
+    [8, I]
+);
+impl_repeated_for_tuple!(
+    [0, A],
+    [1, B],
+    [2, C],
+    [3, D],
+    [4, E],
+    [5, F],
+    [6, G],
+    [7, H],
+    [8, I],
+    [9, J]
+);
+impl_repeated_for_tuple!(
+    [0, A],
+    [1, B],
+    [2, C],
+    [3, D],
+    [4, E],
+    [5, F],
+    [6, G],
+    [7, H],
+    [8, I],
+    [9, J],
+    [10, K]
+);
+impl_repeated_for_tuple!(
+    [0, A],
+    [1, B],
+    [2, C],
+    [3, D],
+    [4, E],
+    [5, F],
+    [6, G],
+    [7, H],
+    [8, I],
+    [9, J],
+    [10, K],
+    [11, L]
+);
+impl_repeated_for_tuple!(
+    [0, A],
+    [1, B],
+    [2, C],
+    [3, D],
+    [4, E],
+    [5, F],
+    [6, G],
+    [7, H],
+    [8, I],
+    [9, J],
+    [10, K],
+    [11, L],
+    [12, M]
+);
 
 /// A visitor which applies `V` again and again if `V` modifies the node.
 ///
@@ -197,21 +266,6 @@ where
 
     fn reset(&mut self) {
         self.pass.reset()
-    }
-}
-
-impl<A, B> Repeated for AndThen<A, B>
-where
-    A: Repeated,
-    B: Repeated,
-{
-    fn changed(&self) -> bool {
-        self.first.changed() || self.second.changed()
-    }
-
-    fn reset(&mut self) {
-        self.first.reset();
-        self.second.reset();
     }
 }
 
@@ -540,5 +594,13 @@ where
             .last_mut()
             .unwrap()
             .set_index(usize::MAX);
+    }
+}
+
+/// NOT A PUBLIC API
+#[doc(hidden)]
+pub fn wrong_ast_path() {
+    unsafe {
+        debug_unreachable::debug_unreachable!("Wrong ast path");
     }
 }

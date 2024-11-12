@@ -1,12 +1,11 @@
 use std::mem::take;
 
-use swc_atoms::js_word;
 use swc_common::{util::take::Take, DUMMY_SP};
 use swc_css_ast::{
     AtRule, AtRuleName, AtRulePrelude, CustomMediaQuery, CustomMediaQueryMediaType, Ident,
     MediaCondition, MediaConditionAllType, MediaConditionType, MediaConditionWithoutOr,
-    MediaConditionWithoutOrType, MediaFeature, MediaFeatureBoolean, MediaFeatureName,
-    MediaInParens, MediaOr, MediaQuery, MediaType, Rule,
+    MediaConditionWithoutOrType, MediaFeatureBoolean, MediaFeatureName, MediaInParens, MediaOr,
+    MediaQuery, MediaType, Rule,
 };
 
 #[derive(Debug, Default)]
@@ -17,11 +16,10 @@ pub(super) struct CustomMediaHandler {
 
 impl CustomMediaHandler {
     pub(crate) fn store_custom_media(&mut self, n: &mut AtRule) {
-        if let AtRuleName::Ident(name) = &n.name {
-            if name.value == js_word!("custom-media") {
-                if let Some(box AtRulePrelude::CustomMediaPrelude(prelude)) = &mut n.prelude {
-                    self.medias.push(prelude.take());
-                }
+        if let AtRuleName::Ident(..) = &n.name {
+            if let Some(AtRulePrelude::CustomMediaPrelude(prelude)) = &mut n.prelude.as_deref_mut()
+            {
+                self.medias.push(prelude.take());
             }
         }
     }
@@ -29,7 +27,10 @@ impl CustomMediaHandler {
     pub(crate) fn process_rules(&mut self, n: &mut Vec<Rule>) {
         n.retain(|n| match n {
             Rule::AtRule(n) => {
-                if matches!(&n.name, AtRuleName::Ident(ident) if ident.value == js_word!("custom-media")) {
+                if matches!(
+                    n.prelude.as_deref(),
+                    Some(AtRulePrelude::CustomMediaPrelude(..))
+                ) {
                     return false;
                 }
 
@@ -67,7 +68,7 @@ impl CustomMediaHandler {
     }
 
     pub(crate) fn process_media_condition(&mut self, media_condition: &mut MediaCondition) {
-        let mut remove_rules_list = vec![];
+        let mut remove_rules_list = Vec::new();
 
         for (i, node) in media_condition.conditions.iter_mut().enumerate() {
             match node {
@@ -154,7 +155,7 @@ impl CustomMediaHandler {
         &mut self,
         media_condition: &mut MediaConditionWithoutOr,
     ) {
-        let mut remove_rules_list = vec![];
+        let mut remove_rules_list = Vec::new();
 
         for (i, node) in media_condition.conditions.iter_mut().enumerate() {
             match node {
@@ -224,15 +225,15 @@ impl CustomMediaHandler {
     }
 
     pub(crate) fn process_media_in_parens(&mut self, n: &MediaInParens) -> Option<MediaInParens> {
-        if let MediaInParens::Feature(box MediaFeature::Boolean(MediaFeatureBoolean {
+        if let Some(MediaFeatureBoolean {
             name: MediaFeatureName::ExtensionName(name),
             ..
-        })) = n
+        }) = n.as_feature().and_then(|feature| feature.as_boolean())
         {
             if let Some(custom_media) = self.medias.iter().find(|m| m.name.value == name.value) {
                 let mut new_media_condition = MediaCondition {
                     span: DUMMY_SP,
-                    conditions: vec![],
+                    conditions: Vec::new(),
                 };
 
                 let queries = match &custom_media.media {
@@ -254,7 +255,7 @@ impl CustomMediaHandler {
                             Some((query.modifier.clone(), query.media_type.clone()));
                     }
 
-                    for condition in &query.condition {
+                    if let Some(condition) = &query.condition {
                         match &**condition {
                             MediaConditionType::All(media_condition) => {
                                 if new_media_condition.conditions.is_empty() {
@@ -262,7 +263,7 @@ impl CustomMediaHandler {
                                         let media_in_parens = if let Some(
                                             MediaConditionAllType::MediaInParens(inner),
                                         ) =
-                                            media_condition.conditions.get(0)
+                                            media_condition.conditions.first()
                                         {
                                             inner.clone()
                                         } else {
@@ -282,7 +283,7 @@ impl CustomMediaHandler {
                                         );
                                     }
                                 } else if let Some(MediaConditionAllType::MediaInParens(inner)) =
-                                    media_condition.conditions.get(0)
+                                    media_condition.conditions.first()
                                 {
                                     new_media_condition
                                         .conditions
@@ -309,7 +310,7 @@ impl CustomMediaHandler {
 
                                 if new_media_condition.conditions.is_empty() {
                                     let media_in_parens = if matches!(
-                                        media_condition.conditions.get(0),
+                                        media_condition.conditions.first(),
                                         Some(MediaConditionAllType::MediaInParens(_))
                                     ) {
                                         match media_condition.conditions.pop() {
@@ -345,7 +346,7 @@ impl CustomMediaHandler {
 
                 if new_media_condition.conditions.len() == 1
                     && matches!(
-                        new_media_condition.conditions.get(0),
+                        new_media_condition.conditions.first(),
                         Some(MediaConditionAllType::MediaInParens(_))
                     )
                 {
@@ -369,7 +370,7 @@ impl CustomMediaHandler {
     ) -> MediaCondition {
         let mut new_media_condition = MediaCondition {
             span: DUMMY_SP,
-            conditions: vec![],
+            conditions: Vec::new(),
         };
 
         for n in &media_condition.conditions {

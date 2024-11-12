@@ -3,12 +3,6 @@ import { Component } from "react";
 import PropTypes from "prop-types";
 import Item from "./Item";
 import compareObjects from "./compareObjects";
-function _defineProperties(target, props) {
-    for(var i = 0; i < props.length; i++){
-        var descriptor = props[i];
-        descriptor.enumerable = descriptor.enumerable || !1, descriptor.configurable = !0, "value" in descriptor && (descriptor.writable = !0), Object.defineProperty(target, descriptor.key, descriptor);
-    }
-}
 function _getPrototypeOf(o) {
     return (_getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function(o) {
         return o.__proto__ || Object.getPrototypeOf(o);
@@ -36,9 +30,9 @@ function _setPrototypeOf(o, p) {
         return o.__proto__ = p, o;
     })(o, p);
 }
-var ItemsList = function(Component) {
+var ItemsList = /*#__PURE__*/ function(Component) {
     "use strict";
-    var protoProps, staticProps;
+    var protoProps;
     function ItemsList() {
         var _this, call;
         return !function(instance, Constructor) {
@@ -72,7 +66,7 @@ var ItemsList = function(Component) {
             key: "render",
             value: function() {
                 var _this = this, _props = this.props, items = _props.items, itemProps = _props.itemProps, renderItem = _props.renderItem, renderItemData = _props.renderItemData, sectionIndex = _props.sectionIndex, highlightedItemIndex = _props.highlightedItemIndex, getItemId = _props.getItemId, theme = _props.theme, keyPrefix = _props.keyPrefix, sectionPrefix = null === sectionIndex ? keyPrefix : "".concat(keyPrefix, "section-").concat(sectionIndex, "-"), isItemPropsFunction = "function" == typeof itemProps;
-                return _jsx("ul", _objectSpread({
+                return /*#__PURE__*/ _jsx("ul", _objectSpread({
                     role: "listbox"
                 }, theme("".concat(sectionPrefix, "items-list"), "itemsList"), {
                     children: items.map(function(item, itemIndex) {
@@ -83,7 +77,8 @@ var ItemsList = function(Component) {
                             id: getItemId(sectionIndex, itemIndex),
                             "aria-selected": isHighlighted
                         }, theme(itemKey, "item", isFirst && "itemFirst", isHighlighted && "itemHighlighted"), itemPropsObj);
-                        return isHighlighted && (allItemProps.ref = _this.storeHighlightedItemReference), _jsx(Item, _objectSpread({}, allItemProps, {
+                        // `key` is provided by theme()
+                        /* eslint-disable react/jsx-key */ return isHighlighted && (allItemProps.ref = _this.storeHighlightedItemReference), /*#__PURE__*/ _jsx(Item, _objectSpread({}, allItemProps, {
                             sectionIndex: sectionIndex,
                             isHighlighted: isHighlighted,
                             itemIndex: itemIndex,
@@ -91,11 +86,16 @@ var ItemsList = function(Component) {
                             renderItem: renderItem,
                             renderItemData: renderItemData
                         }));
-                    })
+                    /* eslint-enable react/jsx-key */ })
                 }));
             }
         }
-    ], _defineProperties(ItemsList.prototype, protoProps), staticProps && _defineProperties(ItemsList, staticProps), ItemsList;
+    ], function(target, props) {
+        for(var i = 0; i < props.length; i++){
+            var descriptor = props[i];
+            descriptor.enumerable = descriptor.enumerable || !1, descriptor.configurable = !0, "value" in descriptor && (descriptor.writable = !0), Object.defineProperty(target, descriptor.key, descriptor);
+        }
+    }(ItemsList.prototype, protoProps), ItemsList;
 }(Component);
 ItemsList.propTypes = {
     items: PropTypes.array.isRequired,

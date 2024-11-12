@@ -1,7 +1,7 @@
 use swc_ecma_ast::*;
-use swc_ecma_parser::{EsConfig, Syntax};
+use swc_ecma_parser::{EsSyntax, Syntax};
 use swc_ecma_transforms_testing::test_transform;
-use swc_ecma_visit::Fold;
+use swc_ecma_visit::{fold_pass, Fold};
 
 struct Panicking;
 
@@ -22,11 +22,12 @@ impl Fold for Panicking {
 #[should_panic = "visited"]
 fn ensure_visited() {
     test_transform(
-        Syntax::Es(EsConfig {
+        Syntax::Es(EsSyntax {
             jsx: true,
             ..Default::default()
         }),
-        |_| Panicking,
+        None,
+        |_| fold_pass(Panicking),
         "
         import React from 'react';
         const comp = () => <amp-something className='something' />;
@@ -35,6 +36,5 @@ fn ensure_visited() {
         import React from 'react';
         const comp = () => <amp-something className='something' />;
         ",
-        false,
     );
 }

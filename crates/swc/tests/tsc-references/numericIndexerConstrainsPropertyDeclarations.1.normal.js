@@ -9,15 +9,15 @@ var C = /*#__PURE__*/ function() {
     }
     var _proto = C.prototype;
     _proto.foo = function foo() {
-        return "";
+        return '';
     };
-    C.foo // ok
-     = function foo() {};
+    C.foo = function foo() {} // ok
+    ;
     _create_class(C, [
         {
             key: "X",
             get: function get() {
-                return "";
+                return '';
             },
             set: function set(v1) {} // ok
         }
@@ -34,21 +34,21 @@ var C = /*#__PURE__*/ function() {
 var a;
 // error
 var b = {
-    a: "",
+    a: '',
     b: 1,
     c: function() {},
-    "d": "",
+    "d": '',
     "e": 1,
-    1.0: "",
+    1.0: '',
     2.0: 1,
-    "3.0": "",
+    "3.0": '',
     "4.0": 1,
     f: null,
     get X () {
-        return "";
+        return '';
     },
     set X (v){},
     foo: function foo() {
-        return "";
+        return '';
     }
 };

@@ -1,7 +1,7 @@
 //// [classConstructorAccessibility5.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var Base = function Base() {
     "use strict";
     _class_call_check(this, Base);
@@ -9,15 +9,14 @@ var Base = function Base() {
 var Derived = /*#__PURE__*/ function(Base1) {
     "use strict";
     _inherits(Derived, Base1);
-    var _super = _create_super(Derived);
     function Derived() {
         _class_call_check(this, Derived);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived, arguments);
     }
-    Derived.make // ok
-     = function make() {
+    Derived.make = function make() {
         new Base();
-    };
+    } // ok
+    ;
     return Derived;
 }(Base);
 var Unrelated = /*#__PURE__*/ function() {
@@ -25,9 +24,9 @@ var Unrelated = /*#__PURE__*/ function() {
     function Unrelated() {
         _class_call_check(this, Unrelated);
     }
-    Unrelated.fake // error
-     = function fake() {
+    Unrelated.fake = function fake() {
         new Base();
-    };
+    } // error
+    ;
     return Unrelated;
 }();

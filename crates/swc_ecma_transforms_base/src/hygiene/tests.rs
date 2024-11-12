@@ -21,7 +21,7 @@ fn marker(markers: &[(&str, Mark)]) -> Marker {
 impl Fold for Marker {
     fn fold_ident(&mut self, mut ident: Ident) -> Ident {
         if let Some(mark) = self.map.get(&ident.sym) {
-            ident.span = ident.span.apply_mark(*mark);
+            ident.ctxt = ident.ctxt.apply_mark(*mark);
         }
 
         ident
@@ -46,7 +46,7 @@ impl OnceMarker {
 impl Fold for OnceMarker {
     fn fold_ident(&mut self, mut ident: Ident) -> Ident {
         if let Some(marks) = self.map.get_mut(&ident.sym) {
-            ident.span = ident.span.apply_mark(marks.remove(0));
+            ident.ctxt = ident.ctxt.apply_mark(marks.remove(0));
         }
 
         ident
@@ -73,28 +73,30 @@ where
             })
         },
         expected,
-        Default::default(),
+        Default::default,
     )
 }
 
-fn test_module<F>(op: F, expected: &str, config: Config)
+fn test_module<F>(op: F, expected: &str, config: impl FnOnce() -> Config)
 where
     F: FnOnce(&mut crate::tests::Tester<'_>) -> Result<Module, ()>,
 {
     crate::tests::Tester::run(|tester| {
-        let module = op(tester)?;
+        let mut module = Program::Module(op(tester)?);
 
         let hygiene_src = tester.print(&module.clone().fold_with(&mut HygieneVisualizer));
         println!("----- Hygiene -----\n{}", hygiene_src);
 
-        let module = module.fold_with(&mut hygiene_with_config(config));
+        hygiene_with_config(config()).process(&mut module);
 
         let actual = tester.print(&module);
 
         let expected = {
-            let expected = tester.with_parser("expected.js", Syntax::default(), expected, |p| {
-                p.parse_module()
-            })?;
+            let expected = tester
+                .with_parser("expected.js", Syntax::default(), expected, |p| {
+                    p.parse_module()
+                })
+                .map(Program::Module)?;
             tester.print(&expected)
         };
 
@@ -413,14 +415,13 @@ fn mark_root() {
             Ok(vec![
                 tester.parse_stmt("actual1.js", "var foo = 'bar';")?,
                 Stmt::Decl(Decl::Fn(FnDecl {
-                    ident: quote_ident!("Foo"),
+                    ident: quote_ident!("Foo").into(),
                     function: Box::new(Function {
                         span: DUMMY_SP,
                         is_async: false,
                         is_generator: false,
-                        decorators: vec![],
+                        decorators: Vec::new(),
                         body: Some(BlockStmt {
-                            span: DUMMY_SP,
                             stmts: vec![
                                 tester
                                     .parse_stmt("actual2.js", "var foo = 'foo';")?
@@ -430,10 +431,10 @@ fn mark_root() {
                                     "_define_property(this, 'bar', foo);",
                                 )?,
                             ],
+                            ..Default::default()
                         }),
-                        params: vec![],
-                        type_params: Default::default(),
-                        return_type: Default::default(),
+                        params: Vec::new(),
+                        ..Default::default()
                     }),
 
                     declare: false,
@@ -500,26 +501,25 @@ fn fn_args() {
             let mark2 = Mark::fresh(Mark::root());
 
             Ok(vec![Stmt::Decl(Decl::Fn(FnDecl {
-                ident: quote_ident!("Foo"),
+                ident: quote_ident!("Foo").into(),
                 function: Box::new(Function {
                     span: DUMMY_SP,
                     is_async: false,
                     is_generator: false,
-                    decorators: vec![],
+                    decorators: Vec::new(),
                     body: Some(BlockStmt {
-                        span: DUMMY_SP,
                         stmts: vec![tester
                             .parse_stmt("actual1.js", "_define_property(this, 'force', force);")?
                             .fold_with(&mut marker(&[("force", mark2)]))],
+                        ..Default::default()
                     }),
                     params: vec![Param {
                         span: DUMMY_SP,
-                        decorators: vec![],
+                        decorators: Vec::new(),
                         pat: quote_ident!("force").into(),
                     }
                     .fold_with(&mut marker(&[("force", mark1)]))],
-                    type_params: Default::default(),
-                    return_type: Default::default(),
+                    ..Default::default()
                 }),
 
                 declare: false,
@@ -541,14 +541,13 @@ fn block_in_fn() {
             let mark2 = Mark::fresh(mark1);
 
             Ok(vec![Stmt::Decl(Decl::Fn(FnDecl {
-                ident: quote_ident!("Foo"),
+                ident: quote_ident!("Foo").into(),
                 function: Box::new(Function {
                     span: DUMMY_SP,
                     is_async: false,
                     is_generator: false,
-                    decorators: vec![],
+                    decorators: Vec::new(),
                     body: Some(BlockStmt {
-                        span: DUMMY_SP,
                         stmts: vec![
                             tester
                                 .parse_stmt("actual1.js", "var bar;")?
@@ -557,10 +556,10 @@ fn block_in_fn() {
                                 .parse_stmt("actual2.js", "{ var bar; }")?
                                 .fold_with(&mut marker(&[("bar", mark2)])),
                         ],
+                        ..Default::default()
                     }),
-                    params: vec![],
-                    type_params: Default::default(),
-                    return_type: Default::default(),
+                    params: Vec::new(),
+                    ..Default::default()
                 }),
 
                 declare: false,
@@ -594,14 +593,13 @@ fn flat_in_fn() {
             let mark2 = Mark::fresh(mark1);
 
             Ok(vec![Stmt::Decl(Decl::Fn(FnDecl {
-                ident: quote_ident!("Foo"),
+                ident: quote_ident!("Foo").into(),
                 function: Box::new(Function {
                     span: DUMMY_SP,
                     is_async: false,
                     is_generator: false,
-                    decorators: vec![],
+                    decorators: Vec::new(),
                     body: Some(BlockStmt {
-                        span: DUMMY_SP,
                         stmts: vec![
                             tester
                                 .parse_stmt("actual1.js", "var bar;")?
@@ -610,10 +608,10 @@ fn flat_in_fn() {
                                 .parse_stmt("actual2.js", "var bar;")?
                                 .fold_with(&mut marker(&[("bar", mark2)])),
                         ],
+                        ..Default::default()
                     }),
-                    params: vec![],
-                    type_params: Default::default(),
-                    return_type: Default::default(),
+                    params: Vec::new(),
+                    ..Default::default()
                 }),
 
                 declare: false,
@@ -636,30 +634,38 @@ fn params_in_fn() {
             let mark2 = Mark::fresh(Mark::root());
 
             Ok(vec![Stmt::Decl(Decl::Fn(FnDecl {
-                ident: quote_ident!("Foo"),
+                ident: quote_ident!("Foo").into(),
                 function: Box::new(Function {
                     span: DUMMY_SP,
                     is_async: false,
                     is_generator: false,
-                    decorators: vec![],
+                    decorators: Vec::new(),
                     body: Some(BlockStmt {
-                        span: DUMMY_SP,
-                        stmts: vec![],
+                        ..Default::default()
                     }),
                     params: vec![
                         Param {
                             span: DUMMY_SP,
                             decorators: Default::default(),
-                            pat: Ident::new("param".into(), DUMMY_SP.apply_mark(mark1)).into(),
+                            pat: Ident::new(
+                                "param".into(),
+                                DUMMY_SP,
+                                SyntaxContext::empty().apply_mark(mark1),
+                            )
+                            .into(),
                         },
                         Param {
                             span: DUMMY_SP,
                             decorators: Default::default(),
-                            pat: Ident::new("param".into(), DUMMY_SP.apply_mark(mark2)).into(),
+                            pat: Ident::new(
+                                "param".into(),
+                                DUMMY_SP,
+                                SyntaxContext::empty().apply_mark(mark2),
+                            )
+                            .into(),
                         },
                     ],
-                    type_params: Default::default(),
-                    return_type: Default::default(),
+                    ..Default::default()
                 }),
 
                 declare: false,
@@ -998,7 +1004,7 @@ fn module_01() {
         },
         "import foo from 'src1';
         import foo1 from 'src2';",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1019,7 +1025,7 @@ fn module_02() {
         },
         "import {foo} from 'src1';
         import {foo as foo1} from 'src2';",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1042,7 +1048,7 @@ fn module_03() {
         "var foo = 1;
         var foo1 = 2;
         export {foo1 as foo}",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1064,7 +1070,7 @@ fn issue_281_01() {
         "label: {
             break label
         }",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1103,7 +1109,7 @@ fn issue_281_02() {
                 }
             }
         }",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1135,7 +1141,7 @@ fn issue_295_01() {
             }
         }
         ",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1169,7 +1175,7 @@ fn issue_295_02() {
             }
         }
         ",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1191,7 +1197,7 @@ fn exported_function() {
         "const foo = {};
         function foo1(){}
       export { foo1 as foo };",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1213,7 +1219,7 @@ fn exported_class_1() {
         "var Foo = {};
         class Foo1 {}
         export { Foo1 as Foo };",
-        Default::default(),
+        Default::default,
     );
 }
 
@@ -1245,7 +1251,7 @@ fn issue_1279() {
             }
         };
         ",
-        Config {
+        || Config {
             keep_class_names: true,
             ..Default::default()
         },
@@ -1286,7 +1292,7 @@ fn issue_1507() {
             }
         };
         ",
-        Config {
+        || Config {
             keep_class_names: true,
             ..Default::default()
         },

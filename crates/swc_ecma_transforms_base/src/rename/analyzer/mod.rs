@@ -1,5 +1,6 @@
 use swc_common::Mark;
 use swc_ecma_ast::*;
+use swc_ecma_utils::stack_size::maybe_grow_default;
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 
 use self::scope::{Scope, ScopeKind};
@@ -9,7 +10,6 @@ pub(super) mod scope;
 
 #[derive(Debug, Default)]
 pub(super) struct Analyzer {
-    pub safari_10: bool,
     /// If `eval` exists for the current scope, we only rename synthesized
     /// identifiers.
     pub has_eval: bool,
@@ -40,8 +40,27 @@ impl Analyzer {
         }
     }
 
+    fn reserve_decl(&mut self, len: usize, belong_to_fn_scope: bool) {
+        if belong_to_fn_scope {
+            match self.scope.kind {
+                ScopeKind::Fn => {
+                    self.scope.reserve_decl(len);
+                }
+                ScopeKind::Block => {
+                    self.hoisted_vars.reserve(len);
+                }
+            }
+        } else {
+            self.scope.reserve_decl(len);
+        }
+    }
+
     fn add_usage(&mut self, id: Id) {
         self.scope.add_usage(id);
+    }
+
+    fn reserve_usage(&mut self, len: usize) {
+        self.scope.reserve_usage(len);
     }
 
     fn with_scope<F>(&mut self, kind: ScopeKind, op: F)
@@ -50,7 +69,6 @@ impl Analyzer {
     {
         {
             let mut v = Analyzer {
-                safari_10: self.safari_10,
                 has_eval: self.has_eval,
                 top_level_mark: self.top_level_mark,
 
@@ -67,6 +85,7 @@ impl Analyzer {
             op(&mut v);
             if !v.hoisted_vars.is_empty() {
                 debug_assert!(matches!(v.scope.kind, ScopeKind::Block));
+                self.reserve_usage(v.hoisted_vars.len());
                 v.hoisted_vars.clone().into_iter().for_each(|id| {
                     // For variables declared in block scope using `var` and `function`,
                     // We should create a fake usage in the block to prevent conflicted
@@ -75,6 +94,7 @@ impl Analyzer {
                 });
                 match self.scope.kind {
                     ScopeKind::Fn => {
+                        self.reserve_decl(v.hoisted_vars.len(), true);
                         v.hoisted_vars
                             .into_iter()
                             .for_each(|id| self.add_decl(id, true));
@@ -123,13 +143,20 @@ impl Visit for Analyzer {
         });
     }
 
-    fn visit_assign_pat_prop(&mut self, p: &AssignPatProp) {
-        p.visit_children_with(self);
+    fn visit_assign_target(&mut self, n: &AssignTarget) {
+        let old = self.is_pat_decl;
 
+        self.is_pat_decl = false;
+        n.visit_children_with(self);
+
+        self.is_pat_decl = old;
+    }
+
+    fn visit_binding_ident(&mut self, i: &BindingIdent) {
         if self.is_pat_decl {
-            self.add_decl(p.key.to_id(), self.var_belong_to_fn_scope)
+            self.add_decl(i.to_id(), self.var_belong_to_fn_scope)
         } else {
-            self.add_usage(p.key.to_id())
+            self.add_usage(i.to_id())
         }
     }
 
@@ -146,43 +173,20 @@ impl Visit for Analyzer {
     }
 
     fn visit_catch_clause(&mut self, n: &CatchClause) {
-        if self.safari_10 {
-            let old_is_pat_decl = self.is_pat_decl;
-            let old_in_catch_params = self.in_catch_params;
+        self.with_scope(ScopeKind::Block, |v| {
+            let old = v.is_pat_decl;
+            let old_in_catch_params = v.in_catch_params;
 
-            self.is_pat_decl = true;
-            self.in_catch_params = true;
-            n.param.visit_with(self);
+            v.is_pat_decl = false;
+            n.body.visit_children_with(v);
 
-            self.in_catch_params = old_in_catch_params;
-            self.is_pat_decl = old_is_pat_decl;
+            v.is_pat_decl = true;
+            v.in_catch_params = true;
+            n.param.visit_with(v);
 
-            self.with_scope(ScopeKind::Block, |v| {
-                let old = v.is_pat_decl;
-                let old_in_catch_params = v.in_catch_params;
-
-                v.is_pat_decl = false;
-                n.body.visit_children_with(v);
-
-                v.is_pat_decl = old;
-                v.in_catch_params = old_in_catch_params;
-            })
-        } else {
-            self.with_scope(ScopeKind::Block, |v| {
-                let old = v.is_pat_decl;
-                let old_in_catch_params = v.in_catch_params;
-
-                v.is_pat_decl = false;
-                n.body.visit_children_with(v);
-
-                v.is_pat_decl = true;
-                v.in_catch_params = true;
-                n.param.visit_with(v);
-
-                v.is_pat_decl = old;
-                v.in_catch_params = old_in_catch_params;
-            })
-        }
+            v.is_pat_decl = old;
+            v.in_catch_params = old_in_catch_params;
+        })
     }
 
     fn visit_class_decl(&mut self, c: &ClassDecl) {
@@ -235,7 +239,7 @@ impl Visit for Analyzer {
                     self.add_decl(id.to_id(), true);
                 }
 
-                f.function.visit_with(self)
+                f.visit_with(self);
             }
             DefaultDecl::TsInterfaceDecl(_) => {}
         }
@@ -254,10 +258,10 @@ impl Visit for Analyzer {
         let old_is_pat_decl = self.is_pat_decl;
 
         self.is_pat_decl = false;
-        e.visit_children_with(self);
+        maybe_grow_default(|| e.visit_children_with(self));
 
         if let Expr::Ident(i) = e {
-            self.add_usage(i.to_id())
+            self.add_usage(i.to_id());
         }
 
         self.is_pat_decl = old_is_pat_decl;
@@ -267,7 +271,14 @@ impl Visit for Analyzer {
         self.add_decl(f.ident.to_id(), true);
 
         // https://github.com/swc-project/swc/issues/6819
-        let has_rest = f.function.params.iter().any(|p| p.pat.is_rest());
+        //
+        // We need to check for assign pattern because safari has a bug.
+        // https://github.com/swc-project/swc/issues/9015
+        let has_rest = f
+            .function
+            .params
+            .iter()
+            .any(|p| p.pat.is_rest() || p.pat.is_assign());
         if has_rest {
             self.add_usage(f.ident.to_id());
         }
@@ -291,7 +302,14 @@ impl Visit for Analyzer {
                 v.add_decl(id.to_id(), true);
                 v.with_fn_scope(|v| {
                     // https://github.com/swc-project/swc/issues/6819
-                    if f.function.params.iter().any(|p| p.pat.is_rest()) {
+                    //
+                    // We need to check for assign pattern because safari has a bug.
+                    // https://github.com/swc-project/swc/issues/9015
+                    if f.function
+                        .params
+                        .iter()
+                        .any(|p| p.pat.is_rest() || p.pat.is_assign())
+                    {
                         v.add_usage(id.to_id());
                     }
 
@@ -303,15 +321,6 @@ impl Visit for Analyzer {
         } else {
             f.function.visit_with(self)
         }
-    }
-
-    // ensure param and function body always in same scope
-    fn visit_function(&mut self, f: &Function) {
-        self.with_fn_scope(|v| {
-            f.decorators.visit_with(v);
-            f.params.visit_with(v);
-            v.visit_fn_body_within_same_scope(&f.body);
-        })
     }
 
     fn visit_for_in_stmt(&mut self, n: &ForInStmt) {
@@ -346,6 +355,15 @@ impl Visit for Analyzer {
                 v.visit_for_body_within_same_scope(&n.body);
             })
         });
+    }
+
+    // ensure param and function body always in same scope
+    fn visit_function(&mut self, f: &Function) {
+        self.with_fn_scope(|v| {
+            f.decorators.visit_with(v);
+            f.params.visit_with(v);
+            v.visit_fn_body_within_same_scope(&f.body);
+        })
     }
 
     fn visit_import_default_specifier(&mut self, n: &ImportDefaultSpecifier) {
@@ -397,18 +415,6 @@ impl Visit for Analyzer {
 
         self.is_pat_decl = old;
         self.var_belong_to_fn_scope = old_need_hoisted
-    }
-
-    fn visit_pat(&mut self, e: &Pat) {
-        e.visit_children_with(self);
-
-        if let Pat::Ident(i) = e {
-            if self.is_pat_decl {
-                self.add_decl(i.to_id(), self.var_belong_to_fn_scope)
-            } else {
-                self.add_usage(i.to_id())
-            }
-        }
     }
 
     fn visit_prop(&mut self, p: &Prop) {

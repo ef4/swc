@@ -24,7 +24,7 @@ pub trait Spanned {
     }
 }
 
-impl<'a, T> Spanned for Cow<'a, T>
+impl<T> Spanned for Cow<'_, T>
 where
     T: Spanned + Clone,
 {
@@ -55,7 +55,7 @@ impl Spanned for BytePos {
     /// Creates a new single-byte span.
     #[inline(always)]
     fn span(&self) -> Span {
-        Span::new(*self, *self, Default::default())
+        Span::new(*self, *self)
     }
 }
 
@@ -145,7 +145,7 @@ where
     }
 }
 
-impl<'a, S> Spanned for &'a S
+impl<S> Spanned for &S
 where
     S: ?Sized + Spanned,
 {
@@ -190,3 +190,14 @@ where
         }
     }
 }
+
+swc_allocator::nightly_only!(
+    impl<T> Spanned for swc_allocator::boxed::Box<T>
+    where
+        T: Spanned,
+    {
+        fn span(&self) -> Span {
+            self.as_ref().span()
+        }
+    }
+);
