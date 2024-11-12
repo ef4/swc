@@ -1,23 +1,35 @@
 //// [awaitUsingDeclarations.13.ts]
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
-function f() {
-    try {
-        var _stack = [];
-        var x = _using(_stack, null, true);
-    } catch (_) {
-        var _error = _;
-        var _hasError = true;
-    } finally{
-        await _dispose(_stack, _error, _hasError);
-    }
-}
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var x = _using(_stack, null, true);
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+    const x = _ts_add_disposable_resource(env, null, true);
+    ;
+    function f() {
+        const env = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
+        try {
+            const x = _ts_add_disposable_resource(env, null, true);
+            ;
+        } catch (e) {
+            env.error = e;
+            env.hasError = true;
+        } finally{
+            const result = _ts_dispose_resources(env);
+            if (result) await result;
+        }
+    }
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    await _dispose(_stack, _error, _hasError);
+    const result = _ts_dispose_resources(env);
+    if (result) await result;
 }

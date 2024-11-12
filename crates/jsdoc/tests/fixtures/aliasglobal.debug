@@ -1,81 +1,25 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                20,
-            ),
-            hi: BytePos(
-                24,
-            ),
-            ctxt: #0,
-        },
+        span: 20..24,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    20,
-                ),
-                hi: BytePos(
-                    20,
-                ),
-                ctxt: #0,
-            },
+            span: 20..20,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        20,
-                    ),
-                    hi: BytePos(
-                        25,
-                    ),
-                    ctxt: #0,
-                },
+                span: 20..25,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            20,
-                        ),
-                        hi: BytePos(
-                            25,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 20..25,
                     value: "alias",
                 },
                 tag: Alias(
                     AliasTag {
-                        span: Span {
-                            lo: BytePos(
-                                20,
-                            ),
-                            hi: BytePos(
-                                25,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 20..25,
                         name_path: NamePath {
-                            span: Span {
-                                lo: BytePos(
-                                    20,
-                                ),
-                                hi: BytePos(
-                                    24,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 20..24,
                             components: [
                                 Text {
-                                    span: Span {
-                                        lo: BytePos(
-                                            20,
-                                        ),
-                                        hi: BytePos(
-                                            28,
-                                        ),
-                                        ctxt: #0,
-                                    },
+                                    span: 20..28,
                                     value: "<global>",
                                 },
                             ],

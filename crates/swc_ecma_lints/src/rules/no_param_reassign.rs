@@ -13,7 +13,6 @@ use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 use crate::{
     config::{LintRuleReaction, RuleConfig},
     rule::{visitor_rule, Rule},
-    rules::utils::unwrap_seqs_and_parens,
 };
 
 const INVALID_REGEX_MESSAGE: &str = "no-param-reassign: invalid regex pattern in allowPattern. Check syntax documentation https://docs.rs/regex/latest/regex/#syntax";
@@ -50,7 +49,7 @@ impl NoParamReassign {
         Self {
             expected_reaction: config.get_rule_reaction(),
             scoped_params: Default::default(),
-            scopes: vec![],
+            scopes: Vec::new(),
             check_props: rule_config.props.unwrap_or(true),
             ignore_names: rule_config.ignore_property_modifications_for.clone(),
             ignore_names_patterns: rule_config.ignore_property_modifications_for_regex.clone(),
@@ -73,7 +72,7 @@ impl NoParamReassign {
 
     fn collect_function_params(&mut self, pat: &Pat) {
         match pat {
-            Pat::Ident(BindingIdent { id, .. }) => {
+            Pat::Ident(id) => {
                 self.scoped_params
                     .get_mut(self.scopes.last().unwrap())
                     .unwrap()
@@ -150,7 +149,7 @@ impl NoParamReassign {
             return;
         }
 
-        match unwrap_seqs_and_parens(member_expr.obj.as_ref()) {
+        match member_expr.obj.unwrap_seqs_and_parens() {
             Expr::Ident(ident) => {
                 if self.is_satisfying_function_param(ident) {
                     self.emit_report(ident.span, &ident.sym);
@@ -176,7 +175,7 @@ impl NoParamReassign {
             },
             AssignTarget::Simple(expr) => match expr {
                 SimpleAssignTarget::Ident(ident) => {
-                    if self.is_satisfying_function_param(ident) {
+                    if self.is_satisfying_function_param(&Ident::from(ident)) {
                         self.emit_report(ident.span, &ident.sym);
                     }
                 }
@@ -190,7 +189,7 @@ impl NoParamReassign {
     }
 
     fn check_expr(&self, expr: &Expr) {
-        match unwrap_seqs_and_parens(expr) {
+        match expr.unwrap_seqs_and_parens() {
             Expr::Ident(ident) => {
                 if self.is_satisfying_function_param(ident) {
                     self.emit_report(ident.span, &ident.sym);
@@ -214,7 +213,7 @@ impl NoParamReassign {
     fn check_object_pat(&self, ObjectPat { props, .. }: &ObjectPat) {
         props.iter().for_each(|prop| match prop {
             ObjectPatProp::Assign(AssignPatProp { key, .. }) => {
-                if self.is_satisfying_function_param(key) {
+                if self.is_satisfying_function_param(&Ident::from(key)) {
                     self.emit_report(key.span, &key.sym);
                 }
             }
@@ -227,8 +226,8 @@ impl NoParamReassign {
 
     fn check_pat(&self, pat: &Pat) {
         match pat {
-            Pat::Ident(BindingIdent { id, .. }) => {
-                if self.is_satisfying_function_param(id) {
+            Pat::Ident(id) => {
+                if self.is_satisfying_function_param(&Ident::from(id)) {
                     self.emit_report(id.span, &id.sym);
                 }
             }

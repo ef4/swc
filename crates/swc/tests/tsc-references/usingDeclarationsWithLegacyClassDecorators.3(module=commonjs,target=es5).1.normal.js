@@ -11,21 +11,26 @@ Object.defineProperty(exports, "default", {
 });
 var _class_call_check = require("@swc/helpers/_/_class_call_check");
 var _ts_decorate = require("@swc/helpers/_/_ts_decorate");
-var _dispose = require("@swc/helpers/_/_dispose");
-var _using = require("@swc/helpers/_/_using");
+var _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource");
+var _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources");
+var env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var before = _using._(_stack, null);
-    var C = function C() {
-        "use strict";
-        _class_call_check._(this, C);
-    };
+    var before = _ts_add_disposable_resource._(env, null, false);
+    ;
     C = _ts_decorate._([
         dec
     ], C);
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    _dispose._(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
 }
+var C = function C() {
+    "use strict";
+    _class_call_check._(this, C);
+};

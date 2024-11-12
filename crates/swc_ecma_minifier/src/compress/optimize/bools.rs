@@ -1,7 +1,7 @@
 use swc_common::{util::take::Take, EqIgnoreSpan, Span, Spanned, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_utils::{
-    undefined, ExprExt, Type,
+    ExprExt, Type,
     Value::{self, Known},
 };
 
@@ -21,7 +21,12 @@ impl Optimizer<'_> {
         expr: &mut Expr,
         is_ret_val_ignored: bool,
     ) -> bool {
-        let cost = negate_cost(&self.expr_ctx, expr, is_ret_val_ignored, is_ret_val_ignored);
+        let cost = negate_cost(
+            &self.ctx.expr_ctx,
+            expr,
+            is_ret_val_ignored,
+            is_ret_val_ignored,
+        );
         if cost >= 0 {
             return false;
         }
@@ -72,11 +77,12 @@ impl Optimizer<'_> {
 
         let ctx = Ctx {
             in_bool_ctx: true,
-            ..self.ctx
+            ..self.ctx.clone()
         };
 
-        self.with_ctx(ctx).negate(&mut e.left, false);
-        self.with_ctx(ctx).negate(&mut e.right, is_ret_val_ignored);
+        self.with_ctx(ctx.clone()).negate(&mut e.left, false);
+        self.with_ctx(ctx.clone())
+            .negate(&mut e.right, is_ret_val_ignored);
 
         dump_change_detail!("{} => {}", start, dump(&*e, false));
 
@@ -97,15 +103,17 @@ impl Optimizer<'_> {
             if let Stmt::Expr(cons) = &mut *stmt.cons {
                 self.changed = true;
                 report_change!("conditionals: `if (foo) bar;` => `foo && bar`");
-                *s = Stmt::Expr(ExprStmt {
+                *s = ExprStmt {
                     span: stmt.span,
-                    expr: Box::new(Expr::Bin(BinExpr {
+                    expr: BinExpr {
                         span: stmt.test.span(),
                         op: op!("&&"),
                         left: stmt.test.take(),
                         right: cons.expr.take(),
-                    })),
-                });
+                    }
+                    .into(),
+                }
+                .into();
             }
         }
     }
@@ -132,7 +140,7 @@ impl Optimizer<'_> {
                         }
                     }
 
-                    *l = *undefined(l.span());
+                    *l = *Expr::undefined(l.span());
                     *r = *arg.take();
                     true
                 }
@@ -194,7 +202,7 @@ impl Optimizer<'_> {
                             span: e.span,
                             op: e.op,
                             left: left.left.take(),
-                            right: Box::new(Expr::Bin(res)),
+                            right: res.into(),
                         };
                     }
                 }
@@ -283,7 +291,7 @@ impl Optimizer<'_> {
                                 span,
                                 op: op!("=="),
                                 left: cmp.take(),
-                                right: Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))),
+                                right: Lit::Null(Null { span: DUMMY_SP }).into(),
                             });
                         } else {
                             report_change!(
@@ -293,7 +301,7 @@ impl Optimizer<'_> {
                                 span,
                                 op: op!("!="),
                                 left: cmp.take(),
-                                right: Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))),
+                                right: Lit::Null(Null { span: DUMMY_SP }).into(),
                             });
                         }
                     }

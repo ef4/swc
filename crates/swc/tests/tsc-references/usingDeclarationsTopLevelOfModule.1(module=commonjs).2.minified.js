@@ -20,14 +20,19 @@ Object.defineProperty(exports, "__esModule", {
         return y;
     }
 });
-const _dispose = require("@swc/helpers/_/_dispose"), _using = require("@swc/helpers/_/_using"), x = 1, w = 3;
+const _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource"), _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources"), env = {
+    stack: [],
+    error: void 0,
+    hasError: !1
+};
 try {
-    var _stack = [], z = _using._(_stack, {
+    let z = _ts_add_disposable_resource._(env, {
         [Symbol.dispose] () {}
-    }), y = 2, _default = 4;
-    console.log(w, x, y, z);
-} catch (_) {
-    var _error = _, _hasError = !0;
+    }, !1);
+    console.log(w, x, 2, z);
+} catch (e) {
+    env.error = e, env.hasError = !0;
 } finally{
-    _dispose._(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
 }
+const x = 1, w = 3, _default = 4;

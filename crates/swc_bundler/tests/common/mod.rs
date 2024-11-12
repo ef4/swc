@@ -18,7 +18,7 @@ use swc_common::{
 };
 use swc_ecma_ast::{EsVersion, Program};
 use swc_ecma_loader::resolve::Resolution;
-use swc_ecma_parser::{parse_file_as_module, Syntax, TsConfig};
+use swc_ecma_parser::{parse_file_as_module, Syntax, TsSyntax};
 use swc_ecma_transforms_base::{
     helpers::{inject_helpers, Helpers, HELPERS},
     resolver,
@@ -26,7 +26,6 @@ use swc_ecma_transforms_base::{
 use swc_ecma_transforms_proposal::decorators;
 use swc_ecma_transforms_react::react;
 use swc_ecma_transforms_typescript::strip;
-use swc_ecma_visit::FoldWith;
 
 pub struct Loader {
     pub cm: Lrc<SourceMap>,
@@ -78,13 +77,13 @@ fn load_url(url: Url) -> Result<String, Error> {
         .bytes()
         .with_context(|| format!("failed to read data from `{}`", url))?;
 
-    let mut content = vec![];
+    let mut content = Vec::new();
     write!(content, "// Loaded from {}\n\n\n", url).unwrap();
     content.extend_from_slice(&bytes);
 
     write(&cache_path, &content)?;
 
-    return Ok(String::from_utf8_lossy(&bytes).to_string());
+    Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
 impl Load for Loader {
@@ -110,21 +109,21 @@ impl Load for Loader {
                 let src = load_url(url.clone())?;
 
                 self.cm
-                    .new_source_file(FileName::Custom(url.to_string()), src)
+                    .new_source_file(FileName::Custom(url.to_string()).into(), src)
             }
             _ => unreachable!(),
         };
 
         let module = parse_file_as_module(
             &fm,
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 decorators: true,
                 tsx,
                 ..Default::default()
             }),
             EsVersion::Es2020,
             None,
-            &mut vec![],
+            &mut Vec::new(),
         )
         .unwrap_or_else(|err| {
             let handler =
@@ -135,21 +134,21 @@ impl Load for Loader {
 
         let module = HELPERS.set(&Helpers::new(false), || {
             Program::Module(module)
-                .fold_with(&mut resolver(unresolved_mark, top_level_mark, false))
-                .fold_with(&mut decorators(decorators::Config {
+                .apply(resolver(unresolved_mark, top_level_mark, false))
+                .apply(decorators(decorators::Config {
                     legacy: true,
                     emit_metadata: Default::default(),
                     use_define_for_class_fields: false,
                 }))
-                .fold_with(&mut strip(top_level_mark))
-                .fold_with(&mut react::<SingleThreadedComments>(
+                .apply(strip(unresolved_mark, top_level_mark))
+                .apply(react::<SingleThreadedComments>(
                     self.cm.clone(),
                     None,
                     Default::default(),
                     top_level_mark,
                     unresolved_mark,
                 ))
-                .fold_with(&mut inject_helpers(unresolved_mark))
+                .apply(inject_helpers(unresolved_mark))
                 .module()
                 .unwrap()
         });

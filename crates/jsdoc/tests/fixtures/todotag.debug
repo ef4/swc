@@ -1,118 +1,38 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                1,
-            ),
-            hi: BytePos(
-                1,
-            ),
-            ctxt: #0,
-        },
+        span: 1..1,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    1,
-                ),
-                hi: BytePos(
-                    15,
-                ),
-                ctxt: #0,
-            },
+            span: 1..15,
             value: "A function.\n *",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        5,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..5,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            5,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..5,
                     value: "todo",
                 },
                 tag: Todo(
                     TodoTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                5,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..5,
                         text: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    10,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..10,
                             value: "something",
                         },
                     },
                 ),
             },
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        1,
-                    ),
-                    hi: BytePos(
-                        5,
-                    ),
-                    ctxt: #0,
-                },
+                span: 1..5,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            1,
-                        ),
-                        hi: BytePos(
-                            5,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 1..5,
                     value: "todo",
                 },
                 tag: Todo(
                     TodoTag {
-                        span: Span {
-                            lo: BytePos(
-                                1,
-                            ),
-                            hi: BytePos(
-                                5,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 1..5,
                         text: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    1,
-                                ),
-                                hi: BytePos(
-                                    15,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 1..15,
                             value: "something else",
                         },
                     },

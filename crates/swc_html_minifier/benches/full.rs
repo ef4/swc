@@ -2,7 +2,7 @@ extern crate swc_malloc;
 
 use std::{fs::read_to_string, path::Path};
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Criterion};
 use swc_common::{errors::HANDLER, FileName};
 use swc_html_ast::{Document, DocumentFragment, DocumentMode, Element, Namespace};
 use swc_html_codegen::{writer::basic::BasicHtmlWriter, Emit};
@@ -74,9 +74,9 @@ criterion_main!(files_document, files_document_fragment);
 fn run_document(src: &str) {
     testing::run_test2(false, |cm, handler| {
         HANDLER.set(&handler, || {
-            let fm = cm.new_source_file(FileName::Anon, src.into());
+            let fm = cm.new_source_file(FileName::Anon.into(), src.into());
 
-            let mut errors = vec![];
+            let mut errors = Vec::new();
             let mut document: Document =
                 parse_file_as_document(&fm, Default::default(), &mut errors).unwrap();
 
@@ -111,18 +111,18 @@ fn run_document(src: &str) {
 fn run_document_fragment(src: &str) {
     testing::run_test2(false, |cm, handler| {
         HANDLER.set(&handler, || {
-            let fm = cm.new_source_file(FileName::Anon, src.into());
+            let fm = cm.new_source_file(FileName::Anon.into(), src.into());
 
-            let mut errors = vec![];
+            let mut errors = Vec::new();
             let context_element_namespace = Namespace::HTML;
             let context_element_tag_name = "template";
             let context_element = Element {
                 span: Default::default(),
                 namespace: context_element_namespace,
                 tag_name: context_element_tag_name.into(),
-                attributes: vec![],
+                attributes: Vec::new(),
                 is_self_closing: false,
-                children: vec![],
+                children: Vec::new(),
                 content: None,
             };
             let mut document: DocumentFragment = parse_file_as_document_fragment(

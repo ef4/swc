@@ -1,5 +1,3 @@
-"use strict";
-var A;
 (function(A) {
     A.v = 25;
     function a() {
@@ -7,3 +5,4 @@ var A;
     }
     A.a = a;
 })(A || (A = {}));
+var A;

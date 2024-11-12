@@ -1,5 +1,6 @@
 #![deny(clippy::all)]
 #![allow(clippy::needless_update)]
+#![allow(non_local_definitions)]
 
 pub use std::fmt::Result;
 use std::{borrow::Cow, str, str::from_utf8};
@@ -2791,7 +2792,7 @@ fn serialize_dimension_unit(value: &str) -> Cow<'_, str> {
     // Fast-path
     let need_escape =
         (value.len() >= 2 && value.as_bytes()[0] == b'e' && value.as_bytes()[1].is_ascii_digit())
-            || value.contains(|c| c == char::REPLACEMENT_CHARACTER);
+            || value.contains(char::REPLACEMENT_CHARACTER);
 
     if !need_escape {
         return Cow::Borrowed(value);

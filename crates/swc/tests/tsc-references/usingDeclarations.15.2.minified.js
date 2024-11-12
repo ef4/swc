@@ -1,13 +1,17 @@
 //// [usingDeclarations.15.ts]
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
+let env = {
+    stack: [],
+    error: void 0,
+    hasError: !1
+};
 try {
-    var _stack = [];
-    _using(_stack, {
+    _ts_add_disposable_resource(env, {
         [Symbol.dispose] () {}
-    });
-} catch (_) {
-    var _error = _, _hasError = !0;
+    }, !1);
+} catch (e) {
+    env.error = e, env.hasError = !0;
 } finally{
-    _dispose(_stack, _error, _hasError);
+    _ts_dispose_resources(env);
 }

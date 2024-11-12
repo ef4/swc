@@ -1,10 +1,10 @@
 use swc_common::util::take::Take;
-use swc_ecma_ast::{CallExpr, Expr, Lit, Regex};
+use swc_ecma_ast::{CallExpr, Expr, Lit, Pass, Regex};
 use swc_ecma_utils::{quote_ident, ExprFactory};
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
-pub fn regexp(config: Config) -> impl Fold + VisitMut {
-    as_folder(RegExp { config })
+pub fn regexp(config: Config) -> impl Pass {
+    visit_mut_pass(RegExp { config })
 }
 
 #[derive(Default, Clone, Copy)]
@@ -23,6 +23,8 @@ pub struct Config {
     pub unicode_property_regex: bool,
     /// [RegExp.prototype.unicode](https://tc39.es/ecma262/multipage/text-processing.html#sec-get-regexp.prototype.unicode)
     pub unicode_regex: bool,
+    // [RegExp.prototype.unicodeSets](https://github.com/tc39/proposal-regexp-v-flag)
+    pub unicode_sets_regex: bool,
 }
 
 struct RegExp {
@@ -30,7 +32,7 @@ struct RegExp {
 }
 
 impl VisitMut for RegExp {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
         expr.visit_mut_children_with(self);
@@ -39,6 +41,7 @@ impl VisitMut for RegExp {
             if (self.config.dot_all_regex && regex.flags.contains('s'))
                 || (self.config.sticky_regex && regex.flags.contains('y'))
                 || (self.config.unicode_regex && regex.flags.contains('u'))
+                || (self.config.unicode_sets_regex && regex.flags.contains('v'))
                 || (self.config.has_indices && regex.flags.contains('d'))
                 || (self.config.named_capturing_groups_regex && regex.exp.contains("(?<"))
                 || (self.config.lookbehind_assertion && regex.exp.contains("(?<=")
@@ -60,7 +63,7 @@ impl VisitMut for RegExp {
                     span,
                     callee: quote_ident!("RegExp").as_callee(),
                     args,
-                    type_args: None,
+                    ..Default::default()
                 }
                 .into()
             }

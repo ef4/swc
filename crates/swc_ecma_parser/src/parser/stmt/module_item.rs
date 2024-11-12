@@ -9,10 +9,10 @@ impl<I: Tokens> Parser<I> {
 
             eat!(self, ';');
 
-            return Ok(Stmt::Expr(ExprStmt {
+            return Ok(ExprStmt {
                 span: span!(self, start),
                 expr,
-            })
+            }
             .into());
         }
 
@@ -21,10 +21,10 @@ impl<I: Tokens> Parser<I> {
 
             eat!(self, ';');
 
-            return Ok(Stmt::Expr(ExprStmt {
+            return Ok(ExprStmt {
                 span: span!(self, start),
                 expr,
-            })
+            }
             .into());
         }
 
@@ -66,19 +66,20 @@ impl<I: Tokens> Parser<I> {
                 None
             };
             expect!(self, ';');
-            return Ok(ModuleItem::from(ModuleDecl::Import(ImportDecl {
+            return Ok(ImportDecl {
                 span: span!(self, start),
                 src,
-                specifiers: vec![],
+                specifiers: Vec::new(),
                 type_only: false,
                 with,
                 phase: Default::default(),
-            })));
+            }
+            .into());
         }
 
         let mut type_only = false;
         let mut phase = ImportPhase::Evaluation;
-        let mut specifiers = vec![];
+        let mut specifiers = Vec::new();
 
         'import_maybe_ident: {
             if is!(self, BindingIdent) {
@@ -96,7 +97,7 @@ impl<I: Tokens> Parser<I> {
                             local = self.parse_imported_default_binding()?;
                         } else if peeked_is!(self, '=') {
                             type_only = true;
-                            local = self.parse_ident_name()?;
+                            local = self.parse_ident_name().map(From::from)?;
                         }
                     }
                 }
@@ -164,7 +165,7 @@ impl<I: Tokens> Parser<I> {
             expect!(self, "from");
             let str_start = cur_pos!(self);
 
-            match *cur!(self, true)? {
+            match *cur!(self, true) {
                 Token::Str { .. } => match bump!(self) {
                     Token::Str { value, raw, .. } => Box::new(Str {
                         span: span!(self, str_start),
@@ -192,14 +193,15 @@ impl<I: Tokens> Parser<I> {
 
         expect!(self, ';');
 
-        Ok(ModuleItem::from(ModuleDecl::Import(ImportDecl {
+        Ok(ImportDecl {
             span: span!(self, start),
             specifiers,
             src,
             type_only,
             with,
             phase,
-        })))
+        }
+        .into())
     }
 
     /// Parse `foo`, `foo2 as bar` in `import { foo, foo2 as bar }`
@@ -215,7 +217,7 @@ impl<I: Tokens> Parser<I> {
                 // `import { type as as } from 'mod'`
                 // `import { type as as as } from 'mod'`
                 if self.syntax().typescript() && orig_name.sym == "type" && is!(self, IdentName) {
-                    let possibly_orig_name = self.parse_ident_name()?;
+                    let possibly_orig_name = self.parse_ident_name().map(Ident::from)?;
                     if possibly_orig_name.sym == "as" {
                         // `import { type as } from 'mod'`
                         if !is!(self, IdentName) {
@@ -239,19 +241,19 @@ impl<I: Tokens> Parser<I> {
                             }));
                         }
 
-                        let maybe_as = self.parse_binding_ident()?.id;
+                        let maybe_as: Ident = self.parse_binding_ident(false)?.into();
                         if maybe_as.sym == "as" {
                             if is!(self, IdentName) {
                                 // `import { type as as as } from 'mod'`
                                 // `import { type as as foo } from 'mod'`
-                                let local = self.parse_binding_ident()?.id;
+                                let local: Ident = self.parse_binding_ident(false)?.into();
 
                                 if type_only {
                                     self.emit_err(orig_name.span, SyntaxError::TS2206);
                                 }
 
                                 return Ok(ImportSpecifier::Named(ImportNamedSpecifier {
-                                    span: Span::new(start, orig_name.span.hi(), Default::default()),
+                                    span: Span::new(start, orig_name.span.hi()),
                                     local,
                                     imported: Some(ModuleExportName::Ident(possibly_orig_name)),
                                     is_type_only: true,
@@ -259,7 +261,7 @@ impl<I: Tokens> Parser<I> {
                             } else {
                                 // `import { type as as } from 'mod'`
                                 return Ok(ImportSpecifier::Named(ImportNamedSpecifier {
-                                    span: Span::new(start, maybe_as.span.hi(), Default::default()),
+                                    span: Span::new(start, maybe_as.span.hi()),
                                     local: maybe_as,
                                     imported: Some(ModuleExportName::Ident(orig_name)),
                                     is_type_only: false,
@@ -268,7 +270,7 @@ impl<I: Tokens> Parser<I> {
                         } else {
                             // `import { type as xxx } from 'mod'`
                             return Ok(ImportSpecifier::Named(ImportNamedSpecifier {
-                                span: Span::new(start, orig_name.span.hi(), Default::default()),
+                                span: Span::new(start, orig_name.span.hi()),
                                 local: maybe_as,
                                 imported: Some(ModuleExportName::Ident(orig_name)),
                                 is_type_only: false,
@@ -287,9 +289,9 @@ impl<I: Tokens> Parser<I> {
                 }
 
                 if eat!(self, "as") {
-                    let local = self.parse_binding_ident()?.id;
+                    let local: Ident = self.parse_binding_ident(false)?.into();
                     return Ok(ImportSpecifier::Named(ImportNamedSpecifier {
-                        span: Span::new(start, local.span.hi(), Default::default()),
+                        span: Span::new(start, local.span.hi()),
                         local,
                         imported: Some(ModuleExportName::Ident(orig_name)),
                         is_type_only,
@@ -314,9 +316,9 @@ impl<I: Tokens> Parser<I> {
             }
             ModuleExportName::Str(orig_str) => {
                 if eat!(self, "as") {
-                    let local = self.parse_binding_ident()?.id;
+                    let local: Ident = self.parse_binding_ident(false)?.into();
                     Ok(ImportSpecifier::Named(ImportNamedSpecifier {
-                        span: Span::new(start, local.span.hi(), Default::default()),
+                        span: Span::new(start, local.span.hi()),
                         local,
                         imported: Some(ModuleExportName::Str(orig_str)),
                         is_type_only: false,
@@ -342,7 +344,7 @@ impl<I: Tokens> Parser<I> {
             in_generator: false,
             ..self.ctx()
         };
-        Ok(self.with_ctx(ctx).parse_binding_ident()?.id)
+        Ok(self.with_ctx(ctx).parse_binding_ident(false)?.into())
     }
 
     fn parse_export(&mut self, mut decorators: Vec<Decorator>) -> PResult<ModuleDecl> {
@@ -367,24 +369,26 @@ impl<I: Tokens> Parser<I> {
         if declare {
             // TODO: Remove
             if let Some(decl) = self.try_parse_ts_declare(after_export_start, decorators.clone())? {
-                return Ok(ModuleDecl::ExportDecl(ExportDecl {
+                return Ok(ExportDecl {
                     span: span!(self, start),
                     decl,
-                }));
+                }
+                .into());
             }
         }
 
         if self.input.syntax().typescript() && is!(self, IdentName) {
-            let sym = match *cur!(self, true)? {
+            let sym = match *cur!(self, true) {
                 Token::Word(ref w) => w.clone().into(),
                 _ => unreachable!(),
             };
             // TODO: remove clone
             if let Some(decl) = self.try_parse_ts_export_decl(decorators.clone(), sym) {
-                return Ok(ModuleDecl::ExportDecl(ExportDecl {
+                return Ok(ExportDecl {
                     span: span!(self, start),
                     decl,
-                }));
+                }
+                .into());
             }
         }
 
@@ -400,7 +404,12 @@ impl<I: Tokens> Parser<I> {
 
                 // export import A = B
                 return self
-                    .parse_ts_import_equals_decl(start, id, /* is_export */ true, is_type_only)
+                    .parse_ts_import_equals_decl(
+                        start,
+                        id.into(),
+                        /* is_export */ true,
+                        is_type_only,
+                    )
                     .map(From::from);
             }
 
@@ -483,28 +492,29 @@ impl<I: Tokens> Parser<I> {
             if is!(self, "class") {
                 let class_start = cur_pos!(self);
                 let decl = self.parse_default_class(start, class_start, decorators, false)?;
-                return Ok(ModuleDecl::ExportDefaultDecl(decl));
+                return Ok(decl.into());
             } else if is!(self, "async")
                 && peeked_is!(self, "function")
                 && !self.input.has_linebreak_between_cur_and_peeked()
             {
                 let decl = self.parse_default_async_fn(start, decorators)?;
-                return Ok(ModuleDecl::ExportDefaultDecl(decl));
+                return Ok(decl.into());
             } else if is!(self, "function") {
                 let decl = self.parse_default_fn(start, decorators)?;
-                return Ok(ModuleDecl::ExportDefaultDecl(decl));
+                return Ok(decl.into());
             } else if self.input.syntax().export_default_from()
                 && (is!(self, "from")
                     || (is!(self, ',') && (peeked_is!(self, '{') || peeked_is!(self, '*'))))
             {
-                export_default = Some(Ident::new("default".into(), self.input.prev_span()))
+                export_default = Some(Ident::new_no_ctxt("default".into(), self.input.prev_span()))
             } else {
                 let expr = self.include_in_expr(true).parse_assignment_expr()?;
                 expect!(self, ';');
-                return Ok(ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
+                return Ok(ExportDefaultExpr {
                     span: span!(self, start),
                     expr,
-                }));
+                }
+                .into());
             }
         }
 
@@ -543,10 +553,11 @@ impl<I: Tokens> Parser<I> {
                 .parse_ts_enum_decl(enum_start, /* is_const */ true)
                 .map(Decl::from)
                 .map(|decl| {
-                    ModuleDecl::ExportDecl(ExportDecl {
+                    ExportDecl {
                         span: span!(self, start),
                         decl,
-                    })
+                    }
+                    .into()
                 });
         } else if !type_only
             && (is!(self, "var")
@@ -591,15 +602,16 @@ impl<I: Tokens> Parser<I> {
 
                 // improve error message for `export * from foo`
                 let (src, with) = self.parse_from_clause_and_semi()?;
-                return Ok(ModuleDecl::ExportAll(ExportAll {
+                return Ok(ExportAll {
                     span: span!(self, start),
                     src,
                     type_only,
                     with,
-                }));
+                }
+                .into());
             }
 
-            let mut specifiers = vec![];
+            let mut specifiers = Vec::new();
 
             let mut has_default = false;
             let mut has_ns = false;
@@ -638,13 +650,14 @@ impl<I: Tokens> Parser<I> {
             if has_default || has_ns {
                 if is!(self, "from") {
                     let (src, with) = self.parse_from_clause_and_semi()?;
-                    return Ok(ModuleDecl::ExportNamed(NamedExport {
+                    return Ok(NamedExport {
                         span: span!(self, start),
                         specifiers,
                         src: Some(src),
                         type_only,
                         with,
-                    }));
+                    }
+                    .into());
                 } else if !self.input.syntax().export_default_from() {
                     // emit error
                     expect!(self, "from");
@@ -711,19 +724,21 @@ impl<I: Tokens> Parser<I> {
                 Some(v) => (Some(v.0), v.1),
                 None => (None, None),
             };
-            return Ok(ModuleDecl::ExportNamed(NamedExport {
+            return Ok(NamedExport {
                 span: span!(self, start),
                 specifiers,
                 src,
                 type_only,
                 with,
-            }));
+            }
+            .into());
         };
 
-        Ok(ModuleDecl::ExportDecl(ExportDecl {
+        Ok(ExportDecl {
             span: span!(self, start),
             decl,
-        }))
+        }
+        .into())
     }
 
     fn parse_named_export_specifier(&mut self, type_only: bool) -> PResult<ExportNamedSpecifier> {
@@ -740,7 +755,7 @@ impl<I: Tokens> Parser<I> {
                 // `export { type as as }`
                 // `export { type as as as }`
                 if self.syntax().typescript() && orig_ident.sym == "type" && is!(self, IdentName) {
-                    let possibly_orig = self.parse_ident_name()?;
+                    let possibly_orig = self.parse_ident_name().map(Ident::from)?;
                     if possibly_orig.sym == "as" {
                         // `export { type as }`
                         if !is!(self, IdentName) {
@@ -756,23 +771,19 @@ impl<I: Tokens> Parser<I> {
                             });
                         }
 
-                        let maybe_as = self.parse_ident_name()?;
+                        let maybe_as = self.parse_ident_name().map(Ident::from)?;
                         if maybe_as.sym == "as" {
                             if is!(self, IdentName) {
                                 // `export { type as as as }`
                                 // `export { type as as foo }`
-                                let exported = self.parse_ident_name()?;
+                                let exported = self.parse_ident_name().map(Ident::from)?;
 
                                 if type_only {
                                     self.emit_err(orig_ident.span, SyntaxError::TS2207);
                                 }
 
                                 return Ok(ExportNamedSpecifier {
-                                    span: Span::new(
-                                        start,
-                                        orig_ident.span.hi(),
-                                        Default::default(),
-                                    ),
+                                    span: Span::new(start, orig_ident.span.hi()),
                                     orig: ModuleExportName::Ident(possibly_orig),
                                     exported: Some(ModuleExportName::Ident(exported)),
                                     is_type_only: true,
@@ -780,11 +791,7 @@ impl<I: Tokens> Parser<I> {
                             } else {
                                 // `export { type as as }`
                                 return Ok(ExportNamedSpecifier {
-                                    span: Span::new(
-                                        start,
-                                        orig_ident.span.hi(),
-                                        Default::default(),
-                                    ),
+                                    span: Span::new(start, orig_ident.span.hi()),
                                     orig: ModuleExportName::Ident(orig_ident),
                                     exported: Some(ModuleExportName::Ident(maybe_as)),
                                     is_type_only: false,
@@ -793,7 +800,7 @@ impl<I: Tokens> Parser<I> {
                         } else {
                             // `export { type as xxx }`
                             return Ok(ExportNamedSpecifier {
-                                span: Span::new(start, orig_ident.span.hi(), Default::default()),
+                                span: Span::new(start, orig_ident.span.hi()),
                                 orig: ModuleExportName::Ident(orig_ident),
                                 exported: Some(ModuleExportName::Ident(maybe_as)),
                                 is_type_only: false,
@@ -835,7 +842,7 @@ impl<I: Tokens> Parser<I> {
         expect!(self, "from");
 
         let str_start = cur_pos!(self);
-        let src = match *cur!(self, true)? {
+        let src = match *cur!(self, true) {
             Token::Str { .. } => match bump!(self) {
                 Token::Str { value, raw, .. } => Box::new(Str {
                     span: span!(self, str_start),
@@ -872,7 +879,7 @@ impl IsDirective for ModuleItem {
     }
 }
 
-impl<'a, I: Tokens> StmtLikeParser<'a, ModuleItem> for Parser<I> {
+impl<I: Tokens> StmtLikeParser<'_, ModuleItem> for Parser<I> {
     fn handle_import_export(
         &mut self,
         top_level: bool,
@@ -899,7 +906,7 @@ impl<'a, I: Tokens> StmtLikeParser<'a, ModuleItem> for Parser<I> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{EsConfig, Syntax};
+    use crate::{EsSyntax, Syntax};
 
     #[test]
     fn test_legacy_decorator() {
@@ -910,7 +917,7 @@ export default class Foo {
     class Baz {}
   }
 }",
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 decorators: true,
                 decorators_before_export: true,
                 ..Default::default()

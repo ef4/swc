@@ -45,7 +45,7 @@ where
         };
 
         Ok(SelectorList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             children,
         })
     }
@@ -68,7 +68,7 @@ where
                         parser.input.reset(&state);
 
                         let span = parser.input.cur_span();
-                        let mut children = vec![];
+                        let mut children = Vec::new();
 
                         while !is_one_of!(parser, EOF, ",", ")") {
                             if let Some(token_and_span) = parser.input.bump() {
@@ -116,7 +116,7 @@ where
         };
 
         Ok(ForgivingSelectorList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             children,
         })
     }
@@ -158,7 +158,7 @@ where
         };
 
         Ok(CompoundSelectorList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             children,
         })
     }
@@ -200,7 +200,7 @@ where
         };
 
         Ok(RelativeSelectorList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             children,
         })
     }
@@ -223,7 +223,7 @@ where
                         parser.input.reset(&state);
 
                         let span = parser.input.cur_span();
-                        let mut children = vec![];
+                        let mut children = Vec::new();
 
                         while !is_one_of!(parser, EOF, ",", ")") {
                             if let Some(token_and_span) = parser.input.bump() {
@@ -271,7 +271,7 @@ where
         };
 
         Ok(ForgivingRelativeSelectorList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             children,
         })
     }
@@ -324,7 +324,7 @@ where
         };
 
         Ok(ComplexSelector {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             children,
         })
     }
@@ -389,7 +389,7 @@ where
         let last_pos = selector.span.hi;
 
         Ok(RelativeSelector {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             combinator,
             selector,
         })
@@ -420,7 +420,7 @@ where
         } else {
             None
         };
-        let mut subclass_selectors = vec![];
+        let mut subclass_selectors = Vec::new();
 
         loop {
             if !(is!(self, "#")
@@ -857,7 +857,7 @@ where
             let state = self.input.state();
             let mut parse_pseudo_class_children =
                 || -> PResult<Vec<PseudoClassSelectorChildren>> {
-                    let mut children = vec![];
+                    let mut children = Vec::new();
 
                     match &*names.0 {
                         "local" | "global" if self.config.css_modules => {
@@ -1044,7 +1044,7 @@ where
             Ok(PseudoClassSelector {
                 span: span!(self, span.lo),
                 name: Ident {
-                    span: Span::new(fn_span.lo, fn_span.hi - BytePos(1), Default::default()),
+                    span: Span::new(fn_span.lo, fn_span.hi - BytePos(1)),
                     value: names.0,
                     raw: Some(names.1),
                 },
@@ -1090,7 +1090,7 @@ where
             let state = self.input.state();
             let mut parse_pseudo_element_children =
                 || -> PResult<Vec<PseudoElementSelectorChildren>> {
-                    let mut children = vec![];
+                    let mut children = Vec::new();
 
                     match &*names.0 {
                         "cue" | "cue-region" => {
@@ -1166,7 +1166,7 @@ where
             Ok(PseudoElementSelector {
                 span: span!(self, span.lo),
                 name: Ident {
-                    span: Span::new(fn_span.lo, fn_span.hi - BytePos(1), Default::default()),
+                    span: Span::new(fn_span.lo, fn_span.hi - BytePos(1)),
                     value: names.0,
                     raw: Some(names.1),
                 },

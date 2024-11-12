@@ -3,7 +3,7 @@ extern crate test;
 use std::{ops::Range, str};
 
 use swc_atoms::Atom;
-use swc_common::{BytePos, Span, SyntaxContext};
+use swc_common::{BytePos, Span};
 use swc_ecma_ast::{AssignOp, AssignOp::*};
 use test::{black_box, Bencher};
 
@@ -27,7 +27,6 @@ fn sp(r: Range<usize>) -> Span {
         lo: BytePos((r.start + 1) as u32),
         // +1 as bytepos starts at 1
         hi: BytePos((r.end + 1) as u32),
-        ctxt: Default::default(),
     }
 }
 
@@ -52,7 +51,6 @@ impl SpanRange for usize {
             // +1 as bytepos starts at 1
             // +1 as hi is exclusive
             BytePos((self + 1 + 1) as _),
-            Default::default(),
         )
     }
 }
@@ -68,7 +66,6 @@ impl SpanRange for Range<usize> {
             BytePos((self.start + 1) as _),
             // +1 as bytepos starts at 1
             BytePos((self.end + 1) as _),
-            Default::default(),
         )
     }
 }
@@ -107,7 +104,7 @@ impl WithSpan for f64 {
         }
     }
 }
-impl<'a> WithSpan for &'a str {
+impl WithSpan for &str {
     fn into_token(self) -> Token {
         Word(Word::Ident(self.into()))
     }
@@ -184,7 +181,6 @@ fn test262_lexer_error_0001() {
                 span: Span {
                     lo: BytePos(1),
                     hi: BytePos(5),
-                    ctxt: Default::default(),
                 }
             },
             Dot.span(4..5),
@@ -289,7 +285,6 @@ fn tpl_invalid_unicode_escape() {
                     Span {
                         lo: BytePos(2),
                         hi: BytePos(4),
-                        ctxt: SyntaxContext::empty(),
                     },
                     SyntaxError::BadCharacterEscapeSequence {
                         expected: "4 hex characters"
@@ -309,7 +304,6 @@ fn tpl_invalid_unicode_escape() {
                     Span {
                         lo: BytePos(2),
                         hi: BytePos(5),
-                        ctxt: SyntaxContext::empty(),
                     },
                     SyntaxError::BadCharacterEscapeSequence {
                         expected: "1-6 hex characters"
@@ -329,7 +323,6 @@ fn tpl_invalid_unicode_escape() {
                     Span {
                         lo: BytePos(2),
                         hi: BytePos(4),
-                        ctxt: SyntaxContext::empty(),
                     },
                     SyntaxError::BadCharacterEscapeSequence {
                         expected: "2 hex characters"
@@ -507,7 +500,6 @@ fn simple_regex() {
                 span: Span {
                     lo: BytePos(1),
                     hi: BytePos(2),
-                    ctxt: Default::default(),
                 },
             },
             42.span(1..3),
@@ -752,7 +744,6 @@ fn migrated_0006() {
                 span: Span {
                     lo: BytePos(5),
                     hi: BytePos(7),
-                    ctxt: Default::default(),
                 }
             },
             BinOp(Div).span(6),
@@ -992,7 +983,7 @@ a"
 fn jsx_01() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1011,7 +1002,7 @@ fn jsx_01() {
 fn jsx_02() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1021,7 +1012,10 @@ fn jsx_02() {
             Token::JSXTagStart,
             Token::JSXName { name: "a".into() },
             Token::JSXTagEnd,
-            Token::JSXText { raw: "foo".into() },
+            Token::JSXText {
+                raw: "foo".into(),
+                value: "foo".into()
+            },
             Token::JSXTagStart,
             tok!('/'),
             Token::JSXName { name: "a".into() },
@@ -1034,7 +1028,7 @@ fn jsx_02() {
 fn jsx_03() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1062,7 +1056,7 @@ fn jsx_03() {
 fn jsx_04() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1097,14 +1091,14 @@ fn shebang() {
 
 #[test]
 fn empty() {
-    assert_eq!(lex_tokens(crate::Syntax::default(), "",), vec![]);
+    assert_eq!(lex_tokens(crate::Syntax::default(), "",), Vec::new());
 }
 
 #[test]
 fn issue_191() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1161,7 +1155,7 @@ fn issue_5722() {
 fn jsx_05() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1187,7 +1181,7 @@ fn jsx_05() {
 fn issue_299_01() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1205,7 +1199,10 @@ fn issue_299_01() {
                 raw: "'\\ '".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1221,7 +1218,7 @@ fn issue_299_01() {
 fn issue_299_02() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1239,7 +1236,10 @@ fn issue_299_02() {
                 raw: "'\\\\'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1255,7 +1255,7 @@ fn issue_299_02() {
 fn jsx_string_1() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1273,7 +1273,10 @@ fn jsx_string_1() {
                 raw: "'abc'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1289,7 +1292,7 @@ fn jsx_string_1() {
 fn jsx_string_2() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1307,7 +1310,10 @@ fn jsx_string_2() {
                 raw: "\"abc\"".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1323,7 +1329,7 @@ fn jsx_string_2() {
 fn jsx_string_3() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1341,7 +1347,10 @@ fn jsx_string_3() {
                 raw: "'\n'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1357,7 +1366,7 @@ fn jsx_string_3() {
 fn jsx_string_4() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1375,7 +1384,10 @@ fn jsx_string_4() {
                 raw: "'&sup3;'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1391,7 +1403,7 @@ fn jsx_string_4() {
 fn jsx_string_5() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1409,7 +1421,10 @@ fn jsx_string_5() {
                 raw: "'&#42;'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1425,7 +1440,7 @@ fn jsx_string_5() {
 fn jsx_string_6() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1443,7 +1458,10 @@ fn jsx_string_6() {
                 raw: "'&#x23;'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1459,7 +1477,7 @@ fn jsx_string_6() {
 fn jsx_string_7() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1477,7 +1495,10 @@ fn jsx_string_7() {
                 raw: "'&'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1493,7 +1514,7 @@ fn jsx_string_7() {
 fn jsx_string_8() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1511,7 +1532,10 @@ fn jsx_string_8() {
                 raw: "'&;'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1527,7 +1551,7 @@ fn jsx_string_8() {
 fn jsx_string_9() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1545,7 +1569,10 @@ fn jsx_string_9() {
                 raw: "'&&'".into(),
             },
             Token::JSXTagEnd,
-            JSXText { raw: "ABC".into() },
+            JSXText {
+                raw: "ABC".into(),
+                value: "ABC".into()
+            },
             JSXTagStart,
             tok!('/'),
             JSXName {
@@ -1587,7 +1614,7 @@ fn issue_401() {
 fn issue_481() {
     assert_eq!(
         lex_tokens(
-            crate::Syntax::Es(crate::EsConfig {
+            crate::Syntax::Es(crate::EsSyntax {
                 jsx: true,
                 ..Default::default()
             }),
@@ -1599,7 +1626,10 @@ fn issue_481() {
                 name: "span".into()
             },
             Token::JSXTagEnd,
-            JSXText { raw: " ".into() },
+            JSXText {
+                raw: " ".into(),
+                value: " ".into()
+            },
             LBrace,
             Word(Word::Ident("foo".into())),
             RBrace,
@@ -1814,14 +1844,14 @@ fn lex_semicolons(b: &mut Bencher) {
 fn issue_1272_1_ts() {
     let (tokens, errors) = lex_errors(crate::Syntax::Typescript(Default::default()), "\\u{16}");
     assert_eq!(tokens.len(), 1);
-    assert_ne!(errors, vec![]);
+    assert_ne!(errors, Vec::new());
 }
 
 #[test]
 fn issue_1272_1_js() {
     let (tokens, errors) = lex_errors(crate::Syntax::Es(Default::default()), "\\u{16}");
     assert_eq!(tokens.len(), 1);
-    assert_ne!(errors, vec![]);
+    assert_ne!(errors, Vec::new());
 }
 
 #[test]
@@ -1829,7 +1859,7 @@ fn issue_1272_2_ts() {
     // Not recoverable yet
     let (tokens, errors) = lex_errors(crate::Syntax::Typescript(Default::default()), "\u{16}");
     assert_eq!(tokens.len(), 1);
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
 }
 
 #[test]
@@ -1837,14 +1867,14 @@ fn issue_1272_2_js() {
     // Not recoverable yet
     let (tokens, errors) = lex_errors(crate::Syntax::Es(Default::default()), "\u{16}");
     assert_eq!(tokens.len(), 1);
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
 }
 
 #[test]
 fn issue_2853_1_js() {
     let (tokens, errors) = lex_errors(crate::Syntax::Es(Default::default()), "const a = \"\\0a\"");
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -1866,7 +1896,7 @@ fn issue_2853_2_ts() {
         "const a = \"\\0a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -1888,7 +1918,7 @@ fn issue_2853_3_js() {
         "const a = \"\u{0000}a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -1910,7 +1940,7 @@ fn issue_2853_4_ts() {
         "const a = \"\u{0000}a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -1928,14 +1958,14 @@ fn issue_2853_4_ts() {
 #[test]
 fn issue_2853_5_jsx() {
     let (tokens, errors) = lex_errors(
-        crate::Syntax::Es(crate::EsConfig {
+        crate::Syntax::Es(crate::EsSyntax {
             jsx: true,
             ..Default::default()
         }),
         "const a = \"\\0a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -1953,14 +1983,14 @@ fn issue_2853_5_jsx() {
 #[test]
 fn issue_2853_6_tsx() {
     let (tokens, errors) = lex_errors(
-        crate::Syntax::Typescript(crate::TsConfig {
+        crate::Syntax::Typescript(crate::TsSyntax {
             tsx: true,
             ..Default::default()
         }),
         "const a = \"\\0a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -1978,14 +2008,14 @@ fn issue_2853_6_tsx() {
 #[test]
 fn issue_2853_7_jsx() {
     let (tokens, errors) = lex_errors(
-        crate::Syntax::Es(crate::EsConfig {
+        crate::Syntax::Es(crate::EsSyntax {
             jsx: true,
             ..Default::default()
         }),
         "const a = \"\u{0000}a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -2003,14 +2033,14 @@ fn issue_2853_7_jsx() {
 #[test]
 fn issue_2853_8_tsx() {
     let (tokens, errors) = lex_errors(
-        crate::Syntax::Typescript(crate::TsConfig {
+        crate::Syntax::Typescript(crate::TsSyntax {
             tsx: true,
             ..Default::default()
         }),
         "const a = \"\u{0000}a\"",
     );
 
-    assert_eq!(errors, vec![]);
+    assert_eq!(errors, Vec::new());
     assert_eq!(
         tokens,
         vec![
@@ -2084,7 +2114,7 @@ class C {
 #[test]
 fn conflict_marker_trivia3() {
     let (_, errors) = lex_errors(
-        crate::Syntax::Typescript(crate::TsConfig {
+        crate::Syntax::Typescript(crate::TsSyntax {
             tsx: true,
             ..Default::default()
         }),
@@ -2158,4 +2188,35 @@ class C {
 
     assert_eq!(errors.len(), 4);
     assert!(errors.iter().all(|e| e.kind() == &SyntaxError::TS1185));
+}
+
+#[test]
+fn issue_9106() {
+    assert_eq!(
+        lex_tokens(
+            crate::Syntax::Es(crate::EsSyntax {
+                jsx: true,
+                ..Default::default()
+            }),
+            "<Page>\n\r\nABC</Page>;"
+        ),
+        vec![
+            Token::JSXTagStart,
+            Token::JSXName {
+                name: "Page".into()
+            },
+            JSXTagEnd,
+            JSXText {
+                raw: "\n\r\nABC".into(),
+                value: "\n\nABC".into(),
+            },
+            JSXTagStart,
+            tok!('/'),
+            JSXName {
+                name: "Page".into()
+            },
+            JSXTagEnd,
+            Semi,
+        ]
+    );
 }

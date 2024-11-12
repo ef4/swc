@@ -1,11 +1,9 @@
-use std::usize;
-
 use serde_json::Value;
 use swc_common::{util::take::Take, Spanned, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::perf::Parallel;
 use swc_ecma_utils::{calc_literal_cost, member_expr, ExprFactory};
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
 /// Transform to optimize performance of literals.
 ///
@@ -29,8 +27,8 @@ use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWit
 ///   - Object literal is deeply nested (threshold: )
 ///
 /// See https://github.com/swc-project/swc/issues/409
-pub fn json_parse(min_cost: usize) -> impl Fold {
-    as_folder(JsonParse { min_cost })
+pub fn json_parse(min_cost: usize) -> impl Pass {
+    visit_mut_pass(JsonParse { min_cost })
 }
 
 struct JsonParse {
@@ -54,7 +52,7 @@ impl Default for JsonParse {
 }
 
 impl VisitMut for JsonParse {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     /// Handles parent expressions before child expressions.
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
@@ -71,17 +69,18 @@ impl VisitMut for JsonParse {
                             unreachable!("failed to serialize serde_json::Value as json: {}", err)
                         });
 
-                    *expr = Expr::Call(CallExpr {
+                    *expr = CallExpr {
                         span: expr.span(),
-                        callee: member_expr!(DUMMY_SP, JSON.parse).as_callee(),
+                        callee: member_expr!(Default::default(), DUMMY_SP, JSON.parse).as_callee(),
                         args: vec![Lit::Str(Str {
                             span: DUMMY_SP,
                             raw: None,
                             value: value.into(),
                         })
                         .as_arg()],
-                        type_args: Default::default(),
-                    });
+                        ..Default::default()
+                    }
+                    .into();
                     return;
                 }
 
@@ -141,10 +140,6 @@ mod tests {
     use swc_ecma_transforms_testing::test;
 
     use super::*;
-
-    struct Normalizer;
-
-    impl Fold for Normalizer {}
 
     test!(
         ::swc_ecma_parser::Syntax::default(),

@@ -1,16 +1,13 @@
-extern crate test;
-
 use std::hint::black_box;
 
 use swc_common::{FileName, SourceMap, DUMMY_SP as span};
 use swc_ecma_visit::assert_eq_ignore_span;
-use test::Bencher;
 
 use super::*;
-use crate::{parse_file_as_expr, EsConfig};
+use crate::{parse_file_as_expr, EsSyntax};
 
 fn syntax() -> Syntax {
-    Syntax::Es(EsConfig {
+    Syntax::Es(EsSyntax {
         allow_super_outside_method: true,
         ..Default::default()
     })
@@ -37,16 +34,20 @@ fn expr(s: &'static str) -> Box<Expr> {
     })
 }
 fn regex_expr() -> Box<Expr> {
-    Box::new(Expr::Assign(AssignExpr {
+    AssignExpr {
         span,
-        left: Ident::new("re".into(), span).into(),
+        left: Ident::new_no_ctxt("re".into(), span).into(),
         op: AssignOp::Assign,
-        right: Box::new(Expr::Lit(Lit::Regex(Regex {
-            span,
-            exp: "w+".into(),
-            flags: "".into(),
-        }))),
-    }))
+        right: Box::new(
+            Lit::Regex(Regex {
+                span,
+                exp: "w+".into(),
+                flags: "".into(),
+            })
+            .into(),
+        ),
+    }
+    .into()
 }
 #[test]
 fn regex_single_line_comment() {
@@ -83,7 +84,7 @@ fn arrow_assign() {
         expr("a = b => false"),
         Box::new(Expr::Assign(AssignExpr {
             span,
-            left: Ident::new("a".into(), span).into(),
+            left: Ident::new_no_ctxt("a".into(), span).into(),
             op: op!("="),
             right: expr("b => false"),
         }))
@@ -97,8 +98,8 @@ fn async_call() {
         Box::new(Expr::Call(CallExpr {
             span,
             callee: Callee::Expr(expr("async")),
-            args: vec![],
-            type_args: None,
+            args: Vec::new(),
+            ..Default::default()
         }))
     );
 }
@@ -111,10 +112,9 @@ fn async_arrow() {
             span,
             is_async: true,
             is_generator: false,
-            params: vec![],
+            params: Vec::new(),
             body: Box::new(BlockStmtOrExpr::Expr(expr("foo"))),
-            return_type: None,
-            type_params: None,
+            ..Default::default()
         }))
     );
 }
@@ -133,17 +133,16 @@ fn object_rest_pat() {
                 props: vec![ObjectPatProp::Rest(RestPat {
                     span,
                     dot3_token: span,
-                    arg: Box::new(Pat::Ident(Ident::new("a34".into(), span).into())),
+                    arg: Box::new(Pat::Ident(Ident::new_no_ctxt("a34".into(), span).into())),
                     type_ann: None,
                 })],
                 type_ann: None
             })],
             body: Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                 span,
-                stmts: vec![]
+                ..Default::default()
             })),
-            return_type: None,
-            type_params: None,
+            ..Default::default()
         }))
     );
 }
@@ -154,17 +153,17 @@ fn object_spread() {
         expr("foo = {a, ...bar, b}"),
         Box::new(Expr::Assign(AssignExpr {
             span,
-            left: Ident::new("foo".into(), span).into(),
+            left: Ident::new_no_ctxt("foo".into(), span).into(),
             op: op!("="),
             right: Box::new(Expr::Object(ObjectLit {
                 span,
                 props: vec![
-                    PropOrSpread::Prop(Box::new(Ident::new("a".into(), span).into())),
+                    PropOrSpread::Prop(Box::new(Ident::new_no_ctxt("a".into(), span).into())),
                     PropOrSpread::Spread(SpreadElement {
                         dot3_token: span,
-                        expr: Box::new(Expr::Ident(Ident::new("bar".into(), span))),
+                        expr: Box::new(Expr::Ident(Ident::new_no_ctxt("bar".into(), span))),
                     }),
-                    PropOrSpread::Prop(Box::new(Ident::new("b".into(), span).into())),
+                    PropOrSpread::Prop(Box::new(Ident::new_no_ctxt("b".into(), span).into())),
                 ]
             }))
         }))
@@ -178,7 +177,7 @@ fn new_expr_should_not_eat_too_much() {
         Box::new(Expr::Member(MemberExpr {
             span,
             obj: member_expr("new Date()"),
-            prop: MemberProp::Ident(Ident::new("toString".into(), span)),
+            prop: MemberProp::Ident(IdentName::new("toString".into(), span)),
         }))
     );
 }
@@ -189,8 +188,8 @@ fn lhs_expr_as_new_expr_prod() {
         Box::new(Expr::New(NewExpr {
             span,
             callee: lhs("Date.toString"),
-            args: Some(vec![]),
-            type_args: None,
+            args: Some(Vec::new()),
+            ..Default::default()
         }))
     );
 }
@@ -202,8 +201,8 @@ fn lhs_expr_as_call() {
         Box::new(Expr::Call(CallExpr {
             span,
             callee: Callee::Expr(lhs("new Date.toString()")),
-            args: vec![],
-            type_args: None,
+            args: Vec::new(),
+            ..Default::default()
         }))
     )
 }
@@ -216,10 +215,9 @@ fn arrow_fn_no_args() {
             span,
             is_async: false,
             is_generator: false,
-            params: vec![],
+            params: Vec::new(),
             body: Box::new(BlockStmtOrExpr::Expr(expr("1"))),
-            return_type: None,
-            type_params: None,
+            ..Default::default()
         }))
     );
 }
@@ -231,10 +229,9 @@ fn arrow_fn() {
             span,
             is_async: false,
             is_generator: false,
-            params: vec![Pat::Ident(Ident::new("a".into(), span).into())],
+            params: vec![Pat::Ident(Ident::new_no_ctxt("a".into(), span).into())],
             body: Box::new(BlockStmtOrExpr::Expr(expr("1"))),
-            return_type: None,
-            type_params: None,
+            ..Default::default()
         }))
     );
 }
@@ -249,12 +246,12 @@ fn arrow_fn_rest() {
             params: vec![Pat::Rest(RestPat {
                 span,
                 dot3_token: span,
-                arg: Box::new(Pat::Ident(Ident::new("a".into(), span).into())),
+                arg: Box::new(Pat::Ident(Ident::new_no_ctxt("a".into(), span).into())),
                 type_ann: None
             })],
             body: Box::new(BlockStmtOrExpr::Expr(expr("1"))),
-            return_type: None,
-            type_params: None,
+
+            ..Default::default()
         }))
     );
 }
@@ -264,12 +261,9 @@ fn arrow_fn_no_paren() {
         expr("a => 1"),
         Box::new(Expr::Arrow(ArrowExpr {
             span,
-            is_async: false,
-            is_generator: false,
-            params: vec![Pat::Ident(Ident::new("a".into(), span).into())],
+            params: vec![Pat::Ident(Ident::new_no_ctxt("a".into(), span).into())],
             body: Box::new(BlockStmtOrExpr::Expr(expr("1"))),
-            type_params: None,
-            return_type: None,
+            ..Default::default()
         }))
     );
 }
@@ -282,7 +276,7 @@ fn new_no_paren() {
             span,
             callee: expr("a"),
             args: None,
-            type_args: None,
+            ..Default::default()
         }))
     );
 }
@@ -295,7 +289,7 @@ fn new_new_no_paren() {
             span,
             callee: expr("new a"),
             args: None,
-            type_args: None,
+            ..Default::default()
         }))
     );
 }
@@ -309,7 +303,7 @@ fn array_lit() {
             elems: vec![
                 Some(ExprOrSpread {
                     spread: None,
-                    expr: Box::new(Expr::Ident(Ident::new("a".into(), span))),
+                    expr: Box::new(Expr::Ident(Ident::new_no_ctxt("a".into(), span))),
                 }),
                 None,
                 None,
@@ -317,12 +311,12 @@ fn array_lit() {
                 None,
                 Some(ExprOrSpread {
                     spread: Some(span),
-                    expr: Box::new(Expr::Ident(Ident::new("d".into(), span))),
+                    expr: Box::new(Expr::Ident(Ident::new_no_ctxt("d".into(), span))),
                 }),
                 None,
                 Some(ExprOrSpread {
                     spread: None,
-                    expr: Box::new(Expr::Ident(Ident::new("e".into(), span))),
+                    expr: Box::new(Expr::Ident(Ident::new_no_ctxt("e".into(), span))),
                 }),
             ]
         }))
@@ -348,8 +342,8 @@ fn iife() {
         Box::new(Expr::Call(CallExpr {
             span,
             callee: Callee::Expr(expr("(function(){})")),
-            args: vec![],
-            type_args: Default::default(),
+            args: Vec::new(),
+            ..Default::default()
         }))
     )
 }
@@ -365,7 +359,7 @@ fn issue_319_1() {
                 spread: None,
                 expr: expr("({ async f() { await g(); } })"),
             }],
-            type_args: Default::default(),
+            ..Default::default()
         }))
     );
 }
@@ -392,7 +386,7 @@ fn issue_328() {
                         raw: Some("'test'".into()),
                     }))),
                 }],
-                type_args: Default::default(),
+                ..Default::default()
             }))
         })
     );
@@ -449,14 +443,12 @@ fn super_expr() {
             callee: Callee::Expr(Box::new(Expr::SuperProp(SuperPropExpr {
                 span,
                 obj: Super { span },
-                prop: SuperProp::Ident(Ident {
+                prop: SuperProp::Ident(IdentName {
                     span,
                     sym: "foo".into(),
-                    optional: false
                 })
             }))),
-            args: Vec::new(),
-            type_args: Default::default(),
+            ..Default::default()
         }))
     );
 }
@@ -476,7 +468,7 @@ fn super_expr_computed() {
                     expr: Box::new(Expr::Ident(Ident {
                         span,
                         sym: "a".into(),
-                        optional: false
+                        ..Default::default()
                     })),
                 })
             }
@@ -522,8 +514,8 @@ fn issue_5947() {
 #[test]
 fn issue_6781() {
     let cm = SourceMap::default();
-    let fm = cm.new_source_file(FileName::Anon, "import.meta.env".to_string());
-    let mut errors = vec![];
+    let fm = cm.new_source_file(FileName::Anon.into(), "import.meta.env".to_string());
+    let mut errors = Vec::new();
     let expr = parse_file_as_expr(
         &fm,
         Default::default(),

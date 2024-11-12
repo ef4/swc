@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
+use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use swc::config::{Config, IsModule, JscConfig, Options};
 use swc_common::{
     errors::Handler, FileName, FilePathMapping, Mark, SourceFile, SourceMap, GLOBALS,
@@ -13,8 +13,7 @@ use swc_common::{
 use swc_compiler_base::PrintArgs;
 use swc_ecma_ast::{EsVersion, Program};
 use swc_ecma_parser::Syntax;
-use swc_ecma_transforms::{fixer, hygiene, resolver, typescript};
-use swc_ecma_visit::FoldWith;
+use swc_ecma_transforms::{fixer, resolver, typescript};
 
 static SOURCE: &str = include_str!("assets/Observable.ts");
 
@@ -26,7 +25,7 @@ fn mk() -> swc::Compiler {
 
 fn parse(c: &swc::Compiler) -> (Arc<SourceFile>, Program) {
     let fm = c.cm.new_source_file(
-        FileName::Real("rxjs/src/internal/Observable.ts".into()),
+        FileName::Real("rxjs/src/internal/Observable.ts".into()).into(),
         SOURCE.to_string(),
     );
     let handler = Handler::with_emitter_writer(Box::new(io::stderr()), Some(c.cm.clone()));
@@ -52,16 +51,16 @@ fn as_es(c: &swc::Compiler) -> Program {
     let top_level_mark = Mark::new();
 
     program
-        .fold_with(&mut resolver(unresolved_mark, top_level_mark, true))
-        .fold_with(&mut typescript::strip(top_level_mark))
+        .apply(&mut resolver(unresolved_mark, top_level_mark, true))
+        .apply(&mut typescript::strip(unresolved_mark, top_level_mark))
 }
 
 fn base_tr_group(c: &mut Criterion) {
     c.bench_function("es/full/base/fixer", base_tr_fixer);
-    c.bench_function(
-        "es/full/base/resolver_and_hygiene",
-        base_tr_resolver_and_hygiene,
-    );
+    // c.bench_function(
+    //     "es/full/base/resolver_and_hygiene",
+    //     base_tr_resolver_and_hygiene,
+    // );
 }
 
 fn base_tr_fixer(b: &mut Bencher) {
@@ -73,34 +72,34 @@ fn base_tr_fixer(b: &mut Bencher) {
             GLOBALS.set(&Default::default(), || {
                 let handler = Handler::with_emitter_writer(Box::new(stderr()), Some(c.cm.clone()));
                 black_box(c.run_transform(&handler, true, || {
-                    module.clone().fold_with(&mut fixer(Some(c.comments())))
+                    module.clone().apply(&mut fixer(Some(c.comments())))
                 }))
             })
         });
     });
 }
 
-fn base_tr_resolver_and_hygiene(b: &mut Bencher) {
-    let c = mk();
-    GLOBALS.set(&Default::default(), || {
-        let module = as_es(&c);
+// fn base_tr_resolver_and_hygiene(b: &mut Bencher) {
+//     let c = mk();
+//     GLOBALS.set(&Default::default(), || {
+//         let module = as_es(&c);
 
-        b.iter(|| {
-            GLOBALS.set(&Default::default(), || {
-                let handler = Handler::with_emitter_writer(Box::new(stderr()), Some(c.cm.clone()));
-                black_box(c.run_transform(&handler, true, || {
-                    module
-                        .clone()
-                        .fold_with(&mut resolver(Mark::new(), Mark::new(), false))
-                        .fold_with(&mut hygiene())
-                }))
-            })
-        });
-    })
-}
+//         b.iter(|| {
+//             GLOBALS.set(&Default::default(), || {
+//                 let handler =
+// Handler::with_emitter_writer(Box::new(stderr()), Some(c.cm.clone()));
+//                 black_box(c.run_transform(&handler, true, || {
+//                     module
+//                         .clone()
+//                         .fold_with(&mut resolver(Mark::new(), Mark::new(),
+// false))                         .fold_with(&mut hygiene())
+//                 }))
+//             })
+//         });
+//     })
+// }
 
 /// This benchmark exists to know exact execution time of each pass.
-
 fn bench_codegen(b: &mut Bencher, _target: EsVersion) {
     let c = mk();
 
@@ -153,7 +152,7 @@ fn bench_full(b: &mut Bencher, opts: &Options) {
                 let handler = Handler::with_emitter_writer(Box::new(stderr()), Some(c.cm.clone()));
 
                 let fm = c.cm.new_source_file(
-                    FileName::Real("rxjs/src/internal/Observable.ts".into()),
+                    FileName::Real("rxjs/src/internal/Observable.ts".into()).into(),
                     SOURCE.to_string(),
                 );
                 let _ = c.process_js_file(fm, &handler, opts).unwrap();

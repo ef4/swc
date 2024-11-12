@@ -13,6 +13,7 @@ use rkyv::Deserialize;
 #[cfg_attr(feature = "__plugin", archive(check_bytes))]
 #[cfg_attr(feature = "__plugin", archive_attr(repr(u32)))]
 /// Enum for possible errors while running transform via plugin.
+///
 /// This error indicates internal operation failure either in plugin_runner
 /// or plugin_macro. Plugin's transform fn itself does not allow to return
 /// error - instead it should use provided `handler` to emit corresponding error
@@ -31,6 +32,8 @@ pub enum PluginError {
     Serialize(String),
 }
 
+/// A wrapper type for the internal representation of serialized data.
+///
 /// Wraps internal representation of serialized data for exchanging data between
 /// plugin to the host. Consumers should not rely on specific details of byte
 /// format struct contains: it is strict implementation detail which can
@@ -103,11 +106,15 @@ impl PluginSerializedBytes {
     pub fn deserialize<W>(&self) -> Result<VersionedSerializable<W>, Error>
     where
         W: rkyv::Archive,
-        W::Archived: rkyv::Deserialize<W, rkyv::de::deserializers::SharedDeserializeMap>,
+        W::Archived: rkyv::Deserialize<W, rkyv::de::deserializers::SharedDeserializeMap>
+            + for<'a> rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>,
     {
         use anyhow::Context;
 
-        let archived = unsafe { rkyv::archived_root::<VersionedSerializable<W>>(&self.field[..]) };
+        let archived = rkyv::check_archived_root::<VersionedSerializable<W>>(&self.field[..])
+            .map_err(|err| {
+                anyhow::format_err!("wasm plugin bytecheck failed {:?}", err.to_string())
+            })?;
 
         archived
             .deserialize(&mut rkyv::de::deserializers::SharedDeserializeMap::new())

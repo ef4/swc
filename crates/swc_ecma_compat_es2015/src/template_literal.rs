@@ -5,14 +5,12 @@ use swc_atoms::JsWord;
 use swc_common::{util::take::Take, BytePos, Spanned, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::{helper, perf::Parallel};
-use swc_ecma_utils::{
-    is_literal, prepend_stmts, private_ident, quote_ident, undefined, ExprFactory, StmtLike,
-};
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_utils::{is_literal, prepend_stmts, private_ident, quote_ident, ExprFactory};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 use swc_trace_macro::swc_trace;
 
-pub fn template_literal(c: Config) -> impl Fold + VisitMut {
-    as_folder(TemplateLiteral {
+pub fn template_literal(c: Config) -> impl Pass {
+    visit_mut_pass(TemplateLiteral {
         c,
         ..Default::default()
     })
@@ -45,7 +43,7 @@ impl Parallel for TemplateLiteral {
 
 #[swc_trace]
 impl VisitMut for TemplateLiteral {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_expr(&mut self, e: &mut Expr) {
         e.visit_mut_children_with(self);
@@ -78,7 +76,7 @@ impl VisitMut for TemplateLiteral {
 
                 let len = quasis.len() + exprs.len();
 
-                let mut args = vec![];
+                let mut args = Vec::new();
                 let mut quasis = quasis.iter_mut();
                 let mut exprs = exprs.take().into_iter();
 
@@ -132,16 +130,16 @@ impl VisitMut for TemplateLiteral {
                                         value: r_value,
                                         ..
                                     })) => {
-                                        obj = Box::new(Expr::Lit(Lit::Str(Str {
+                                        obj = Lit::Str(Str {
                                             span: span.with_hi(r_span.hi()),
                                             raw: None,
                                             value: format!("{}{}", value, r_value).into(),
-                                        })));
+                                        })
+                                        .into();
                                         continue;
                                     }
                                     _ => {
-                                        obj =
-                                            Box::new(Expr::Lit(Lit::Str(Str { span, raw, value })));
+                                        obj = Lit::Str(Str { span, raw, value }).into();
                                     }
                                 }
                             }
@@ -155,21 +153,22 @@ impl VisitMut for TemplateLiteral {
                             obj = if self.c.ignore_to_primitive {
                                 let args = mem::take(&mut args);
                                 for arg in args {
-                                    obj = Box::new(Expr::Bin(BinExpr {
+                                    obj = BinExpr {
                                         span: span.with_hi(expr_span.hi() + BytePos(1)),
                                         op: op!(bin, "+"),
                                         left: obj,
                                         right: arg,
-                                    }))
+                                    }
+                                    .into()
                                 }
                                 obj
                             } else {
-                                Box::new(Expr::Call(CallExpr {
+                                CallExpr {
                                     span: span.with_hi(expr_span.hi() + BytePos(1)),
                                     callee: MemberExpr {
                                         span: DUMMY_SP,
                                         obj,
-                                        prop: MemberProp::Ident(Ident::new(
+                                        prop: MemberProp::Ident(IdentName::new(
                                             "concat".into(),
                                             expr_span,
                                         )),
@@ -179,8 +178,9 @@ impl VisitMut for TemplateLiteral {
                                         .into_iter()
                                         .map(|expr| expr.as_arg())
                                         .collect(),
-                                    type_args: Default::default(),
-                                }))
+                                    ..Default::default()
+                                }
+                                .into()
                             }
                         }
                     } else {
@@ -196,21 +196,22 @@ impl VisitMut for TemplateLiteral {
                                             continue;
                                         }
                                     }
-                                    obj = Box::new(Expr::Bin(BinExpr {
+                                    obj = BinExpr {
                                         span: span.with_hi(expr_span.hi() + BytePos(1)),
                                         op: op!(bin, "+"),
                                         left: obj,
                                         right: arg,
-                                    }))
+                                    }
+                                    .into()
                                 }
                                 obj
                             } else {
-                                Box::new(Expr::Call(CallExpr {
+                                CallExpr {
                                     span: span.with_hi(expr_span.hi() + BytePos(1)),
                                     callee: MemberExpr {
                                         span: DUMMY_SP,
                                         obj,
-                                        prop: MemberProp::Ident(Ident::new(
+                                        prop: MemberProp::Ident(IdentName::new(
                                             "concat".into(),
                                             expr_span,
                                         )),
@@ -220,8 +221,9 @@ impl VisitMut for TemplateLiteral {
                                         .into_iter()
                                         .map(|expr| expr.as_arg())
                                         .collect(),
-                                    type_args: Default::default(),
-                                }))
+                                    ..Default::default()
+                                }
+                                .into()
                             };
                         }
                         debug_assert!(args.is_empty());
@@ -242,7 +244,7 @@ impl VisitMut for TemplateLiteral {
                     span: DUMMY_SP,
                     is_async: false,
                     is_generator: false,
-                    params: vec![],
+                    params: Vec::new(),
                     body: {
                         // const data = _tagged_template_literal(["first", "second"]);
                         let data_decl = VarDecl {
@@ -291,7 +293,7 @@ impl VisitMut for TemplateLiteral {
                                                     .into_iter()
                                                     .map(|elem| match elem.cooked {
                                                         Some(cooked) => cooked.as_arg(),
-                                                        None => undefined(DUMMY_SP).as_arg(),
+                                                        None => Expr::undefined(DUMMY_SP).as_arg(),
                                                     })
                                                     .map(Some)
                                                     .collect(),
@@ -301,16 +303,17 @@ impl VisitMut for TemplateLiteral {
                                         .chain(raw)
                                         .collect()
                                     },
-                                    type_args: Default::default(),
+                                    ..Default::default()
                                 }))),
                             }],
+                            ..Default::default()
                         };
 
                         // _templateObject2 = function () {
                         //     return data;
                         // };
-                        let assign_expr = {
-                            Expr::Assign(AssignExpr {
+                        let assign_expr: Expr = {
+                            AssignExpr {
                                 span: DUMMY_SP,
                                 left: fn_ident.clone().into(),
                                 op: op!("="),
@@ -318,20 +321,20 @@ impl VisitMut for TemplateLiteral {
                                     span: DUMMY_SP,
                                     is_async: false,
                                     is_generator: false,
-                                    params: vec![],
+                                    params: Vec::new(),
                                     body: Some(BlockStmt {
                                         span: DUMMY_SP,
                                         stmts: vec![Stmt::Return(ReturnStmt {
                                             span: DUMMY_SP,
                                             arg: Some(Box::new(quote_ident!("data").into())),
                                         })],
+                                        ..Default::default()
                                     }),
-                                    decorators: Default::default(),
-                                    type_params: Default::default(),
-                                    return_type: Default::default(),
+                                    ..Default::default()
                                 }
                                 .into(),
-                            })
+                            }
+                            .into()
                         };
 
                         Some(BlockStmt {
@@ -345,34 +348,38 @@ impl VisitMut for TemplateLiteral {
                                     arg: Some(Box::new(quote_ident!("data").into())),
                                 }),
                             ],
+                            ..Default::default()
                         })
                     },
-                    decorators: Default::default(),
-                    type_params: Default::default(),
-                    return_type: Default::default(),
-                };
-                self.added.push(Stmt::Decl(Decl::Fn(FnDecl {
-                    declare: false,
-                    ident: fn_ident.clone(),
-                    function: f.into(),
-                })));
 
-                *e = Expr::Call(CallExpr {
+                    ..Default::default()
+                };
+                self.added.push(
+                    FnDecl {
+                        declare: false,
+                        ident: fn_ident.clone(),
+                        function: f.into(),
+                    }
+                    .into(),
+                );
+
+                *e = CallExpr {
                     span: DUMMY_SP,
                     callee: tag.take().as_callee(),
                     args: iter::once(
                         CallExpr {
                             span: DUMMY_SP,
                             callee: fn_ident.as_callee(),
-                            args: vec![],
-                            type_args: Default::default(),
+                            args: Vec::new(),
+                            ..Default::default()
                         }
                         .as_arg(),
                     )
                     .chain(tpl.exprs.take().into_iter().map(|e| e.as_arg()))
                     .collect(),
-                    type_args: Default::default(),
-                })
+                    ..Default::default()
+                }
+                .into()
             }
 
             _ => {}
@@ -382,7 +389,7 @@ impl VisitMut for TemplateLiteral {
     fn visit_mut_module(&mut self, m: &mut Module) {
         m.visit_mut_children_with(self);
 
-        prepend_stmts(&mut m.body, self.added.drain(..).map(ModuleItem::from_stmt));
+        prepend_stmts(&mut m.body, self.added.drain(..).map(ModuleItem::from));
     }
 
     fn visit_mut_script(&mut self, m: &mut Script) {

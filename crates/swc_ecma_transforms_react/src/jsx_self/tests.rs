@@ -2,12 +2,13 @@ use swc_ecma_transforms_testing::test;
 
 use super::*;
 
-fn tr() -> impl Fold {
+fn tr() -> impl Pass {
     jsx_self(true)
 }
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),

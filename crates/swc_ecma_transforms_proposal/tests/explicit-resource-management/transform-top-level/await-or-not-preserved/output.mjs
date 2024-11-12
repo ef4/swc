@@ -1,11 +1,18 @@
-export { x, y };
+const env = {
+    stack: [],
+    error: void 0,
+    hasError: false
+};
 try {
-    var _stack = [];
-    var x = _using(_stack, A);
-    var y = _using(_stack, B, true);
-} catch (_) {
-    var _error = _;
-    var _hasError = true;
+    const x = _ts_add_disposable_resource(env, A, false);
+    ;
+    const y = _ts_add_disposable_resource(env, B, true);
+    ;
+} catch (e) {
+    env.error = e;
+    env.hasError = true;
 } finally{
-    await _dispose(_stack, _error, _hasError);
+    const result = _ts_dispose_resources(env);
+    if (result) await result;
 }
+export { x, y };

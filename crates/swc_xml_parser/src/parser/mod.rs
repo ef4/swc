@@ -19,16 +19,12 @@ pub type PResult<T> = Result<T, Error>;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ParserConfig {}
 
+#[derive(Debug, Default)]
 pub enum Phase {
+    #[default]
     StartPhase,
     MainPhase,
     EndPhase,
-}
-
-impl Default for Phase {
-    fn default() -> Self {
-        Phase::StartPhase
-    }
 }
 
 pub struct Parser<I>
@@ -87,7 +83,7 @@ where
         let last = self.input.last_pos()?;
 
         Ok(Document {
-            span: Span::new(start.lo(), last, Default::default()),
+            span: Span::new(start.lo(), last),
             children,
         })
     }
@@ -153,7 +149,7 @@ where
                         },
                     };
 
-                    Span::new(start_span.lo(), end_span.hi(), Default::default())
+                    Span::new(start_span.lo(), end_span.hi())
                 };
 
                 Child::Element(Element {
@@ -165,7 +161,7 @@ where
             }
             Data::Text { data, raw } => {
                 let span = if let Some(end_span) = node.end_span.take() {
-                    swc_common::Span::new(start_span.lo(), end_span.hi(), Default::default())
+                    swc_common::Span::new(start_span.lo(), end_span.hi())
                 } else {
                     start_span
                 };
@@ -217,7 +213,7 @@ where
                     let last_pos = self.input.last_pos()?;
 
                     TokenAndInfo {
-                        span: Span::new(start_pos, last_pos, Default::default()),
+                        span: Span::new(start_pos, last_pos),
                         acknowledged: false,
                         token: Token::Eof,
                     }

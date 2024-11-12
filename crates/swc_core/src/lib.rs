@@ -1,5 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub extern crate swc_allocator as alloc;
+
 #[cfg(feature = "swc_atoms")]
 #[cfg_attr(docsrs, doc(cfg(feature = "swc_atoms")))]
 pub use swc_atoms as atoms;
@@ -30,12 +32,6 @@ pub extern crate swc_ecma_quote_macros;
 )]
 pub mod plugin;
 
-#[cfg(feature = "preset_env")]
-#[cfg_attr(docsrs, doc(cfg(feature = "preset_env")))]
-pub mod preset_env {
-    pub use preset_env_base::*;
-}
-
 #[cfg(feature = "__ecma")]
 #[cfg_attr(docsrs, doc(cfg(feature = "__ecma")))]
 pub mod ecma {
@@ -57,9 +53,7 @@ pub mod ecma {
     )]
     pub mod transforms {
         pub mod base {
-            pub use swc_ecma_transforms_base::{
-                assumptions::Assumptions, feature, fixer, helpers, hygiene, pass, perf, resolver,
-            };
+            pub use swc_ecma_transforms_base::*;
         }
         #[cfg(feature = "ecma_transforms_optimization")]
         #[cfg_attr(docsrs, doc(cfg(feature = "transforms_optimization")))]
@@ -182,6 +176,18 @@ pub mod plugin_runner {
 #[cfg_attr(docsrs, doc(cfg(feature = "trace_macro")))]
 pub mod trace_macro {
     pub use swc_trace_macro::*;
+}
+
+#[cfg(feature = "transform_common")]
+#[cfg_attr(docsrs, doc(cfg(feature = "transform_common")))]
+pub mod transform_common {
+    pub use swc_transform_common::*;
+}
+
+#[cfg(feature = "typescript")]
+#[cfg_attr(docsrs, doc(cfg(feature = "typescript")))]
+pub mod typescript {
+    pub use swc_typescript::*;
 }
 
 // swc_bundler

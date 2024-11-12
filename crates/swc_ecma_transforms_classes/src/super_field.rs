@@ -1,6 +1,6 @@
 use std::iter;
 
-use swc_common::{util::take::Take, Mark, Span, DUMMY_SP};
+use swc_common::{util::take::Take, Mark, Span, SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::helper;
 use swc_ecma_utils::{is_rest_arguments, quote_ident, ExprFactory};
@@ -24,7 +24,6 @@ use super::get_prototype_of;
 pub struct SuperFieldAccessFolder<'a> {
     pub class_name: &'a Ident,
 
-    pub vars: &'a mut Vec<VarDeclarator>,
     /// Mark for the `_this`. Used only when folding constructor.
     pub constructor_this_mark: Option<Mark>,
     pub is_static: bool,
@@ -64,7 +63,7 @@ macro_rules! mark_nested {
     };
 }
 
-impl<'a> VisitMut for SuperFieldAccessFolder<'a> {
+impl VisitMut for SuperFieldAccessFolder<'_> {
     noop_visit_mut_type!();
 
     // mark_nested!(fold_function, Function);
@@ -75,14 +74,16 @@ impl<'a> VisitMut for SuperFieldAccessFolder<'a> {
     fn visit_mut_expr(&mut self, n: &mut Expr) {
         match n {
             Expr::This(ThisExpr { span }) if self.in_nested_scope => {
-                *n = Expr::Ident(quote_ident!(
-                    span.apply_mark(
+                *n = quote_ident!(
+                    SyntaxContext::empty().apply_mark(
                         *self
                             .this_alias_mark
                             .get_or_insert_with(|| Mark::fresh(Mark::root()))
                     ),
+                    *span,
                     "_this"
-                ));
+                )
+                .into();
             }
             // We pretend method folding mode for while folding injected `_define_property`
             // calls.
@@ -161,7 +162,7 @@ impl<'a> VisitMut for SuperFieldAccessFolder<'a> {
     }
 }
 
-impl<'a> SuperFieldAccessFolder<'a> {
+impl SuperFieldAccessFolder<'_> {
     /// # In
     /// ```js
     /// super.foo(a)
@@ -187,14 +188,15 @@ impl<'a> SuperFieldAccessFolder<'a> {
             {
                 let this = match self.this_alias_mark.or(self.constructor_this_mark) {
                     Some(mark) => {
-                        let ident = quote_ident!(DUMMY_SP.apply_mark(mark), "_this").as_arg();
+                        let ident =
+                            quote_ident!(SyntaxContext::empty().apply_mark(mark), "_this").as_arg();
                         // in constant super, call will be the only place where a assert is needed
                         if self.constant_super {
                             CallExpr {
                                 span: DUMMY_SP,
                                 callee: helper!(assert_this_initialized),
                                 args: vec![ident],
-                                type_args: Default::default(),
+                                ..Default::default()
                             }
                             .as_arg()
                         } else {
@@ -208,7 +210,7 @@ impl<'a> SuperFieldAccessFolder<'a> {
                 let mut args = args.clone();
 
                 if args.len() == 1 && is_rest_arguments(&args[0]) {
-                    *n = Expr::Call(CallExpr {
+                    *n = CallExpr {
                         span: DUMMY_SP,
                         callee: callee.make_member(quote_ident!("apply")).as_callee(),
                         args: iter::once(this)
@@ -218,17 +220,19 @@ impl<'a> SuperFieldAccessFolder<'a> {
                                 arg
                             }))
                             .collect(),
-                        type_args: Default::default(),
-                    });
+                        ..Default::default()
+                    }
+                    .into();
                     return;
                 }
 
-                *n = Expr::Call(CallExpr {
+                *n = CallExpr {
                     span: DUMMY_SP,
                     callee: callee.make_member(quote_ident!("call")).as_callee(),
                     args: iter::once(this).chain(args).collect(),
-                    type_args: Default::default(),
-                });
+                    ..Default::default()
+                }
+                .into();
             }
         }
     }
@@ -307,11 +311,11 @@ impl<'a> SuperFieldAccessFolder<'a> {
                 span: super_token,
                 obj: Box::new({
                     let name = self.super_class.clone().unwrap_or_else(|| {
-                        quote_ident!(if self.is_static { "Function" } else { "Object" })
+                        quote_ident!(if self.is_static { "Function" } else { "Object" }).into()
                     });
                     // in static default super class is Function.prototype
                     if self.is_static && self.super_class.is_some() {
-                        Expr::Ident(name)
+                        name.into()
                     } else {
                         name.make_member(quote_ident!("prototype")).into()
                     }
@@ -333,7 +337,7 @@ impl<'a> SuperFieldAccessFolder<'a> {
                 span: super_token,
                 callee: helper!(get),
                 args: vec![proto_arg.as_arg(), prop_arg, this_arg],
-                type_args: Default::default(),
+                ..Default::default()
             }
             .into()
         }
@@ -349,7 +353,12 @@ impl<'a> SuperFieldAccessFolder<'a> {
         debug_assert_eq!(op, op!("="));
 
         let this_expr = Box::new(match self.constructor_this_mark {
-            Some(mark) => quote_ident!(super_token.apply_mark(mark), "_this").into(),
+            Some(mark) => quote_ident!(
+                SyntaxContext::empty().apply_mark(mark),
+                super_token,
+                "_this"
+            )
+            .into(),
             None => ThisExpr { span: super_token }.into(),
         });
 
@@ -363,18 +372,19 @@ impl<'a> SuperFieldAccessFolder<'a> {
                 },
             };
 
-            Expr::Assign(AssignExpr {
+            AssignExpr {
                 span: super_token,
                 left: left.into(),
                 op,
                 right: rhs,
-            })
+            }
+            .into()
         } else {
             let proto_arg = self.proto_arg();
 
             let prop_arg = prop_arg(prop).as_arg();
 
-            Expr::Call(CallExpr {
+            CallExpr {
                 span: super_token,
                 callee: helper!(set),
                 args: vec![
@@ -385,8 +395,9 @@ impl<'a> SuperFieldAccessFolder<'a> {
                     // strict
                     true.as_arg(),
                 ],
-                type_args: Default::default(),
-            })
+                ..Default::default()
+            }
+            .into()
         }
     }
 
@@ -397,7 +408,7 @@ impl<'a> SuperFieldAccessFolder<'a> {
 
         let this_arg = self.this_arg(super_token).as_arg();
 
-        let expr = Expr::Call(CallExpr {
+        let expr: Expr = CallExpr {
             span: super_token,
             callee: helper!(update),
             args: vec![
@@ -407,8 +418,9 @@ impl<'a> SuperFieldAccessFolder<'a> {
                 // strict
                 true.as_arg(),
             ],
-            type_args: Default::default(),
-        });
+            ..Default::default()
+        }
+        .into();
 
         expr.make_member(quote_ident!("_"))
     }
@@ -416,7 +428,7 @@ impl<'a> SuperFieldAccessFolder<'a> {
     fn proto_arg(&mut self) -> Box<Expr> {
         let expr = if self.is_static {
             // Foo
-            Box::new(Expr::Ident(self.class_name.clone()))
+            self.class_name.clone().into()
         } else {
             // Foo.prototype
             self.class_name
@@ -432,7 +444,7 @@ impl<'a> SuperFieldAccessFolder<'a> {
         let mut proto_arg = get_prototype_of(expr);
 
         if let Some(mark) = self.constructor_this_mark {
-            let this = quote_ident!(DUMMY_SP.apply_mark(mark), "_this");
+            let this = quote_ident!(SyntaxContext::empty().apply_mark(mark), "_this");
 
             proto_arg = SeqExpr {
                 span: DUMMY_SP,
@@ -441,7 +453,7 @@ impl<'a> SuperFieldAccessFolder<'a> {
                         span: DUMMY_SP,
                         callee: helper!(assert_this_initialized),
                         args: vec![this.as_arg()],
-                        type_args: Default::default(),
+                        ..Default::default()
                     })
                     .into(),
                     proto_arg,
@@ -455,7 +467,12 @@ impl<'a> SuperFieldAccessFolder<'a> {
 
     fn this_arg(&self, super_token: Span) -> Expr {
         match self.constructor_this_mark {
-            Some(mark) => quote_ident!(super_token.apply_mark(mark), "_this").into(),
+            Some(mark) => quote_ident!(
+                SyntaxContext::empty().apply_mark(mark),
+                super_token,
+                "_this"
+            )
+            .into(),
             None => ThisExpr { span: super_token }.into(),
         }
     }
@@ -470,13 +487,14 @@ fn is_assign_to_super_prop(left: &AssignTarget) -> bool {
 
 fn prop_arg(prop: SuperProp) -> Expr {
     match prop {
-        SuperProp::Ident(Ident {
+        SuperProp::Ident(IdentName {
             sym: value, span, ..
-        }) => Expr::Lit(Lit::Str(Str {
+        }) => Lit::Str(Str {
             span,
             raw: None,
             value,
-        })),
+        })
+        .into(),
         SuperProp::Computed(c) => *c.expr,
     }
 }

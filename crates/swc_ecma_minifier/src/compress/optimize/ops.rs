@@ -119,30 +119,33 @@ impl Optimizer<'_> {
         let flag = n.op == op!("!=");
         let mut make_lit_bool = |value: bool| {
             self.changed = true;
-            Some(Expr::Lit(Lit::Bool(Bool {
-                span: n.span,
-                value: flag ^ value,
-            })))
+            Some(
+                Lit::Bool(Bool {
+                    span: n.span,
+                    value: flag ^ value,
+                })
+                .into(),
+            )
         };
         match (n.left.get_type().opt()?, n.right.get_type().opt()?) {
             // Abort if types differ, or one of them is unknown.
             (lt, rt) if lt != rt => {}
             (Type::Obj, Type::Obj) => {}
             (Type::Num, Type::Num) => {
-                let l = n.left.as_pure_number(&self.expr_ctx).opt()?;
-                let r = n.right.as_pure_number(&self.expr_ctx).opt()?;
+                let l = n.left.as_pure_number(&self.ctx.expr_ctx).opt()?;
+                let r = n.right.as_pure_number(&self.ctx.expr_ctx).opt()?;
                 report_change!("Optimizing: literal comparison => num");
                 return make_lit_bool(l == r);
             }
             (Type::Str, Type::Str) => {
-                let l = &n.left.as_pure_string(&self.expr_ctx).opt()?;
-                let r = &n.right.as_pure_string(&self.expr_ctx).opt()?;
+                let l = &n.left.as_pure_string(&self.ctx.expr_ctx).opt()?;
+                let r = &n.right.as_pure_string(&self.ctx.expr_ctx).opt()?;
                 report_change!("Optimizing: literal comparison => str");
                 return make_lit_bool(l == r);
             }
             (_, _) => {
-                let l = n.left.as_pure_bool(&self.expr_ctx).opt()?;
-                let r = n.right.as_pure_bool(&self.expr_ctx).opt()?;
+                let l = n.left.as_pure_bool(&self.ctx.expr_ctx).opt()?;
+                let r = n.right.as_pure_bool(&self.ctx.expr_ctx).opt()?;
                 report_change!("Optimizing: literal comparison => bool");
                 return make_lit_bool(l == r);
             }
@@ -198,7 +201,12 @@ impl Optimizer<'_> {
     }
 
     pub(super) fn negate(&mut self, e: &mut Expr, is_ret_val_ignored: bool) {
-        negate(&self.expr_ctx, e, self.ctx.in_bool_ctx, is_ret_val_ignored)
+        negate(
+            &self.ctx.expr_ctx,
+            e,
+            self.ctx.in_bool_ctx,
+            is_ret_val_ignored,
+        )
     }
 
     /// This method does
@@ -222,7 +230,7 @@ impl Optimizer<'_> {
             Expr::Bin(BinExpr {
                 left, op, right, ..
             }) => match &**right {
-                Expr::Ident(r) if lhs.sym == r.sym && lhs.span.ctxt == r.span.ctxt => {
+                Expr::Ident(r) if lhs.sym == r.sym && lhs.ctxt == r.ctxt => {
                     // We need this check because a function call like below can change value of
                     // operand.
                     //
@@ -306,7 +314,7 @@ impl Optimizer<'_> {
 
         match bin.op {
             op!("&&") => {
-                let rb = bin.right.as_pure_bool(&self.expr_ctx);
+                let rb = bin.right.as_pure_bool(&self.ctx.expr_ctx);
                 let rb = match rb {
                     Value::Known(v) => v,
                     _ => return,
@@ -321,7 +329,7 @@ impl Optimizer<'_> {
                 }
             }
             op!("||") => {
-                let rb = bin.right.as_pure_bool(&self.expr_ctx);
+                let rb = bin.right.as_pure_bool(&self.ctx.expr_ctx);
                 let rb = match rb {
                     Value::Known(v) => v,
                     _ => return,
@@ -358,32 +366,35 @@ impl Optimizer<'_> {
                             "Converting typeof of variable to literal as we know the value"
                         );
                         self.changed = true;
-                        *e = Expr::Lit(Lit::Str(Str {
+                        *e = Lit::Str(Str {
                             span: *span,
                             raw: None,
                             value,
-                        }));
+                        })
+                        .into();
                     }
                 }
 
-                Expr::Arrow(..) | Expr::Fn(..) => {
+                Expr::Arrow(..) | Expr::Fn(..) | Expr::Class(..) => {
                     report_change!("Converting typeof to 'function' as we know the value");
                     self.changed = true;
-                    *e = Expr::Lit(Lit::Str(Str {
+                    *e = Lit::Str(Str {
                         span: *span,
                         raw: None,
                         value: "function".into(),
-                    }));
+                    })
+                    .into();
                 }
 
                 Expr::Array(..) | Expr::Object(..) => {
                     report_change!("Converting typeof to 'object' as we know the value");
                     self.changed = true;
-                    *e = Expr::Lit(Lit::Str(Str {
+                    *e = Lit::Str(Str {
                         span: *span,
                         raw: None,
                         value: "object".into(),
-                    }));
+                    })
+                    .into();
                 }
                 _ => {}
             }

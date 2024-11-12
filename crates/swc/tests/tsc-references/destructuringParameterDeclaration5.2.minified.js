@@ -1,23 +1,19 @@
 //// [destructuringParameterDeclaration5.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var Class = function Class() {
     _class_call_check(this, Class);
-}, SubClass = function(Class) {
-    _inherits(SubClass, Class);
-    var _super = _create_super(SubClass);
+}, SubClass = /*#__PURE__*/ function(Class) {
     function SubClass() {
-        return _class_call_check(this, SubClass), _super.call(this);
+        return _class_call_check(this, SubClass), _call_super(this, SubClass);
     }
-    return SubClass;
-}(Class), SubD = function(D) {
-    _inherits(SubD, D);
-    var _super = _create_super(SubD);
+    return _inherits(SubClass, Class), SubClass;
+}(Class), SubD = /*#__PURE__*/ function(D) {
     function SubD() {
-        return _class_call_check(this, SubD), _super.call(this);
+        return _class_call_check(this, SubD), _call_super(this, SubD);
     }
-    return SubD;
+    return _inherits(SubD, D), SubD;
 }(function D() {
     _class_call_check(this, D);
 });
@@ -42,4 +38,4 @@ new Class(), d0({
     y: new SubClass()
 }).y, ({
     y: new Class()
-}).y, ({}).y;
+}).y;

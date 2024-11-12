@@ -1,36 +1,41 @@
 //// [usingDeclarationsTopLevelOfModule.3.ts]
 System.register([
-    "@swc/helpers/_/_dispose",
-    "@swc/helpers/_/_using"
+    "@swc/helpers/_/_ts_add_disposable_resource",
+    "@swc/helpers/_/_ts_dispose_resources"
 ], function(_export, _context) {
     "use strict";
-    var _dispose, _using;
-    function f() {
-        console.log(y, z);
-    }
+    var _ts_add_disposable_resource, _ts_dispose_resources, env;
     return {
         setters: [
-            function(_dispose1) {
-                _dispose = _dispose1._;
+            function(_ts_add_disposable_resource1) {
+                _ts_add_disposable_resource = _ts_add_disposable_resource1._;
             },
-            function(_using1) {
-                _using = _using1._;
+            function(_ts_dispose_resources1) {
+                _ts_dispose_resources = _ts_dispose_resources1._;
             }
         ],
         execute: function() {
+            env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var z = _using(_stack, {
+                const z = _ts_add_disposable_resource(env, {
                     [Symbol.dispose] () {}
-                });
+                }, false);
+                ;
                 if (false) {
                     var y = 1;
                 }
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+                function f() {
+                    console.log(y, z);
+                }
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                _dispose(_stack, _error, _hasError);
+                _ts_dispose_resources(env);
             }
         }
     };

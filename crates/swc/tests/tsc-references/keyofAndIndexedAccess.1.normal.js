@@ -1,7 +1,7 @@
 //// [keyofAndIndexedAccess.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var Shape = function Shape() {
     "use strict";
     _class_call_check(this, Shape);
@@ -9,10 +9,9 @@ var Shape = function Shape() {
 var TaggedShape = /*#__PURE__*/ function(Shape) {
     "use strict";
     _inherits(TaggedShape, Shape);
-    var _super = _create_super(TaggedShape);
     function TaggedShape() {
         _class_call_check(this, TaggedShape);
-        return _super.apply(this, arguments);
+        return _call_super(this, TaggedShape, arguments);
     }
     return TaggedShape;
 }(Shape);
@@ -24,7 +23,7 @@ var Options = function Options() {
     "use strict";
     _class_call_check(this, Options);
 };
-var E;
+;
 function getProperty(obj, key) {
     return obj[key];
 }
@@ -155,9 +154,9 @@ function f60(source, target) {
     }
 }
 function f70(func) {
-    func("a", "a");
-    func("a", "b");
-    func("a", "c");
+    func('a', 'a');
+    func('a', 'b');
+    func('a', 'c');
 }
 function f71(func) {
     var x = func({
@@ -176,19 +175,19 @@ function f72(func) {
         b: "hello"
     }, {
         c: true
-    }, "a"); // number
+    }, 'a'); // number
     var b = func({
         a: 1,
         b: "hello"
     }, {
         c: true
-    }, "b"); // string
+    }, 'b'); // string
     var c = func({
         a: 1,
         b: "hello"
     }, {
         c: true
-    }, "c"); // boolean
+    }, 'c'); // boolean
 }
 function f73(func) {
     var a = func({
@@ -196,19 +195,19 @@ function f73(func) {
         b: "hello"
     }, {
         c: true
-    }, "a"); // number
+    }, 'a'); // number
     var b = func({
         a: 1,
         b: "hello"
     }, {
         c: true
-    }, "b"); // string
+    }, 'b'); // string
     var c = func({
         a: 1,
         b: "hello"
     }, {
         c: true
-    }, "c"); // boolean
+    }, 'c'); // boolean
 }
 function f74(func) {
     var a = func({
@@ -217,25 +216,25 @@ function f74(func) {
     }, {
         a: 2,
         b: true
-    }, "a"); // number
+    }, 'a'); // number
     var b = func({
         a: 1,
         b: "hello"
     }, {
         a: 2,
         b: true
-    }, "b"); // string | boolean
+    }, 'b'); // string | boolean
 }
 function f80(obj) {
     var a1 = obj.a; // { x: any }
-    var a2 = obj["a"]; // { x: any }
-    var a3 = obj["a"]; // T["a"]
+    var a2 = obj['a']; // { x: any }
+    var a3 = obj['a']; // T["a"]
     var x1 = obj.a.x; // any
-    var x2 = obj["a"]["x"]; // any
-    var x3 = obj["a"]["x"]; // T["a"]["x"]
+    var x2 = obj['a']['x']; // any
+    var x3 = obj['a']['x']; // T["a"]["x"]
 }
 function f81(obj) {
-    return obj["a"]["x"];
+    return obj['a']['x'];
 }
 function f82() {
     var x1 = f81({
@@ -250,7 +249,7 @@ function f82() {
     }); // number
 }
 function f83(obj, key) {
-    return obj[key]["x"];
+    return obj[key]['x'];
 }
 function f84() {
     var x1 = f83({
@@ -329,11 +328,10 @@ var Base = /*#__PURE__*/ function() {
 var Person = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(Person, Base);
-    var _super = _create_super(Person);
     function Person(parts) {
         _class_call_check(this, Person);
         var _this;
-        _this = _super.call(this);
+        _this = _call_super(this, Person);
         _this.set("parts", parts);
         return _this;
     }
@@ -383,13 +381,13 @@ function path(obj) {
     return result;
 }
 function f1(thing) {
-    var x1 = path(thing, "a"); // { x: number, y: string }
-    var x2 = path(thing, "a", "y"); // string
-    var x3 = path(thing, "b"); // boolean
+    var x1 = path(thing, 'a'); // { x: number, y: string }
+    var x2 = path(thing, 'a', 'y'); // string
+    var x3 = path(thing, 'b'); // boolean
     var x4 = path.apply(void 0, [
         thing,
-        "a",
-        "x"
+        'a',
+        'x'
     ]); // any
 }
 // Repro from comment in #12114
@@ -425,7 +423,7 @@ function addToMyThingy(key) {
     MyThingy[key].push("a");
 }
 function onChangeGenericFunction(handler) {
-    handler.onChange("preset");
+    handler.onChange('preset');
 }
 // Repro from #13285
 function updateIds(obj, idFields, idMapping) {
@@ -467,10 +465,9 @@ var A = function A() {
 var B = /*#__PURE__*/ function(A) {
     "use strict";
     _inherits(B, A);
-    var _super = _create_super(B);
     function B() {
         _class_call_check(this, B);
-        return _super.apply(this, arguments);
+        return _call_super(this, B, arguments);
     }
     var _proto = B.prototype;
     _proto.f = function f(p) {
@@ -499,13 +496,14 @@ var SampleClass = function SampleClass(props) {
 var AnotherSampleClass = /*#__PURE__*/ function(SampleClass) {
     "use strict";
     _inherits(AnotherSampleClass, SampleClass);
-    var _super = _create_super(AnotherSampleClass);
     function AnotherSampleClass(props) {
         _class_call_check(this, AnotherSampleClass);
         var foo = {
             foo: "bar"
         };
-        return _super.call(this, merge(props, foo));
+        return _call_super(this, AnotherSampleClass, [
+            merge(props, foo)
+        ]);
     }
     var _proto = AnotherSampleClass.prototype;
     _proto.brokenMethod = function brokenMethod() {
@@ -522,11 +520,11 @@ function f3(t, k, tk) {
         t[key] = tk; // ok, T[K] ==> T[keyof T]
     }
 }
-var Flag;
-(function(Flag) {
+var Flag = /*#__PURE__*/ function(Flag) {
     Flag["FLAG_1"] = "flag_1";
     Flag["FLAG_2"] = "flag_2";
-})(Flag || (Flag = {}));
+    return Flag;
+}(Flag || {});
 function getFlagsFromSimpleRecord(record, flags) {
     return record[flags[0]];
 }

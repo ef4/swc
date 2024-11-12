@@ -2,19 +2,21 @@ use swc_common::{util::take::Take, Mark, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_compat_es2015::arrow;
 use swc_ecma_utils::prepend_stmt;
-use swc_ecma_visit::{noop_fold_type, Fold, FoldWith, InjectVars};
+use swc_ecma_visit::{fold_pass, standard_only_fold, Fold, FoldWith, InjectVars, VisitMutWith};
 use swc_trace_macro::swc_trace;
 
+/// A bugfix pass for Safari 10.3.
+///
 /// Safari 10.3 had an issue where async arrow function expressions within any
 /// class method would throw. After an initial fix, any references to the
 /// instance via `this` within those methods would also throw. This is fixed by
 /// converting arrow functions in class methods into equivalent function
 /// expressions. See https://bugs.webkit.org/show_bug.cgi?id=166879
-pub fn async_arrows_in_class(unresolved_mark: Mark) -> impl Fold {
-    AsyncArrowsInClass {
+pub fn async_arrows_in_class(unresolved_mark: Mark) -> impl Pass {
+    fold_pass(AsyncArrowsInClass {
         unresolved_mark,
         ..Default::default()
-    }
+    })
 }
 #[derive(Default, Clone)]
 struct AsyncArrowsInClass {
@@ -26,7 +28,7 @@ struct AsyncArrowsInClass {
 /// TODO: VisitMut
 #[swc_trace]
 impl Fold for AsyncArrowsInClass {
-    noop_fold_type!();
+    standard_only_fold!();
 
     fn fold_class_method(&mut self, n: ClassMethod) -> ClassMethod {
         self.in_class_method = true;
@@ -43,7 +45,7 @@ impl Fold for AsyncArrowsInClass {
     }
 
     fn fold_expr(&mut self, n: Expr) -> Expr {
-        let n = n.fold_children_with(self);
+        let mut n = n.fold_children_with(self);
         if !self.in_class_method {
             return n;
         }
@@ -52,7 +54,7 @@ impl Fold for AsyncArrowsInClass {
             Expr::Arrow(ref a) => {
                 if a.is_async {
                     let mut v = arrow(self.unresolved_mark);
-                    let n = n.fold_with(&mut v);
+                    n.visit_mut_with(&mut v);
                     self.vars.extend(v.take_vars());
                     n
                 } else {
@@ -73,6 +75,7 @@ impl Fold for AsyncArrowsInClass {
                     kind: VarDeclKind::Var,
                     declare: false,
                     decls: self.vars.take(),
+                    ..Default::default()
                 }
                 .into(),
             );
@@ -91,6 +94,7 @@ impl Fold for AsyncArrowsInClass {
                     kind: VarDeclKind::Var,
                     declare: false,
                     decls: self.vars.take(),
+                    ..Default::default()
                 }
                 .into(),
             );
@@ -102,17 +106,16 @@ impl Fold for AsyncArrowsInClass {
 
 #[cfg(test)]
 mod tests {
-    use swc_common::chain;
     use swc_ecma_transforms_base::resolver;
     use swc_ecma_transforms_testing::test;
 
     use super::*;
 
-    fn tr() -> impl Fold {
+    fn tr() -> impl Pass {
         let unresolved = Mark::new();
-        chain!(
+        (
             resolver(unresolved, Mark::new(), false),
-            async_arrows_in_class(unresolved)
+            async_arrows_in_class(unresolved),
         )
     }
 

@@ -1,13 +1,9 @@
-for await (const x of y){
-    try {
-        var _stack = [];
-        {
-            doSomethingWith(x);
-        }
-    } catch (_) {
-        var _error = _;
-        var _hasError = true;
-    } finally{
-        _dispose(_stack, _error, _hasError);
-    }
+for await (const _x of y) try {
+  var _usingCtx = babelHelpers.usingCtx();
+  const x = _usingCtx.u(_x);
+  doSomethingWith(x);
+} catch (_) {
+  _usingCtx.e = _;
+} finally {
+  _usingCtx.d();
 }

@@ -1,84 +1,28 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                16,
-            ),
-            hi: BytePos(
-                16,
-            ),
-            ctxt: #0,
-        },
+        span: 16..16,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    16,
-                ),
-                hi: BytePos(
-                    65,
-                ),
-                ctxt: #0,
-            },
+            span: 16..65,
             value: "Generate the Fibonacci sequence of numbers.\n *\n *",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        16,
-                    ),
-                    hi: BytePos(
-                        22,
-                    ),
-                    ctxt: #0,
-                },
+                span: 16..22,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            16,
-                        ),
-                        hi: BytePos(
-                            22,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 16..22,
                     value: "yields",
                 },
                 tag: Yield(
                     YieldTag {
-                        span: Span {
-                            lo: BytePos(
-                                16,
-                            ),
-                            hi: BytePos(
-                                22,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 16..22,
                         value: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        16,
-                                    ),
-                                    hi: BytePos(
-                                        24,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 16..24,
                                 value: "{number}",
                             },
                         ),
                         description: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    16,
-                                ),
-                                hi: BytePos(
-                                    58,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 16..58,
                             value: "The next number in the Fibonacci sequence.",
                         },
                     },
@@ -87,85 +31,29 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                163,
-            ),
-            hi: BytePos(
-                163,
-            ),
-            ctxt: #0,
-        },
+        span: 163..163,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    163,
-                ),
-                hi: BytePos(
-                    212,
-                ),
-                ctxt: #0,
-            },
+            span: 163..212,
             value: "Generate the Fibonacci sequence of numbers.\n *\n *",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        163,
-                    ),
-                    hi: BytePos(
-                        169,
-                    ),
-                    ctxt: #0,
-                },
+                span: 163..169,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            163,
-                        ),
-                        hi: BytePos(
-                            169,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 163..169,
                     value: "yields",
                 },
                 tag: Yield(
                     YieldTag {
-                        span: Span {
-                            lo: BytePos(
-                                163,
-                            ),
-                            hi: BytePos(
-                                169,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 163..169,
                         value: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        163,
-                                    ),
-                                    hi: BytePos(
-                                        166,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 163..166,
                                 value: "The",
                             },
                         ),
                         description: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    163,
-                                ),
-                                hi: BytePos(
-                                    201,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 163..201,
                             value: "next number in the Fibonacci sequence.",
                         },
                     },
@@ -174,85 +62,29 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                302,
-            ),
-            hi: BytePos(
-                302,
-            ),
-            ctxt: #0,
-        },
+        span: 302..302,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    302,
-                ),
-                hi: BytePos(
-                    351,
-                ),
-                ctxt: #0,
-            },
+            span: 302..351,
             value: "Generate the Fibonacci sequence of numbers.\n *\n *",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        302,
-                    ),
-                    hi: BytePos(
-                        308,
-                    ),
-                    ctxt: #0,
-                },
+                span: 302..308,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            302,
-                        ),
-                        hi: BytePos(
-                            308,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 302..308,
                     value: "yields",
                 },
                 tag: Yield(
                     YieldTag {
-                        span: Span {
-                            lo: BytePos(
-                                302,
-                            ),
-                            hi: BytePos(
-                                308,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 302..308,
                         value: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        302,
-                                    ),
-                                    hi: BytePos(
-                                        310,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 302..310,
                                 value: "{number}",
                             },
                         ),
                         description: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    302,
-                                ),
-                                hi: BytePos(
-                                    302,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 302..302,
                             value: "",
                         },
                     },

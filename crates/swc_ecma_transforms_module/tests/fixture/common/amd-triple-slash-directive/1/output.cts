@@ -1,7 +1,7 @@
 ///<amd-module name='NamedModule'/>
 "use strict";
 class Foo {
-    x: number;
+    x;
     constructor(){
         this.x = 5;
     }

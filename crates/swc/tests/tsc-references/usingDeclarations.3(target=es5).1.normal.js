@@ -1,15 +1,20 @@
 //// [usingDeclarations.3.ts]
 import { _ as _define_property } from "@swc/helpers/_/_define_property";
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
 {
+    var env = {
+        stack: [],
+        error: void 0,
+        hasError: false
+    };
     try {
-        var _stack = [];
-        var d1 = _using(_stack, _define_property({}, Symbol.dispose, function() {})), d2 = _using(_stack, null), d3 = _using(_stack, undefined), d4 = _using(_stack, _define_property({}, Symbol.dispose, function() {}));
-    } catch (_) {
-        var _error = _;
-        var _hasError = true;
+        var d1 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false), d2 = _ts_add_disposable_resource(env, null, false), d3 = _ts_add_disposable_resource(env, undefined, false), d4 = _ts_add_disposable_resource(env, _define_property({}, Symbol.dispose, function() {}), false);
+        ;
+    } catch (e) {
+        env.error = e;
+        env.hasError = true;
     } finally{
-        _dispose(_stack, _error, _hasError);
+        _ts_dispose_resources(env);
     }
 }

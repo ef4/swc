@@ -9,6 +9,7 @@ extern crate swc_malloc;
 use std::{env::args, fs, path::Path};
 
 use swc_common::{sync::Lrc, Mark, SourceMap};
+use swc_ecma_ast::Program;
 use swc_ecma_codegen::text_writer::JsWriter;
 use swc_ecma_minifier::{
     optimize,
@@ -19,7 +20,6 @@ use swc_ecma_transforms_base::{
     fixer::{fixer, paren_remover},
     resolver,
 };
-use swc_ecma_visit::FoldWith;
 
 fn main() {
     let file = args().nth(1).expect("should provide a path to file");
@@ -37,17 +37,18 @@ fn main() {
             Default::default(),
             Default::default(),
             None,
-            &mut vec![],
+            &mut Vec::new(),
         )
         .map_err(|err| {
             err.into_diagnostic(&handler).emit();
         })
-        .map(|module| module.fold_with(&mut resolver(unresolved_mark, top_level_mark, false)))
-        .map(|module| module.fold_with(&mut paren_remover(None)))
+        .map(Program::Module)
+        .map(|module| module.apply(resolver(unresolved_mark, top_level_mark, false)))
+        .map(|module| module.apply(paren_remover(None)))
         .unwrap();
 
         let output = optimize(
-            program.into(),
+            program,
             cm.clone(),
             None,
             None,
@@ -59,11 +60,11 @@ fn main() {
             &ExtraOptions {
                 unresolved_mark,
                 top_level_mark,
+                mangle_name_cache: None,
             },
-        )
-        .expect_module();
+        );
 
-        let output = output.fold_with(&mut fixer(None));
+        let output = output.apply(fixer(None));
 
         let code = print(cm, &[output], false);
 
@@ -75,7 +76,7 @@ fn main() {
 }
 
 fn print<N: swc_ecma_codegen::Node>(cm: Lrc<SourceMap>, nodes: &[N], minify: bool) -> String {
-    let mut buf = vec![];
+    let mut buf = Vec::new();
 
     {
         let mut emitter = swc_ecma_codegen::Emitter {

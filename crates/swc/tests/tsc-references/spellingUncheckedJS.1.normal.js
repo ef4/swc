@@ -1,9 +1,9 @@
 //// [spellingUncheckedJS.js]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _get } from "@swc/helpers/_/_get";
 import { _ as _get_prototype_of } from "@swc/helpers/_/_get_prototype_of";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 export var inModule = 1;
 inmodule.toFixed();
 function f() {
@@ -18,7 +18,7 @@ var Classe = /*#__PURE__*/ function() {
     "use strict";
     function Classe() {
         _class_call_check(this, Classe);
-        this.non = "oui";
+        this.non = 'oui';
     }
     var _proto = Classe.prototype;
     _proto.methode = function methode() {
@@ -30,10 +30,9 @@ var Classe = /*#__PURE__*/ function() {
 var Derivee = /*#__PURE__*/ function(Classe) {
     "use strict";
     _inherits(Derivee, Classe);
-    var _super = _create_super(Derivee);
     function Derivee() {
         _class_call_check(this, Derivee);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derivee, arguments);
     }
     var _proto = Derivee.prototype;
     _proto.methode = function methode() {
@@ -57,7 +56,7 @@ new Date().getGMTDate() // OK, from another file
 ;
 // No suggestions for globals from other files
 var atoc = setIntegral(function() {
-    return console.log("ok");
+    return console.log('ok');
 }, 500);
 AudioBuffin // etc
 ;

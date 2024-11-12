@@ -28,23 +28,18 @@ define([
         this.m1 = 42;
     };
     C1.s1 = true;
-    var E1;
-    (function(E1) {
+    var E1 = /*#__PURE__*/ function(E1) {
         E1[E1["A"] = 0] = "A";
         E1[E1["B"] = 1] = "B";
         E1[E1["C"] = 2] = "C";
-    })(E1 || (E1 = {}));
+        return E1;
+    }({});
 });
 //// [foo_1.ts]
 define([
-    "require",
-    "exports",
-    "./foo_0"
-], function(require, exports, _foo_0) {
+    "require"
+], function(require) {
     "use strict";
-    Object.defineProperty(exports, "__esModule", {
-        value: true
-    });
     var i;
     var x = {};
     var y = false;

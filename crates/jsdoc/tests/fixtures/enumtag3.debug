@@ -1,118 +1,38 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                26,
-            ),
-            hi: BytePos(
-                26,
-            ),
-            ctxt: #0,
-        },
+        span: 26..26,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    26,
-                ),
-                hi: BytePos(
-                    26,
-                ),
-                ctxt: #0,
-            },
+            span: 26..26,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        26,
-                    ),
-                    hi: BytePos(
-                        33,
-                    ),
-                    ctxt: #0,
-                },
+                span: 26..33,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            26,
-                        ),
-                        hi: BytePos(
-                            33,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 26..33,
                     value: "exports",
                 },
                 tag: Exports(
                     ExportsTag {
-                        span: Span {
-                            lo: BytePos(
-                                26,
-                            ),
-                            hi: BytePos(
-                                33,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 26..33,
                         module_name: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    26,
-                                ),
-                                hi: BytePos(
-                                    34,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 26..34,
                             value: "mymodule",
                         },
                     },
                 ),
             },
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        26,
-                    ),
-                    hi: BytePos(
-                        30,
-                    ),
-                    ctxt: #0,
-                },
+                span: 26..30,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            26,
-                        ),
-                        hi: BytePos(
-                            30,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 26..30,
                     value: "enum",
                 },
                 tag: Enum(
                     EnumTag {
-                        span: Span {
-                            lo: BytePos(
-                                26,
-                            ),
-                            hi: BytePos(
-                                30,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 26..30,
                         ty: Text {
-                            span: Span {
-                                lo: BytePos(
-                                    26,
-                                ),
-                                hi: BytePos(
-                                    34,
-                                ),
-                                ctxt: #0,
-                            },
+                            span: 26..34,
                             value: "{string}",
                         },
                     },

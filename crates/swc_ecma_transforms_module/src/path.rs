@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     env::current_dir,
-    fs::read_link,
+    fs::canonicalize,
     io,
     path::{Component, Path, PathBuf},
     sync::Arc,
@@ -11,17 +11,19 @@ use anyhow::{anyhow, Context, Error};
 use path_clean::PathClean;
 use pathdiff::diff_paths;
 use swc_atoms::JsWord;
-use swc_common::{FileName, Mark, Span, DUMMY_SP};
+use swc_common::{FileName, Mark, Span, SyntaxContext, DUMMY_SP};
 use swc_ecma_ast::*;
 use swc_ecma_loader::resolve::{Resolution, Resolve};
 use swc_ecma_utils::{quote_ident, ExprFactory};
 use tracing::{debug, info, warn, Level};
 
-pub(crate) enum Resolver {
+#[derive(Default)]
+pub enum Resolver {
     Real {
         base: FileName,
-        resolver: Box<dyn ImportResolver>,
+        resolver: Arc<dyn ImportResolver>,
     },
+    #[default]
     Default,
 }
 
@@ -44,18 +46,22 @@ impl Resolver {
     ) -> Expr {
         let src = self.resolve(src);
 
-        Expr::Call(CallExpr {
+        CallExpr {
             span: DUMMY_SP,
-            callee: quote_ident!(DUMMY_SP.apply_mark(unresolved_mark), "require").as_callee(),
+            callee: quote_ident!(
+                SyntaxContext::empty().apply_mark(unresolved_mark),
+                "require"
+            )
+            .as_callee(),
             args: vec![Lit::Str(Str {
                 span: src_span,
                 raw: None,
                 value: src,
             })
             .as_arg()],
-
-            type_args: Default::default(),
-        })
+            ..Default::default()
+        }
+        .into()
     }
 }
 
@@ -117,7 +123,7 @@ where
     }
 
     pub fn with_config(resolver: R, config: Config) -> Self {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
         if let Some(base_dir) = &config.base_dir {
             assert!(
                 base_dir.is_absolute(),
@@ -173,7 +179,14 @@ where
                 false
             };
 
-            if orig_filename == "index" {
+            let file_stem_matches = if let Some(stem) = target_path.file_stem() {
+                stem == orig_filename
+            } else {
+                false
+            };
+
+            if self.config.resolve_fully && is_resolved_as_js {
+            } else if orig_filename == "index" {
                 // Import: `./foo/index`
                 // Resolved: `./foo/index.js`
 
@@ -187,6 +200,8 @@ where
                 // Resolved: `./foo/index.js`
 
                 target_path.pop();
+            } else if is_resolved_as_non_js && self.config.resolve_fully && file_stem_matches {
+                target_path.set_extension("js");
             } else if !is_resolved_as_js && !is_resolved_as_index && !is_exact {
                 target_path.set_file_name(orig_filename);
             } else if is_resolved_as_non_js && is_exact {
@@ -245,7 +260,7 @@ where
         //
         // https://github.com/swc-project/swc/issues/8265
         if let FileName::Real(resolved) = &target.filename {
-            if let Ok(orig) = read_link(resolved) {
+            if let Ok(orig) = canonicalize(resolved) {
                 target.filename = FileName::Real(orig);
             }
         }
@@ -259,14 +274,7 @@ where
         info!("Resolved as {target:?} with slug = {slug:?}");
 
         let mut target = match target {
-            FileName::Real(v) => {
-                // @nestjs/common should be preserved as a whole
-                if v.starts_with(".") || v.starts_with("..") || v.is_absolute() {
-                    v
-                } else {
-                    return Ok(self.to_specifier(v, slug));
-                }
-            }
+            FileName::Real(v) => v,
             FileName::Custom(s) => return Ok(self.to_specifier(s.into(), slug)),
             _ => {
                 unreachable!(
@@ -280,13 +288,16 @@ where
                 v.parent()
                     .ok_or_else(|| anyhow!("failed to get parent of {:?}", v))?,
             ),
-            FileName::Anon => {
-                if cfg!(target_arch = "wasm32") {
-                    panic!("Please specify `filename`")
-                } else {
-                    Cow::Owned(current_dir().expect("failed to get current directory"))
+            FileName::Anon => match &self.config.base_dir {
+                Some(v) => Cow::Borrowed(&**v),
+                None => {
+                    if cfg!(target_arch = "wasm32") {
+                        panic!("Please specify `filename`")
+                    } else {
+                        Cow::Owned(current_dir().expect("failed to get current directory"))
+                    }
                 }
-            }
+            },
             _ => {
                 unreachable!(
                     "Node path provider does not support using `{:?}` as a base file name",

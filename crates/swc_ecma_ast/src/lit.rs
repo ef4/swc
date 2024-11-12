@@ -4,6 +4,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use is_macro::Is;
 use num_bigint::BigInt as BigIntValue;
 use swc_atoms::{js_word, Atom};
 use swc_common::{ast_node, util::take::Take, EqIgnoreSpan, Span, DUMMY_SP};
@@ -11,7 +12,7 @@ use swc_common::{ast_node, util::take::Take, EqIgnoreSpan, Span, DUMMY_SP};
 use crate::jsx::JSXText;
 
 #[ast_node]
-#[derive(Eq, Hash, EqIgnoreSpan)]
+#[derive(Eq, Hash, EqIgnoreSpan, Is)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Lit {
     #[tag("StringLiteral")]
@@ -59,6 +60,20 @@ bridge_lit_from!(Bool, bool);
 bridge_lit_from!(Number, f64);
 bridge_lit_from!(Number, usize);
 bridge_lit_from!(BigInt, BigIntValue);
+
+impl Lit {
+    pub fn set_span(&mut self, span: Span) {
+        match self {
+            Lit::Str(s) => s.span = span,
+            Lit::Bool(b) => b.span = span,
+            Lit::Null(n) => n.span = span,
+            Lit::Num(n) => n.span = span,
+            Lit::BigInt(n) => n.span = span,
+            Lit::Regex(n) => n.span = span,
+            Lit::JSXText(n) => n.span = span,
+        }
+    }
+}
 
 #[ast_node("BigIntLiteral")]
 #[derive(Eq, Hash)]
@@ -195,6 +210,54 @@ impl Str {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.value.is_empty()
+    }
+
+    pub fn from_tpl_raw(tpl_raw: &str) -> Atom {
+        let mut buf = String::with_capacity(tpl_raw.len());
+
+        let mut iter = tpl_raw.chars();
+
+        while let Some(c) = iter.next() {
+            match c {
+                '\\' => {
+                    if let Some(next) = iter.next() {
+                        match next {
+                            '`' | '$' | '\\' => {
+                                buf.push(next);
+                            }
+                            'b' => {
+                                buf.push('\u{0008}');
+                            }
+                            'f' => {
+                                buf.push('\u{000C}');
+                            }
+                            'n' => {
+                                buf.push('\n');
+                            }
+                            'r' => {
+                                buf.push('\r');
+                            }
+                            't' => {
+                                buf.push('\t');
+                            }
+                            'v' => {
+                                buf.push('\u{000B}');
+                            }
+                            _ => {
+                                buf.push('\\');
+                                buf.push(next);
+                            }
+                        }
+                    }
+                }
+
+                c => {
+                    buf.push(c);
+                }
+            }
+        }
+
+        buf.into()
     }
 }
 

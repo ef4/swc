@@ -1,9 +1,9 @@
 //// [neverReturningFunctions1.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _get } from "@swc/helpers/_/_get";
 import { _ as _get_prototype_of } from "@swc/helpers/_/_get_prototype_of";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 function fail(message) {
     throw new Error(message);
 }
@@ -150,7 +150,7 @@ function f43() {
     f[0](); // No effect (not a dotted name)
     f;
 }
-var Component = registerComponent("test-component", {
+var Component = registerComponent('test-component', {
     schema: {
         myProperty: {
             default: [],
@@ -161,13 +161,13 @@ var Component = registerComponent("test-component", {
             }
         },
         string: {
-            type: "string"
+            type: 'string'
         },
         num: 0
     },
     init: function init() {
         this.data.num = 0;
-        this.el.setAttribute("custom-attribute", "custom-value");
+        this.el.setAttribute('custom-attribute', 'custom-value');
     },
     update: function update() {},
     tick: function tick() {},
@@ -194,10 +194,9 @@ var MyThrowable = /*#__PURE__*/ function() {
 var SuperThrowable = /*#__PURE__*/ function(MyThrowable) {
     "use strict";
     _inherits(SuperThrowable, MyThrowable);
-    var _super = _create_super(SuperThrowable);
     function SuperThrowable() {
         _class_call_check(this, SuperThrowable);
-        return _super.apply(this, arguments);
+        return _call_super(this, SuperThrowable, arguments);
     }
     var _proto = SuperThrowable.prototype;
     _proto.err = function err(msg) {

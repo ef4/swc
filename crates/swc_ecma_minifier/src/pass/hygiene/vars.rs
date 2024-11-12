@@ -51,10 +51,7 @@ impl<'a> Scope<'a> {
 
         while let Some(scope) = cur {
             let mut w = scope.data.borrow_mut();
-            w.decls
-                .entry(i.sym.clone())
-                .or_default()
-                .insert(i.span.ctxt);
+            w.decls.entry(i.sym.clone()).or_default().insert(i.ctxt);
 
             cur = scope.parent;
         }
@@ -80,8 +77,8 @@ macro_rules! scoped {
             v.cur.data.into_inner()
         };
 
-        let old = $v.all.scopes.insert($n.span.ctxt, data);
-        debug_assert!(old.is_none(), "{:?}", $n.span.ctxt);
+        let old = $v.all.scopes.insert($n.ctxt, data);
+        debug_assert!(old.is_none(), "{:?}", $n.ctxt);
     };
 }
 

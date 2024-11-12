@@ -8,7 +8,7 @@ use swc_ecma_ast::*;
 use swc_ecma_codegen::Emitter;
 use swc_ecma_parser::{error::Error, lexer::Lexer, Parser, StringInput, Syntax};
 use swc_ecma_utils::DropSpan;
-use swc_ecma_visit::{as_folder, Fold, FoldWith};
+use swc_ecma_visit::{Fold, FoldWith};
 
 use crate::{fixer::fixer, helpers::HELPERS, hygiene::hygiene_with_config};
 
@@ -18,7 +18,7 @@ pub struct Tester<'a> {
     pub comments: Lrc<SingleThreadedComments>,
 }
 
-impl<'a> Tester<'a> {
+impl Tester<'_> {
     pub fn run<F>(op: F)
     where
         F: FnOnce(&mut Tester<'_>) -> Result<(), ()>,
@@ -53,7 +53,7 @@ impl<'a> Tester<'a> {
     {
         let fm = self
             .cm
-            .new_source_file(FileName::Real(file_name.into()), src.into());
+            .new_source_file(FileName::Real(file_name.into()).into(), src.into());
 
         let mut p = Parser::new(syntax, StringInput::from(&*fm), Some(&self.comments));
         let res = op(&mut p).map_err(|e| e.into_diagnostic(self.handler).emit());
@@ -84,16 +84,16 @@ impl<'a> Tester<'a> {
         Ok(stmts.pop().unwrap())
     }
 
-    pub fn apply_transform<T: Fold>(
+    pub fn apply_transform<T: Pass>(
         &mut self,
-        mut tr: T,
+        tr: T,
         name: &str,
         syntax: Syntax,
         src: &str,
-    ) -> Result<Module, ()> {
+    ) -> Result<Program, ()> {
         let fm = self
             .cm
-            .new_source_file(FileName::Real(name.into()), src.into());
+            .new_source_file(FileName::Real(name.into()).into(), src.into());
 
         let module = {
             let mut p = Parser::new(syntax, StringInput::from(&*fm), Some(&self.comments));
@@ -108,17 +108,13 @@ impl<'a> Tester<'a> {
             res?
         };
 
-        let module = module
-            .fold_with(&mut tr)
-            .fold_with(&mut as_folder(DropSpan {
-                preserve_ctxt: true,
-            }));
+        let module = Program::Module(module).apply(tr).apply(DropSpan);
 
         Ok(module)
     }
 
-    pub fn print(&mut self, module: &Module) -> String {
-        let mut buf = vec![];
+    pub fn print(&mut self, program: &Program) -> String {
+        let mut buf = Vec::new();
         {
             let mut emitter = Emitter {
                 cfg: Default::default(),
@@ -133,7 +129,7 @@ impl<'a> Tester<'a> {
             };
 
             // println!("Emitting: {:?}", module);
-            emitter.emit_module(module).unwrap();
+            emitter.emit_program(program).unwrap();
         }
 
         let s = String::from_utf8_lossy(&buf);
@@ -145,7 +141,7 @@ pub(crate) struct HygieneVisualizer;
 impl Fold for HygieneVisualizer {
     fn fold_ident(&mut self, ident: Ident) -> Ident {
         Ident {
-            sym: format!("{}{:?}", ident.sym, ident.span.ctxt()).into(),
+            sym: format!("{}{:?}", ident.sym, ident.ctxt).into(),
             ..ident
         }
     }
@@ -160,17 +156,10 @@ pub(crate) fn test_transform<F, P>(
     hygiene_config: impl FnOnce() -> crate::hygiene::Config,
 ) where
     F: FnOnce(&mut Tester) -> P,
-    P: Fold,
+    P: Pass,
 {
     crate::tests::Tester::run(|tester| {
-        let expected = tester.apply_transform(
-            as_folder(::swc_ecma_utils::DropSpan {
-                preserve_ctxt: true,
-            }),
-            "output.js",
-            syntax,
-            expected,
-        )?;
+        let expected = tester.apply_transform(DropSpan, "output.js", syntax, expected)?;
 
         println!("----- Actual -----");
 
@@ -186,11 +175,9 @@ pub(crate) fn test_transform<F, P>(
         }
 
         let actual = actual
-            .fold_with(&mut hygiene_with_config(hygiene_config()))
-            .fold_with(&mut fixer(None))
-            .fold_with(&mut as_folder(DropSpan {
-                preserve_ctxt: false,
-            }));
+            .apply(hygiene_with_config(hygiene_config()))
+            .apply(fixer(None))
+            .apply(DropSpan);
 
         if actual == expected {
             return Ok(());

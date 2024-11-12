@@ -14,13 +14,13 @@ pub(crate) struct Helpers {
 
 fn parse(code: &'static str, name: &'static str) -> Vec<ModuleItem> {
     let cm = SourceMap::new(FilePathMapping::empty());
-    let fm = cm.new_source_file(FileName::Custom(name.into()), code.into());
+    let fm = cm.new_source_file(FileName::Custom(name.into()).into(), code.into());
     parse_file_as_module(
         &fm,
         Default::default(),
         Default::default(),
         None,
-        &mut vec![],
+        &mut Vec::new(),
     )
     .map(|script| drop_span(script.body))
     .map_err(|_| {})
@@ -59,7 +59,7 @@ impl Helpers {
     }
 
     pub fn add_to(&self, to: &mut Vec<ModuleItem>) {
-        let mut buf = vec![];
+        let mut buf = Vec::new();
 
         if self.require.load(SeqCst) {
             build_swcpack_require(&mut buf);

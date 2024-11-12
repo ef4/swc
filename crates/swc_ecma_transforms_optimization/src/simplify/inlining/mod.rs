@@ -5,10 +5,10 @@ use swc_common::{
     util::take::Take,
 };
 use swc_ecma_ast::*;
-use swc_ecma_transforms_base::{pass::RepeatedJsPass, scope::IdentType};
-use swc_ecma_utils::{contains_this_expr, find_pat_ids, undefined};
+use swc_ecma_transforms_base::scope::IdentType;
+use swc_ecma_utils::{contains_this_expr, find_pat_ids};
 use swc_ecma_visit::{
-    as_folder, noop_visit_mut_type, noop_visit_type, visit_obj_and_computed, Visit, VisitMut,
+    noop_visit_mut_type, noop_visit_type, visit_mut_pass, visit_obj_and_computed, Visit, VisitMut,
     VisitMutWith, VisitWith,
 };
 use tracing::{span, Level};
@@ -33,8 +33,8 @@ pub struct Config {}
 ///
 /// Currently all functions are treated as a black box, and all the pass gives
 /// up inlining variables across a function call or a constructor call.
-pub fn inlining(_: Config) -> impl 'static + RepeatedJsPass + VisitMut {
-    as_folder(Inlining {
+pub fn inlining(_: Config) -> impl 'static + Repeated + CompilerPass + Pass + VisitMut {
+    visit_mut_pass(Inlining {
         phase: Phase::Analysis,
         is_first_run: true,
         changed: false,
@@ -54,7 +54,7 @@ enum Phase {
 }
 
 impl CompilerPass for Inlining<'_> {
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inlining")
     }
 }
@@ -316,7 +316,7 @@ impl VisitMut for Inlining<'_> {
                                 tracing::debug!("Inlining: {:?} as undefined", id);
 
                                 if var.is_undefined.get() {
-                                    *node = *undefined(i.span);
+                                    *node = *Expr::undefined(i.span);
                                     return;
                                 } else {
                                     tracing::trace!("Not a cheap expression");
@@ -468,19 +468,19 @@ impl VisitMut for Inlining<'_> {
         self.visit_with_child(ScopeKind::Cond, &mut stmt.alt);
     }
 
-    fn visit_mut_module_items(&mut self, items: &mut Vec<ModuleItem>) {
+    fn visit_mut_program(&mut self, program: &mut Program) {
         let _tracing = span!(Level::ERROR, "inlining", pass = self.pass).entered();
 
         let old_phase = self.phase;
 
         self.phase = Phase::Analysis;
-        items.visit_mut_children_with(self);
+        program.visit_mut_children_with(self);
 
         tracing::trace!("Switching to Inlining phase");
 
         // Inline
         self.phase = Phase::Inlining;
-        items.visit_mut_children_with(self);
+        program.visit_mut_children_with(self);
 
         self.phase = old_phase;
     }
@@ -504,7 +504,7 @@ impl VisitMut for Inlining<'_> {
                 PatFoldingMode::Param => {
                     self.declare(
                         i.to_id(),
-                        Some(Cow::Owned(Expr::Ident(i.id.clone()))),
+                        Some(Cow::Owned(Ident::from(i).into())),
                         false,
                         VarType::Param,
                     );
@@ -512,7 +512,7 @@ impl VisitMut for Inlining<'_> {
                 PatFoldingMode::CatchParam => {
                     self.declare(
                         i.to_id(),
-                        Some(Cow::Owned(Expr::Ident(i.id.clone()))),
+                        Some(Cow::Owned(Ident::from(i).into())),
                         false,
                         VarType::Var(VarDeclKind::Var),
                     );
@@ -649,9 +649,7 @@ impl VisitMut for Inlining<'_> {
 
                         tracing::trace!("Trying to optimize variable declaration: {:?}", id);
 
-                        if self
-                            .scope
-                            .is_inline_prevented(&Expr::Ident(name.id.clone()))
+                        if self.scope.is_inline_prevented(&Ident::from(name).into())
                             || !self.scope.has_same_this(&id, node.init.as_deref())
                         {
                             tracing::trace!("Inline is prevented for {:?}", id);
@@ -666,7 +664,7 @@ impl VisitMut for Inlining<'_> {
                             if let Expr::Ident(ri) = &**init {
                                 self.declare(
                                     name.to_id(),
-                                    Some(Cow::Owned(Expr::Ident(ri.clone()))),
+                                    Some(Cow::Owned(ri.clone().into())),
                                     false,
                                     kind,
                                 );
@@ -690,10 +688,7 @@ impl VisitMut for Inlining<'_> {
                             Some(e) if e.is_lit() || e.is_ident() => Some(e),
                             Some(e) => {
                                 let e = *e;
-                                if self
-                                    .scope
-                                    .is_inline_prevented(&Expr::Ident(name.id.clone()))
-                                {
+                                if self.scope.is_inline_prevented(&Ident::from(name).into()) {
                                     node.init = Some(Box::new(e));
                                     return;
                                 }

@@ -1,7 +1,6 @@
 use swc_ecma_parser::Syntax;
-use swc_ecma_visit::Fold;
 
-use super::{InnerConfig, *};
+use super::*;
 use crate::hygiene::Config;
 
 // struct TsHygiene {
@@ -11,11 +10,11 @@ use crate::hygiene::Config;
 // impl VisitMut for TsHygiene {
 //     fn visit_mut_ident(&mut self, i: &mut Ident) {
 //         if SyntaxContext::empty().apply_mark(self.top_level_mark) ==
-// i.span.ctxt {             println!("ts_hygiene: {} is top-level", i.sym);
+// i.ctxt {             println!("ts_hygiene: {} is top-level", i.sym);
 //             return;
 //         }
 
-//         let ctxt = format!("{:?}", i.span.ctxt).replace("#", "");
+//         let ctxt = format!("{:?}", i.ctxt).replace("#", "");
 //         i.sym = format!("{}__{}", i.sym, ctxt).into();
 //         i.span = i.span.with_ctxt(SyntaxContext::empty());
 //     }
@@ -49,7 +48,7 @@ fn run_test_with_config<F, V>(
     config: impl FnOnce() -> crate::hygiene::Config,
 ) where
     F: FnOnce() -> V,
-    V: Fold,
+    V: Pass,
 {
     crate::tests::test_transform(syntax, |_| tr(), src, to, true, config);
 }

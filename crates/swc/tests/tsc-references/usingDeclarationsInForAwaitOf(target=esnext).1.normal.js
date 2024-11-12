@@ -1,21 +1,27 @@
 //// [usingDeclarationsInForAwaitOf.ts]
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
 async function main() {
-    for await (const d1 of [
+    for await (const _ of [
         {
             [Symbol.dispose] () {}
         },
         null,
         undefined
     ]){
+        const env = {
+            stack: [],
+            error: void 0,
+            hasError: false
+        };
         try {
-            var _stack = [];
+            const d1 = _ts_add_disposable_resource(env, _, false);
             {}
-        } catch (_) {
-            var _error = _;
-            var _hasError = true;
+        } catch (e) {
+            env.error = e;
+            env.hasError = true;
         } finally{
-            _dispose(_stack, _error, _hasError);
+            _ts_dispose_resources(env);
         }
     }
 }

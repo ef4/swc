@@ -12,32 +12,16 @@ pub enum Program {
     Module(Module),
     #[tag("Script")]
     Script(Script),
-    // Reserved type for the testing purpose only. Prod codes does not utilize
-    // this at all and user should not try to attempt to use this as well.
-    // TODO: reenable once experimental_metadata breaking change is merged
-    // #[tag("ReservedUnused")]
-    // ReservedUnused(ReservedUnused),
 }
 
-#[ast_node("ReservedUnused")]
-#[derive(Eq, Hash, EqIgnoreSpan)]
-pub struct ReservedUnused {
-    pub span: Span,
-    pub body: Option<Vec<ModuleItem>>,
-}
-
-#[cfg(feature = "arbitrary")]
-#[cfg_attr(docsrs, doc(cfg(feature = "arbitrary")))]
-impl<'a> arbitrary::Arbitrary<'a> for ReservedUnused {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
-        let span = u.arbitrary()?;
-        let body = u.arbitrary()?;
-        Ok(Self { span, body })
+impl Take for Program {
+    fn dummy() -> Self {
+        Program::Script(Script::default())
     }
 }
 
 #[ast_node("Module")]
-#[derive(Eq, Hash, EqIgnoreSpan)]
+#[derive(Eq, Hash, EqIgnoreSpan, Default)]
 pub struct Module {
     pub span: Span,
 
@@ -72,7 +56,7 @@ impl Take for Module {
 }
 
 #[ast_node("Script")]
-#[derive(Eq, Hash, EqIgnoreSpan)]
+#[derive(Eq, Hash, EqIgnoreSpan, Default)]
 pub struct Script {
     pub span: Span,
 
@@ -126,6 +110,6 @@ pub enum ModuleItem {
 
 impl Take for ModuleItem {
     fn dummy() -> Self {
-        ModuleItem::Stmt(Take::dummy())
+        Self::Stmt(Default::default())
     }
 }

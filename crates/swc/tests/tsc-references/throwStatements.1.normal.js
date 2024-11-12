@@ -13,7 +13,6 @@ var D = function D() {
 function F(x) {
     return 42;
 }
-var M;
 (function(M) {
     var A = function A() {
         "use strict";
@@ -27,7 +26,7 @@ var M;
 })(M || (M = {}));
 var aNumber = 9.9;
 throw aNumber;
-var aString = "this is a string";
+var aString = 'this is a string';
 throw aString;
 var aDate = new Date(12);
 throw aDate;
@@ -49,7 +48,7 @@ var anObjectLiteral = {
 throw anObjectLiteral;
 var aFunction = F;
 throw aFunction;
-throw aFunction("");
+throw aFunction('');
 var aLambda = function(x) {
     return 2;
 };
@@ -70,9 +69,9 @@ throw 0.0;
 throw false;
 throw null;
 throw undefined;
-throw "a string";
+throw 'a string';
 throw function() {
-    return "a string";
+    return 'a string';
 };
 throw function(x) {
     return 42;
@@ -83,9 +82,9 @@ throw {
 };
 throw [];
 throw [
-    "a",
+    'a',
     [
-        "b"
+        'b'
     ]
 ];
 throw /[a-z]/;
@@ -93,3 +92,4 @@ throw new Date();
 throw new C();
 throw new Object();
 throw new D();
+var M;

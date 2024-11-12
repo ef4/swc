@@ -8,7 +8,7 @@ use std::{
 
 use swc_common::{comments::SingleThreadedComments, FileName};
 use swc_ecma_ast::*;
-use swc_ecma_parser::{lexer::Lexer, EsConfig, PResult, Parser, Syntax};
+use swc_ecma_parser::{lexer::Lexer, EsSyntax, PResult, Parser, Syntax};
 use swc_ecma_visit::FoldWith;
 use testing::StdErr;
 
@@ -80,7 +80,7 @@ where
 {
     ::testing::run_test(treat_error_as_bug, |cm, handler| {
         if shift {
-            cm.new_source_file(FileName::Anon, "".into());
+            cm.new_source_file(FileName::Anon.into(), "".into());
         }
 
         let comments = SingleThreadedComments::default();
@@ -90,9 +90,10 @@ where
             .unwrap_or_else(|e| panic!("failed to load {}: {}", file_name.display(), e));
 
         let lexer = Lexer::new(
-            Syntax::Es(EsConfig {
+            Syntax::Es(EsSyntax {
                 explicit_resource_management: true,
                 import_attributes: true,
+                decorators: true,
                 ..Default::default()
             }),
             EsVersion::Es2015,

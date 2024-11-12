@@ -1,4 +1,4 @@
-use swc_atoms::{Atom, JsWord};
+use swc_atoms::Atom;
 use swc_common::{ast_node, EqIgnoreSpan, Span};
 
 #[ast_node("TokenAndSpan")]
@@ -13,10 +13,10 @@ pub struct TokenAndSpan {
 pub struct AttributeToken {
     pub span: Span,
 
-    pub name: JsWord,
+    pub name: Atom,
     pub raw_name: Option<Atom>,
 
-    pub value: Option<JsWord>,
+    pub value: Option<Atom>,
     pub raw_value: Option<Atom>,
 }
 
@@ -27,12 +27,9 @@ pub struct AttributeToken {
 )]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 #[cfg_attr(feature = "serde-impl", derive(serde::Serialize, serde::Deserialize))]
 pub enum Raw {
     Same,
@@ -46,42 +43,39 @@ pub enum Raw {
 )]
 #[cfg_attr(
     feature = "rkyv",
-    archive(bound(
-        serialize = "__S: rkyv::ser::Serializer + rkyv::ser::ScratchSpace + \
-                     rkyv::ser::SharedSerializeRegistry",
-        deserialize = "__D: rkyv::de::SharedDeserializeRegistry"
-    ))
+    archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 #[cfg_attr(feature = "serde-impl", derive(serde::Serialize, serde::Deserialize))]
 pub enum Token {
     Doctype {
         // Name
-        name: Option<JsWord>,
+        name: Option<Atom>,
         // Is force quirks?
         force_quirks: bool,
 
         // Public identifier
-        public_id: Option<JsWord>,
+        public_id: Option<Atom>,
 
         // System identifier
-        system_id: Option<JsWord>,
+        system_id: Option<Atom>,
         // Raw value
         raw: Option<Atom>,
     },
     StartTag {
-        tag_name: JsWord,
+        tag_name: Atom,
         raw_tag_name: Option<Atom>,
         is_self_closing: bool,
         attributes: Vec<AttributeToken>,
     },
     EndTag {
-        tag_name: JsWord,
+        tag_name: Atom,
         raw_tag_name: Option<Atom>,
         is_self_closing: bool,
         attributes: Vec<AttributeToken>,
     },
     Comment {
-        data: JsWord,
+        data: Atom,
         raw: Option<Atom>,
     },
     Character {

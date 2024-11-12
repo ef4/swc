@@ -1,8 +1,8 @@
 //// [subtypingWithCallSignatures4.ts]
 // checking subtype relations for function types as it relates to contextual signature instantiation
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var Base = function Base() {
     "use strict";
     _class_call_check(this, Base);
@@ -10,30 +10,27 @@ var Base = function Base() {
 var Derived = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(Derived, Base);
-    var _super = _create_super(Derived);
     function Derived() {
         _class_call_check(this, Derived);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived, arguments);
     }
     return Derived;
 }(Base);
 var Derived2 = /*#__PURE__*/ function(Derived) {
     "use strict";
     _inherits(Derived2, Derived);
-    var _super = _create_super(Derived2);
     function Derived2() {
         _class_call_check(this, Derived2);
-        return _super.apply(this, arguments);
+        return _call_super(this, Derived2, arguments);
     }
     return Derived2;
 }(Derived);
 var OtherDerived = /*#__PURE__*/ function(Base) {
     "use strict";
     _inherits(OtherDerived, Base);
-    var _super = _create_super(OtherDerived);
     function OtherDerived() {
         _class_call_check(this, OtherDerived);
-        return _super.apply(this, arguments);
+        return _call_super(this, OtherDerived, arguments);
     }
     return OtherDerived;
 }(Base);
@@ -54,12 +51,12 @@ var r1b = [
 ];
 var r2arg = function(x) {
     return [
-        ""
+        ''
     ];
 };
 var r2arg2 = function(x) {
     return [
-        ""
+        ''
     ];
 };
 var r2 = foo2(r2arg);
@@ -85,10 +82,10 @@ var r3b = [
     r3arg
 ];
 var r4arg = function(x, y) {
-    return "";
+    return '';
 };
 var r4arg2 = function(x, y) {
-    return "";
+    return '';
 };
 var r4 = foo4(r4arg);
 var r4a = [

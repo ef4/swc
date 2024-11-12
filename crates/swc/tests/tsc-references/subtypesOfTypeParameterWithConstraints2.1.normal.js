@@ -35,10 +35,10 @@ var C2 = function C2() {
     "use strict";
     _class_call_check(this, C2);
 };
-var E;
-(function(E) {
+var E = /*#__PURE__*/ function(E) {
     E[E["A"] = 0] = "A";
-})(E || (E = {}));
+    return E;
+}(E || {});
 function f() {}
 (function(f) {
     f.bar = 1;
@@ -62,8 +62,8 @@ function f5(x) {
     var r1 = true ? x : 1; // ok
 }
 function f6(x) {
-    var r2 = true ? "" : x; // ok
-    var r2 = true ? x : ""; // ok
+    var r2 = true ? '' : x; // ok
+    var r2 = true ? x : ''; // ok
 }
 function f7(x) {
     var r3 = true ? true : x; // ok

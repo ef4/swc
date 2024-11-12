@@ -1,18 +1,18 @@
 use swc_atoms::JsWord;
 use swc_ecma_ast::*;
 use swc_ecma_utils::private_ident;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut};
 use swc_trace_macro::swc_trace;
 
-pub fn export_namespace_from() -> impl Fold + VisitMut {
-    as_folder(ExportNamespaceFrom)
+pub fn export_namespace_from() -> impl Pass {
+    visit_mut_pass(ExportNamespaceFrom)
 }
 
 struct ExportNamespaceFrom;
 
 #[swc_trace]
 impl VisitMut for ExportNamespaceFrom {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_module_items(&mut self, items: &mut Vec<ModuleItem>) {
         let count = items
@@ -42,10 +42,10 @@ impl VisitMut for ExportNamespaceFrom {
                     type_only: false,
                     with,
                 })) if specifiers.iter().any(|s| s.is_namespace()) => {
-                    let mut origin_specifiers = vec![];
+                    let mut origin_specifiers = Vec::new();
 
-                    let mut import_specifiers = vec![];
-                    let mut export_specifiers = vec![];
+                    let mut import_specifiers = Vec::new();
+                    let mut export_specifiers = Vec::new();
 
                     for s in specifiers.into_iter() {
                         match s {
@@ -74,35 +74,40 @@ impl VisitMut for ExportNamespaceFrom {
                         }
                     }
 
-                    stmts.push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
-                        span,
-                        specifiers: import_specifiers,
-                        src: src.clone(),
-                        type_only: false,
-                        with: with.clone(),
-                        phase: Default::default(),
-                    })));
+                    stmts.push(
+                        ImportDecl {
+                            span,
+                            specifiers: import_specifiers,
+                            src: src.clone(),
+                            type_only: false,
+                            with: with.clone(),
+                            phase: Default::default(),
+                        }
+                        .into(),
+                    );
 
-                    stmts.push(ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(
+                    stmts.push(
                         NamedExport {
                             span,
                             specifiers: export_specifiers,
                             src: None,
                             type_only: false,
                             with: None,
-                        },
-                    )));
+                        }
+                        .into(),
+                    );
 
                     if !origin_specifiers.is_empty() {
-                        stmts.push(ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(
+                        stmts.push(
                             NamedExport {
                                 span,
                                 specifiers: origin_specifiers,
                                 src: Some(src),
                                 type_only: false,
                                 with,
-                            },
-                        )));
+                            }
+                            .into(),
+                        );
                     }
                 }
                 _ => {

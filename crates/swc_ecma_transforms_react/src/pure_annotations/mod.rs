@@ -1,20 +1,22 @@
 use swc_atoms::JsWord;
 use swc_common::{collections::AHashMap, comments::Comments, Span};
 use swc_ecma_ast::*;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
 #[cfg(test)]
 mod tests;
 
+/// A pass to add a /*#__PURE__#/ annotation to calls to known pure calls.
+///
 /// This pass adds a /*#__PURE__#/ annotation to calls to known pure top-level
 /// React methods, so that terser and other minifiers can safely remove them
 /// during dead code elimination.
 /// See https://reactjs.org/docs/react-api.html
-pub fn pure_annotations<C>(comments: Option<C>) -> impl Fold + VisitMut
+pub fn pure_annotations<C>(comments: Option<C>) -> impl Pass
 where
     C: Comments,
 {
-    as_folder(PureAnnotations {
+    visit_mut_pass(PureAnnotations {
         imports: Default::default(),
         comments,
     })

@@ -2,7 +2,6 @@
 // members N and M of types S and T have the same name, same accessibility, same optionality, and N is assignable M
 // string named numeric properties work correctly, errors below unless otherwise noted
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
-var JustStrings;
 (function(JustStrings) {
     var S = function S() {
         "use strict";
@@ -19,10 +18,10 @@ var JustStrings;
     var a;
     var b;
     var a2 = {
-        "1.0": ""
+        '1.0': ''
     };
     var b2 = {
-        "1": ""
+        '1': ''
     };
     s = t;
     t = s;
@@ -44,7 +43,6 @@ var JustStrings;
     a2 = t2; // ok
     a2 = t;
 })(JustStrings || (JustStrings = {}));
-var NumbersAndStrings;
 (function(NumbersAndStrings) {
     var S = function S() {
         "use strict";
@@ -61,10 +59,10 @@ var NumbersAndStrings;
     var a;
     var b;
     var a2 = {
-        "1.0": ""
+        '1.0': ''
     };
     var b2 = {
-        1.: ""
+        1.: ''
     };
     s = t; // ok
     t = s; // ok
@@ -87,3 +85,4 @@ var NumbersAndStrings;
     a2 = t2; // error
     a2 = t; // error
 })(NumbersAndStrings || (NumbersAndStrings = {}));
+var JustStrings, NumbersAndStrings;

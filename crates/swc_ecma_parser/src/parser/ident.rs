@@ -6,7 +6,7 @@ use super::*;
 use crate::token::{IdentLike, Keyword};
 
 impl<I: Tokens> Parser<I> {
-    pub(super) fn parse_maybe_private_name(&mut self) -> PResult<Either<PrivateName, Ident>> {
+    pub(super) fn parse_maybe_private_name(&mut self) -> PResult<Either<PrivateName, IdentName>> {
         let is_private = is!(self, '#');
 
         if is_private {
@@ -32,7 +32,7 @@ impl<I: Tokens> Parser<I> {
         let id = self.parse_ident_name()?;
         Ok(PrivateName {
             span: span!(self, start),
-            id,
+            name: id.sym,
         })
     }
 
@@ -52,18 +52,18 @@ impl<I: Tokens> Parser<I> {
 
     /// Use this when spec says "IdentifierName".
     /// This allows idents like `catch`.
-    pub(super) fn parse_ident_name(&mut self) -> PResult<Ident> {
+    pub(super) fn parse_ident_name(&mut self) -> PResult<IdentName> {
         let in_type = self.ctx().in_type;
 
         let start = cur_pos!(self);
 
         let w = match cur!(self, true) {
-            Ok(&Word(..)) => match bump!(self) {
+            Word(..) => match bump!(self) {
                 Word(w) => w.into(),
                 _ => unreachable!(),
             },
 
-            Ok(&Token::JSXName { .. }) if in_type => match bump!(self) {
+            Token::JSXName { .. } if in_type => match bump!(self) {
                 Token::JSXName { name } => name,
                 _ => unreachable!(),
             },
@@ -71,7 +71,7 @@ impl<I: Tokens> Parser<I> {
             _ => syntax_error!(self, SyntaxError::ExpectedIdent),
         };
 
-        Ok(Ident::new(w, span!(self, start)))
+        Ok(IdentName::new(w, span!(self, start)))
     }
 
     // https://tc39.es/ecma262/#prod-ModuleExportName
@@ -81,7 +81,7 @@ impl<I: Tokens> Parser<I> {
                 Lit::Str(str_lit) => ModuleExportName::Str(str_lit),
                 _ => unreachable!(),
             },
-            Ok(&Word(..)) => ModuleExportName::Ident(self.parse_ident_name()?),
+            Ok(&Word(..)) => ModuleExportName::Ident(self.parse_ident_name()?.into()),
             _ => {
                 unexpected!(self, "identifier or string");
             }
@@ -99,7 +99,7 @@ impl<I: Tokens> Parser<I> {
 
         let word = self.parse_with(|p| {
             let w = match cur!(p, true) {
-                Ok(&Word(..)) => match bump!(p) {
+                &Word(..) => match bump!(p) {
                     Word(w) => w,
                     _ => unreachable!(),
                 },
@@ -174,6 +174,6 @@ impl<I: Tokens> Parser<I> {
             }
         })?;
 
-        Ok(Ident::new(word, span!(self, start)))
+        Ok(Ident::new_no_ctxt(word, span!(self, start)))
     }
 }

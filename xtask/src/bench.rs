@@ -15,6 +15,10 @@ pub(super) struct BenchCmd {
     #[clap(long)]
     debug: bool,
 
+    /// Template to use while instrumenting
+    #[clap(short = 't')]
+    template: Option<String>,
+
     #[clap(long)]
     no_lib: bool,
 
@@ -28,6 +32,10 @@ pub(super) struct BenchCmd {
     #[clap(long)]
     instrument: bool,
 
+    /// Instrument using https://github.com/mstange/samply
+    #[clap(long)]
+    samply: bool,
+
     #[clap(long)]
     features: Vec<String>,
 
@@ -39,23 +47,33 @@ impl BenchCmd {
         let mut cmd = self.build_cmd()?;
 
         cmd.env("RUST_LOG", "off");
+        cmd.env("CARGO_PROFILE_RELEASE_DEBUG", "true");
+        cmd.env("CARGO_PROFILE_BENCH_DEBUG", "true");
 
         run_cmd(&mut cmd)
     }
 
     fn build_cmd(&self) -> Result<Command> {
-        let mut cmd = if self.instrument {
+        let mut cmd = if self.samply {
             // ddt profile instruments cargo -t time
             let mut cmd = Command::new("ddt");
-            cmd.arg("profile").arg("instruments").arg("cargo");
-            cmd.arg("-t").arg("time");
+            cmd.arg("profile").arg("samply").arg("cargo");
 
             if !self.debug {
                 cmd.arg("--release");
             }
 
-            // TODO: This should use cargo metadata
-            cmd.current_dir(repository_root()?.join("crates").join(&self.package));
+            cmd
+        } else if self.instrument {
+            // ddt profile instruments cargo -t time
+            let mut cmd = Command::new("ddt");
+            cmd.arg("profile").arg("instruments").arg("cargo");
+            cmd.arg("-t")
+                .arg(self.template.as_deref().unwrap_or("time"));
+
+            if !self.debug {
+                cmd.arg("--release");
+            }
 
             cmd
         } else {
@@ -83,11 +101,14 @@ impl BenchCmd {
             cmd.arg("--features").arg(f);
         }
 
-        if self.instrument {
+        if self.samply || self.instrument {
             cmd.arg("--").arg("--bench").args(&self.args);
         } else {
             cmd.arg("--").args(&self.args);
         }
+
+        // TODO: This should use cargo metadata
+        cmd.current_dir(repository_root()?.join("crates").join(&self.package));
 
         Ok(cmd)
     }

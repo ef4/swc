@@ -6,7 +6,7 @@ use swc_ecma_utils::{
     function::{init_this, FnEnvHoister},
     prepend_stmt,
 };
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, InjectVars, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, InjectVars, VisitMut, VisitMutWith};
 use swc_trace_macro::swc_trace;
 
 /// Compile ES2015 arrow functions to ES5
@@ -57,8 +57,8 @@ use swc_trace_macro::swc_trace;
 /// };
 /// console.log(bob.printFriends());
 /// ```
-pub fn arrow(unresolved_mark: Mark) -> impl Fold + VisitMut + InjectVars {
-    as_folder(Arrow {
+pub fn arrow(unresolved_mark: Mark) -> impl Pass + VisitMut + InjectVars {
+    visit_mut_pass(Arrow {
         in_subclass: false,
         hoister: FnEnvHoister::new(SyntaxContext::empty().apply_mark(unresolved_mark)),
     })
@@ -72,20 +72,22 @@ struct Arrow {
 
 #[swc_trace]
 impl VisitMut for Arrow {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_class(&mut self, c: &mut Class) {
+        let old = self.in_subclass;
+
         if c.super_class.is_some() {
             self.in_subclass = true;
         }
         c.visit_mut_children_with(self);
-        self.in_subclass = false;
+        self.in_subclass = old;
     }
 
     fn visit_mut_constructor(&mut self, c: &mut Constructor) {
         c.params.visit_mut_children_with(self);
 
-        if let Some(BlockStmt { span: _, stmts }) = &mut c.body {
+        if let Some(BlockStmt { span: _, stmts, .. }) = &mut c.body {
             let old_rep = self.hoister.take();
 
             stmts.visit_mut_children_with(self);
@@ -138,7 +140,7 @@ impl VisitMut for Arrow {
                 body.visit_mut_with(&mut self.hoister);
 
                 let fn_expr = Function {
-                    decorators: vec![],
+                    decorators: Vec::new(),
                     span: *span,
                     params,
                     is_async: *is_async,
@@ -154,10 +156,10 @@ impl VisitMut for Arrow {
                                 span: DUMMY_SP,
                                 arg: Some(expr.take()),
                             })],
+                            ..Default::default()
                         },
                     }),
-                    type_params: Default::default(),
-                    return_type: Default::default(),
+                    ..Default::default()
                 }
                 .into();
 
@@ -181,13 +183,29 @@ impl VisitMut for Arrow {
         }
     }
 
+    fn visit_mut_getter_prop(&mut self, f: &mut GetterProp) {
+        f.key.visit_mut_with(self);
+
+        if let Some(body) = &mut f.body {
+            let old_rep = self.hoister.take();
+
+            body.visit_mut_with(self);
+
+            let decl = mem::replace(&mut self.hoister, old_rep).to_stmt();
+
+            if let Some(stmt) = decl {
+                prepend_stmt(&mut body.stmts, stmt);
+            }
+        }
+    }
+
     fn visit_mut_module_items(&mut self, stmts: &mut Vec<ModuleItem>) {
         stmts.visit_mut_children_with(self);
 
         let decl = self.hoister.take().to_stmt();
 
         if let Some(stmt) = decl {
-            prepend_stmt(stmts, ModuleItem::Stmt(stmt));
+            prepend_stmt(stmts, stmt.into());
         }
     }
 
@@ -198,6 +216,23 @@ impl VisitMut for Arrow {
 
         if let Some(stmt) = decl {
             prepend_stmt(&mut script.body, stmt);
+        }
+    }
+
+    fn visit_mut_setter_prop(&mut self, f: &mut SetterProp) {
+        f.key.visit_mut_with(self);
+        f.param.visit_mut_with(self);
+
+        if let Some(body) = &mut f.body {
+            let old_rep = self.hoister.take();
+
+            body.visit_mut_with(self);
+
+            let decl = mem::replace(&mut self.hoister, old_rep).to_stmt();
+
+            if let Some(stmt) = decl {
+                prepend_stmt(&mut body.stmts, stmt);
+            }
         }
     }
 }

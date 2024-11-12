@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use rustc_hash::FxHashSet;
+use swc_allocator::{collections::FxHashSet, maybe::vec::Vec};
 use swc_common::{sync::Lrc, BytePos, LineCol, SourceMap, Span};
 
 use super::{Result, WriteJs};
@@ -72,15 +72,12 @@ impl<'a, W: Write> JsWriter<'a, W> {
 
     #[inline]
     fn raw_write(&mut self, data: &str) -> Result {
-        // #[cfg(debug_assertions)]
-        // tracing::trace!("Write: `{}`", data);
         self.wr.write_all(data.as_bytes())?;
 
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write(&mut self, span: Option<Span>, data: &str) -> Result {
         if !data.is_empty() {
             if self.line_start {
@@ -138,16 +135,13 @@ impl<'a, W: Write> JsWriter<'a, W> {
                     col: self.line_pos as _,
                 };
 
-                // #[cfg(debug_assertions)]
-                // tracing::trace!("SourceMap: {:?} => {:?}", byte_pos, loc);
-
                 srcmap.push((byte_pos, loc));
             }
         }
     }
 }
 
-impl<'a, W: Write> WriteJs for JsWriter<'a, W> {
+impl<W: Write> WriteJs for JsWriter<'_, W> {
     #[inline]
     fn increase_indent(&mut self) -> Result {
         self.indent += 1;
@@ -167,42 +161,36 @@ impl<'a, W: Write> WriteJs for JsWriter<'a, W> {
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_space(&mut self) -> Result {
         self.write(None, " ")?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_keyword(&mut self, span: Option<Span>, s: &'static str) -> Result {
         self.write(span, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_operator(&mut self, span: Option<Span>, s: &str) -> Result {
         self.write(span, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_param(&mut self, s: &str) -> Result {
         self.write(None, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_property(&mut self, s: &str) -> Result {
         self.write(None, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_line(&mut self) -> Result {
         let pending = self.pending_srcmap.take();
         if !self.line_start {
@@ -222,7 +210,6 @@ impl<'a, W: Write> WriteJs for JsWriter<'a, W> {
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_lit(&mut self, span: Span, s: &str) -> Result {
         if !s.is_empty() {
             self.srcmap(span.lo());
@@ -234,14 +221,12 @@ impl<'a, W: Write> WriteJs for JsWriter<'a, W> {
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_comment(&mut self, s: &str) -> Result {
         self.write(None, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_str_lit(&mut self, span: Span, s: &str) -> Result {
         if !s.is_empty() {
             self.srcmap(span.lo());
@@ -253,34 +238,29 @@ impl<'a, W: Write> WriteJs for JsWriter<'a, W> {
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_str(&mut self, s: &str) -> Result {
         self.write(None, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_symbol(&mut self, span: Span, s: &str) -> Result {
         self.write(Some(span), s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn write_punct(&mut self, span: Option<Span>, s: &'static str) -> Result {
         self.write(span, s)?;
         Ok(())
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn care_about_srcmap(&self) -> bool {
         self.srcmap.is_some()
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn add_srcmap(&mut self, pos: BytePos) -> Result {
         if self.srcmap.is_some() {
             if self.line_start {
@@ -293,7 +273,6 @@ impl<'a, W: Write> WriteJs for JsWriter<'a, W> {
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
     fn commit_pending_semi(&mut self) -> Result {
         Ok(())
     }

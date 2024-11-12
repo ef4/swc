@@ -4,11 +4,11 @@ use swc_atoms::JsWord;
 use swc_common::{
     collections::AHashMap,
     util::{move_map::MoveMap, take::Take},
-    Spanned, DUMMY_SP,
+    BytePos, Spanned, DUMMY_SP,
 };
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::helper;
-use swc_ecma_utils::{quote_ident, undefined, ExprFactory};
+use swc_ecma_utils::{quote_ident, ExprFactory};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
 
 use super::EnumKind;
@@ -60,15 +60,43 @@ impl VisitMut for ParamMetadata {
 }
 
 impl ParamMetadata {
-    fn create_param_decorator(&self, param_index: usize, decorator_expr: Box<Expr>) -> Decorator {
+    fn create_param_decorator(
+        &self,
+        param_index: usize,
+        mut decorator_expr: Box<Expr>,
+    ) -> Decorator {
+        remove_span(&mut decorator_expr);
+
         Decorator {
             span: DUMMY_SP,
-            expr: Box::new(Expr::Call(CallExpr {
-                span: decorator_expr.span(),
+            expr: CallExpr {
+                span: DUMMY_SP,
                 callee: helper!(ts, ts_param),
                 args: vec![param_index.as_arg(), decorator_expr.as_arg()],
-                type_args: Default::default(),
-            })),
+                ..Default::default()
+            }
+            .into(),
+        }
+    }
+}
+
+pub(super) fn remove_span(e: &mut Expr) {
+    match e {
+        Expr::Member(m) => {
+            m.span = DUMMY_SP;
+            remove_span(&mut m.obj);
+        }
+        Expr::Call(c) => {
+            c.span = DUMMY_SP;
+            if let Callee::Expr(e) = &mut c.callee {
+                remove_span(e);
+            }
+            for arg in &mut c.args {
+                remove_span(&mut arg.expr);
+            }
+        }
+        _ => {
+            e.set_span(DUMMY_SP);
         }
     }
 }
@@ -164,8 +192,25 @@ impl VisitMut for Metadata<'_> {
         }
 
         {
-            let dec = self
-                .create_metadata_design_decorator("design:type", quote_ident!("Function").as_arg());
+            let type_arg = match m.kind {
+                MethodKind::Method => quote_ident!("Function").as_arg(),
+                MethodKind::Getter => {
+                    let return_type = m.function.return_type.as_deref();
+
+                    if let Some(kind) = self.enums.get_kind_as_str(return_type) {
+                        quote_ident!(kind).as_arg()
+                    } else {
+                        serialize_type(self.class_name, return_type).as_arg()
+                    }
+                }
+                MethodKind::Setter => serialize_type(
+                    self.class_name,
+                    get_type_ann_of_pat(&m.function.params[0].pat),
+                )
+                .as_arg(),
+            };
+
+            let dec = self.create_metadata_design_decorator("design:type", type_arg);
             m.function.decorators.push(dec);
         }
         {
@@ -189,7 +234,9 @@ impl VisitMut for Metadata<'_> {
             );
             m.function.decorators.push(dec);
         }
-        {
+
+        // https://github.com/microsoft/TypeScript/blob/2a8865e6ba95c9bdcdb9e2c9c08f10c5f5c75391/src/compiler/transformers/ts.ts#L1180
+        if m.kind == MethodKind::Method {
             // Copy tsc behaviour
             // https://github.com/microsoft/TypeScript/blob/5e8c261b6ab746213f19ee3501eb8c48a6215dd7/src/compiler/transformers/typeSerializer.ts#L242
             let dec = self.create_metadata_design_decorator(
@@ -239,12 +286,13 @@ impl<'a> Metadata<'a> {
     fn create_metadata_design_decorator(&self, design: &str, type_arg: ExprOrSpread) -> Decorator {
         Decorator {
             span: DUMMY_SP,
-            expr: Box::new(Expr::Call(CallExpr {
+            expr: CallExpr {
                 span: DUMMY_SP,
                 callee: helper!(ts, ts_metadata),
                 args: vec![design.as_arg(), type_arg],
-                type_args: Default::default(),
-            })),
+                ..Default::default()
+            }
+            .into(),
         }
     }
 }
@@ -254,40 +302,51 @@ fn serialize_type(class_name: Option<&Ident>, param: Option<&TsTypeAnn>) -> Expr
         match *expr {
             Expr::Member(ref member_expr) => {
                 let obj_expr = member_expr.obj.clone();
-                Box::new(Expr::Bin(BinExpr {
+                BinExpr {
                     span: DUMMY_SP,
                     left: check_object_existed(obj_expr),
                     op: op!("||"),
-                    right: Box::new(Expr::Bin(BinExpr {
-                        span: DUMMY_SP,
-                        left: Box::new(Expr::Unary(UnaryExpr {
+                    right: Box::new(
+                        BinExpr {
                             span: DUMMY_SP,
-                            op: op!("typeof"),
-                            arg: expr,
-                        })),
-                        op: op!("==="),
-                        right: Box::new(Expr::Lit(Lit::Str(Str {
-                            span: DUMMY_SP,
-                            value: "undefined".into(),
-                            raw: None,
-                        }))),
-                    })),
-                }))
+                            left: Box::new(Expr::Unary(UnaryExpr {
+                                span: DUMMY_SP,
+                                op: op!("typeof"),
+                                arg: expr,
+                            })),
+                            op: op!("==="),
+                            right: Box::new(Expr::Lit(Lit::Str(Str {
+                                span: DUMMY_SP,
+                                value: "undefined".into(),
+                                raw: None,
+                            }))),
+                        }
+                        .into(),
+                    ),
+                }
+                .into()
             }
-            _ => Box::new(Expr::Bin(BinExpr {
+            _ => BinExpr {
                 span: DUMMY_SP,
-                left: Box::new(Expr::Unary(UnaryExpr {
-                    span: DUMMY_SP,
-                    op: op!("typeof"),
-                    arg: expr,
-                })),
+                left: Box::new(
+                    UnaryExpr {
+                        span: DUMMY_SP,
+                        op: op!("typeof"),
+                        arg: expr,
+                    }
+                    .into(),
+                ),
                 op: op!("==="),
-                right: Box::new(Expr::Lit(Lit::Str(Str {
-                    span: DUMMY_SP,
-                    value: "undefined".into(),
-                    raw: None,
-                }))),
-            })),
+                right: Box::new(
+                    Lit::Str(Str {
+                        span: DUMMY_SP,
+                        value: "undefined".into(),
+                        raw: None,
+                    })
+                    .into(),
+                ),
+            }
+            .into(),
         }
     }
 
@@ -309,12 +368,13 @@ fn serialize_type(class_name: Option<&Ident>, param: Option<&TsTypeAnn>) -> Expr
         // `typeof` operator allows us to use the expression even if it is not defined,
         // fallback is just `Object`.
 
-        Expr::Cond(CondExpr {
+        CondExpr {
             span: DUMMY_SP,
             test: check_object_existed(Box::new(member_expr.clone())),
             cons: Box::new(quote_ident!("Object").into()),
             alt: Box::new(member_expr),
-        })
+        }
+        .into()
     }
 
     fn serialize_type_list(class_name: &str, types: &[Box<TsType>]) -> Expr {
@@ -405,7 +465,7 @@ fn serialize_type(class_name: Option<&Ident>, param: Option<&TsTypeAnn>) -> Expr
             | TsType::TsKeywordType(TsKeywordType {
                 kind: TsKeywordTypeKind::TsNeverKeyword,
                 ..
-            }) => *undefined(span),
+            }) => *Expr::undefined(span),
 
             TsType::TsParenthesizedType(ty) => serialize_type_node(class_name, &ty.type_ann),
 
@@ -442,12 +502,13 @@ fn serialize_type(class_name: Option<&Ident>, param: Option<&TsTypeAnn>) -> Expr
             TsType::TsKeywordType(TsKeywordType {
                 kind: TsKeywordTypeKind::TsBigIntKeyword,
                 ..
-            }) => Expr::Cond(CondExpr {
+            }) => CondExpr {
                 span: DUMMY_SP,
                 test: check_object_existed(quote_ident!("BigInt").into()),
                 cons: quote_ident!("Object").into(),
                 alt: quote_ident!("BigInt").into(),
-            }),
+            }
+            .into(),
 
             TsType::TsLitType(ty) => {
                 // TODO: Proper error reporting
@@ -495,7 +556,7 @@ fn serialize_type(class_name: Option<&Ident>, param: Option<&TsTypeAnn>) -> Expr
 
     let param = match param {
         Some(v) => &v.type_ann,
-        None => return *undefined(DUMMY_SP),
+        None => return *Expr::undefined(DUMMY_SP),
     };
 
     serialize_type_node(class_name.map(|v| &*v.sym).unwrap_or(""), param)
@@ -506,13 +567,14 @@ fn ts_entity_to_member_expr(type_name: &TsEntityName) -> Expr {
         TsEntityName::TsQualifiedName(q) => {
             let obj = ts_entity_to_member_expr(&q.left);
 
-            Expr::Member(MemberExpr {
+            MemberExpr {
                 span: DUMMY_SP,
                 obj: obj.into(),
                 prop: MemberProp::Ident(q.right.clone()),
-            })
+            }
+            .into()
         }
-        TsEntityName::Ident(i) => Expr::Ident(i.clone()),
+        TsEntityName::Ident(i) => i.clone().with_pos(BytePos::DUMMY, BytePos::DUMMY).into(),
     }
 }
 
@@ -522,9 +584,7 @@ fn get_type_ann_of_pat(p: &Pat) -> Option<&TsTypeAnn> {
         Pat::Array(p) => p.type_ann.as_deref(),
         Pat::Rest(p) => p.type_ann.as_deref(),
         Pat::Object(p) => p.type_ann.as_deref(),
-        Pat::Assign(p) => {
-            return get_type_ann_of_pat(&p.left);
-        }
+        Pat::Assign(p) => get_type_ann_of_pat(&p.left),
         Pat::Invalid(_) => None,
         Pat::Expr(_) => None,
     }

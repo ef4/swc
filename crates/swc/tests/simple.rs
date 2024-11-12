@@ -4,7 +4,7 @@ use swc::{
 };
 use swc_common::FileName;
 use swc_ecma_ast::EsVersion;
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_ecma_parser::{Syntax, TsSyntax};
 use testing::Tester;
 
 fn compile(src: &str, options: Options) -> String {
@@ -12,7 +12,7 @@ fn compile(src: &str, options: Options) -> String {
         .print_errors(|cm, handler| {
             let c = Compiler::new(cm.clone());
 
-            let fm = cm.new_source_file(FileName::Real("input.js".into()), src.into());
+            let fm = cm.new_source_file(FileName::Real("input.js".into()).into(), src.into());
             let s = c.process_js_file(fm, &handler, &options);
 
             match s {
@@ -96,7 +96,7 @@ fn test_tsx_escape_xhtml() {
         Options {
             config: Config {
                 jsc: JscConfig {
-                    syntax: Some(Syntax::Typescript(TsConfig {
+                    syntax: Some(Syntax::Typescript(TsSyntax {
                         tsx: true,
                         ..Default::default()
                     })),
@@ -117,7 +117,7 @@ fn test_tsx_escape_xhtml() {
         Options {
             config: Config {
                 jsc: JscConfig {
-                    syntax: Some(Syntax::Typescript(TsConfig {
+                    syntax: Some(Syntax::Typescript(TsSyntax {
                         tsx: true,
                         ..Default::default()
                     })),

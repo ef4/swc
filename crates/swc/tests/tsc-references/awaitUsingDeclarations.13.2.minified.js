@@ -1,11 +1,16 @@
 //// [awaitUsingDeclarations.13.ts]
-import { _ as _dispose } from "@swc/helpers/_/_dispose";
-import { _ as _using } from "@swc/helpers/_/_using";
+import { _ as _ts_add_disposable_resource } from "@swc/helpers/_/_ts_add_disposable_resource";
+import { _ as _ts_dispose_resources } from "@swc/helpers/_/_ts_dispose_resources";
+let env = {
+    stack: [],
+    error: void 0,
+    hasError: !1
+};
 try {
-    var _stack = [];
-    _using(_stack, null, !0);
-} catch (_) {
-    var _error = _, _hasError = !0;
+    _ts_add_disposable_resource(env, null, !0);
+} catch (e) {
+    env.error = e, env.hasError = !0;
 } finally{
-    await _dispose(_stack, _error, _hasError);
+    let result = _ts_dispose_resources(env);
+    result && await result;
 }

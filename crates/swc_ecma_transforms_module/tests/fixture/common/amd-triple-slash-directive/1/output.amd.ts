@@ -4,10 +4,10 @@ define("NamedModule", [
 ], function(require) {
     "use strict";
     class Foo {
-        x: number;
+        x;
         constructor(){
             this.x = 5;
         }
     }
-    return Foo;
+    module.exports = Foo;
 });

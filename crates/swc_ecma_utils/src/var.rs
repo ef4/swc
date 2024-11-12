@@ -9,8 +9,8 @@ pub struct VarCollector<'a, I: IdentLike> {
     pub to: &'a mut Vec<I>,
 }
 
-impl<'a, I: IdentLike> Visit for VarCollector<'a, I> {
-    noop_visit_type!();
+impl<I: IdentLike> Visit for VarCollector<'_, I> {
+    noop_visit_type!(fail);
 
     fn visit_arrow_expr(&mut self, _: &ArrowExpr) {}
 

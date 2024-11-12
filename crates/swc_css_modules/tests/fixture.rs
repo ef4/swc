@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use rustc_hash::FxHashMap;
+use indexmap::IndexMap;
 use serde::Serialize;
 use swc_atoms::JsWord;
 use swc_css_codegen::{
@@ -15,7 +15,7 @@ use testing::NormalizedOutput;
 fn imports(input: PathBuf) {
     testing::run_test(false, |cm, _| {
         let fm = cm.load_file(&input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let ss = swc_css_parser::parse_file(
             &fm,
             None,
@@ -49,7 +49,7 @@ fn imports(input: PathBuf) {
 fn compile(input: PathBuf) {
     testing::run_test(false, |cm, _| {
         let fm = cm.load_file(&input).unwrap();
-        let mut errors = vec![];
+        let mut errors = Vec::new();
         let mut ss = swc_css_parser::parse_file(
             &fm,
             None,
@@ -89,7 +89,7 @@ fn compile(input: PathBuf) {
             .unwrap();
 
         if !transform_result.renamed.is_empty() {
-            let transformed_classes = &transform_result
+            let mut transformed_classes = transform_result
                 .renamed
                 .into_iter()
                 .map(|(k, v)| {
@@ -113,7 +113,9 @@ fn compile(input: PathBuf) {
                             .collect::<Vec<_>>(),
                     )
                 })
-                .collect::<FxHashMap<_, _>>();
+                .collect::<IndexMap<_, _>>();
+
+            transformed_classes.sort_keys();
 
             NormalizedOutput::compare_json_to_file(
                 &transformed_classes,

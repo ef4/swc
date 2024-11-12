@@ -1,13 +1,15 @@
 use swc_ecma_ast::*;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 use swc_trace_macro::swc_trace;
 
+/// A bugfix pass for Edge.
+///
 /// Converts destructured parameters with default values to non-shorthand
 /// syntax. This fixes the only arguments-related bug in ES Modules-supporting
 /// browsers (Edge 16 & 17). Use this plugin instead of
 /// @babel/plugin-transform-parameters when targeting ES Modules.
-pub fn edge_default_param() -> impl Fold + VisitMut {
-    as_folder(EdgeDefaultParam::default())
+pub fn edge_default_param() -> impl Pass {
+    visit_mut_pass(EdgeDefaultParam::default())
 }
 #[derive(Default, Clone, Copy)]
 struct EdgeDefaultParam {
@@ -16,7 +18,7 @@ struct EdgeDefaultParam {
 
 #[swc_trace]
 impl VisitMut for EdgeDefaultParam {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_arrow_expr(&mut self, n: &mut ArrowExpr) {
         self.in_arrow = true;
@@ -44,11 +46,12 @@ impl VisitMut for EdgeDefaultParam {
             {
                 let prop = ObjectPatProp::KeyValue(KeyValuePatProp {
                     key: PropName::Ident(key.clone().into()),
-                    value: Box::new(Pat::Assign(AssignPat {
+                    value: AssignPat {
                         span: *span,
                         left: key.clone().into(),
                         right: value.clone(),
-                    })),
+                    }
+                    .into(),
                 });
 
                 n.props[idx] = prop;
@@ -59,16 +62,16 @@ impl VisitMut for EdgeDefaultParam {
 
 #[cfg(test)]
 mod tests {
-    use swc_common::{chain, Mark};
+    use swc_common::Mark;
     use swc_ecma_transforms_base::resolver;
     use swc_ecma_transforms_testing::test;
 
     use super::*;
 
-    fn tr() -> impl Fold {
-        chain!(
+    fn tr() -> impl Pass {
+        (
             resolver(Mark::new(), Mark::new(), false),
-            edge_default_param()
+            edge_default_param(),
         )
     }
 

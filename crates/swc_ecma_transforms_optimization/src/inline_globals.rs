@@ -6,7 +6,7 @@ use swc_common::{
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::perf::{ParVisitMut, Parallel};
 use swc_ecma_utils::{collect_decls, parallel::cpu_count, NodeIgnoringSpan};
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
 /// The key will be compared using [EqIgnoreSpan::eq_ignore_span], and matched
 /// expressions will be replaced with the value.
@@ -18,7 +18,7 @@ pub fn inline_globals(
     envs: Lrc<AHashMap<JsWord, Expr>>,
     globals: Lrc<AHashMap<JsWord, Expr>>,
     typeofs: Lrc<AHashMap<JsWord, JsWord>>,
-) -> impl Fold + VisitMut {
+) -> impl Pass {
     inline_globals2(envs, globals, Default::default(), typeofs)
 }
 
@@ -33,8 +33,8 @@ pub fn inline_globals2(
     globals: Lrc<AHashMap<JsWord, Expr>>,
     global_exprs: GlobalExprMap,
     typeofs: Lrc<AHashMap<JsWord, JsWord>>,
-) -> impl Fold + VisitMut {
-    as_folder(InlineGlobals {
+) -> impl Pass {
+    visit_mut_pass(InlineGlobals {
         envs,
         globals,
         global_exprs,
@@ -63,11 +63,11 @@ impl Parallel for InlineGlobals {
 }
 
 impl VisitMut for InlineGlobals {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
-        if let Expr::Ident(Ident { ref sym, span, .. }) = expr {
-            if self.bindings.contains(&(sym.clone(), span.ctxt)) {
+        if let Expr::Ident(Ident { ref sym, ctxt, .. }) = expr {
+            if self.bindings.contains(&(sym.clone(), *ctxt)) {
                 return;
             }
         }
@@ -100,21 +100,22 @@ impl VisitMut for InlineGlobals {
             }) => {
                 if let Expr::Ident(Ident {
                     ref sym,
-                    span: arg_span,
+                    ctxt: arg_ctxt,
                     ..
                 }) = &**arg
                 {
-                    if self.bindings.contains(&(sym.clone(), arg_span.ctxt)) {
+                    if self.bindings.contains(&(sym.clone(), *arg_ctxt)) {
                         return;
                     }
 
                     // It's ok because we don't recurse into member expressions.
                     if let Some(value) = self.typeofs.get(sym).cloned() {
-                        *expr = Expr::Lit(Lit::Str(Str {
+                        *expr = Lit::Str(Str {
                             span: *span,
                             raw: None,
                             value,
-                        }));
+                        })
+                        .into();
                     }
                 }
             }
@@ -135,7 +136,7 @@ impl VisitMut for InlineGlobals {
                                 }
                             }
 
-                            MemberProp::Ident(Ident { sym, .. }) => {
+                            MemberProp::Ident(IdentName { sym, .. }) => {
                                 if let Some(env) = self.envs.get(sym) {
                                     *expr = env.clone();
                                 }
@@ -168,7 +169,7 @@ impl VisitMut for InlineGlobals {
             if let Some(mut value) = self.globals.get(&i.sym).cloned().map(Box::new) {
                 value.visit_mut_with(self);
                 *p = Prop::KeyValue(KeyValueProp {
-                    key: PropName::Ident(i.clone()),
+                    key: PropName::Ident(i.clone().into()),
                     value,
                 });
             }
@@ -201,8 +202,7 @@ impl VisitMut for InlineGlobals {
 #[cfg(test)]
 mod tests {
     use swc_ecma_transforms_testing::{test, Tester};
-    use swc_ecma_utils::DropSpan;
-    use swc_ecma_visit::as_folder;
+    use swc_ecma_utils::{DropSpan, StmtOrModuleItem};
 
     use super::*;
 
@@ -220,19 +220,23 @@ mod tests {
                 (*v).into()
             };
 
-            let mut v = tester
+            let v = tester
                 .apply_transform(
-                    as_folder(DropSpan {
-                        preserve_ctxt: false,
-                    }),
+                    visit_mut_pass(DropSpan),
                     "global.js",
                     ::swc_ecma_parser::Syntax::default(),
+                    None,
                     &v,
                 )
                 .unwrap();
-            assert_eq!(v.body.len(), 1);
-            let v = match v.body.pop().unwrap() {
-                ModuleItem::Stmt(Stmt::Expr(ExprStmt { expr, .. })) => *expr,
+
+            let v = match v {
+                Program::Module(mut m) => m.body.pop().and_then(|x| x.into_stmt().ok()),
+                Program::Script(mut s) => s.body.pop(),
+            };
+            assert!(v.is_some());
+            let v = match v.unwrap() {
+                Stmt::Expr(ExprStmt { expr, .. }) => *expr,
                 _ => unreachable!(),
             };
 

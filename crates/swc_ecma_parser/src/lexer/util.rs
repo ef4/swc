@@ -4,10 +4,9 @@
 //! [babylon/util/identifier.js]:https://github.com/babel/babel/blob/master/packages/babylon/src/util/identifier.js
 use std::char;
 
-use smartstring::{LazyCompact, SmartString};
 use swc_common::{
     comments::{Comment, CommentKind},
-    BytePos, Span, SyntaxContext,
+    BytePos, Span,
 };
 use swc_ecma_ast::Ident;
 use tracing::warn;
@@ -22,35 +21,7 @@ use crate::{
     Tokens,
 };
 
-/// Collector for raw string.
-///
-/// Methods of this struct is noop if the value is [None].
-pub(super) struct Raw(pub Option<SmartString<LazyCompact>>);
-
-impl Raw {
-    #[inline]
-    pub fn push_str(&mut self, s: &str) {
-        if let Some(ref mut st) = self.0 {
-            st.push_str(s)
-        }
-    }
-
-    #[inline]
-    pub fn push(&mut self, c: char) {
-        if let Some(ref mut st) = self.0 {
-            st.push(c)
-        }
-    }
-}
-
-// pub const BACKSPACE: char = 8 as char;
-// pub const SHIFT_OUT: char = 14 as char;
-// pub const OGHAM_SPACE_MARK: char = '\u{1680}'; // ' '
-// pub const LINE_FEED: char = '\n';
-// pub const LINE_SEPARATOR: char = '\u{2028}';
-// pub const PARAGRAPH_SEPARATOR: char = '\u{2029}';
-
-impl<'a> Lexer<'a> {
+impl Lexer<'_> {
     pub(super) fn span(&self, start: BytePos) -> Span {
         let end = self.last_pos();
         if cfg!(debug_assertions) && start > end {
@@ -60,11 +31,7 @@ impl<'a> Lexer<'a> {
                 start.0, end.0
             )
         }
-        Span {
-            lo: start,
-            hi: end,
-            ctxt: SyntaxContext::empty(),
-        }
+        Span { lo: start, hi: end }
     }
 
     #[inline(always)]
@@ -120,7 +87,7 @@ impl<'a> Lexer<'a> {
     #[inline(never)]
     pub(super) fn error<T>(&mut self, start: BytePos, kind: SyntaxError) -> LexResult<T> {
         let span = self.span(start);
-        self.error_span(Span::new(span.lo, span.hi, span.ctxt), kind)
+        self.error_span(span, kind)
     }
 
     #[cold]
@@ -133,7 +100,7 @@ impl<'a> Lexer<'a> {
     #[inline(never)]
     pub(super) fn emit_error(&mut self, start: BytePos, kind: SyntaxError) {
         let span = self.span(start);
-        self.emit_error_span(Span::new(span.lo, span.hi, span.ctxt), kind)
+        self.emit_error_span(span, kind)
     }
 
     #[cold]
@@ -152,7 +119,7 @@ impl<'a> Lexer<'a> {
     #[inline(never)]
     pub(super) fn emit_strict_mode_error(&mut self, start: BytePos, kind: SyntaxError) {
         let span = self.span(start);
-        self.emit_strict_mode_error_span(Span::new(span.lo, span.hi, span.ctxt), kind)
+        self.emit_strict_mode_error_span(span, kind)
     }
 
     #[cold]
@@ -172,7 +139,7 @@ impl<'a> Lexer<'a> {
     #[inline(never)]
     pub(super) fn emit_module_mode_error(&mut self, start: BytePos, kind: SyntaxError) {
         let span = self.span(start);
-        self.emit_module_mode_error_span(Span::new(span.lo, span.hi, span.ctxt), kind)
+        self.emit_module_mode_error_span(span, kind)
     }
 
     /// Some codes are valid in a strict mode script  but invalid in module
@@ -189,7 +156,7 @@ impl<'a> Lexer<'a> {
     ///
     /// See https://tc39.github.io/ecma262/#sec-white-space
     #[inline(never)]
-    pub(super) fn skip_space<const LEX_COMMENTS: bool>(&mut self) -> LexResult<()> {
+    pub(super) fn skip_space<const LEX_COMMENTS: bool>(&mut self) {
         loop {
             let (offset, newline) = {
                 let mut skip = SkipWhitespace {
@@ -203,23 +170,23 @@ impl<'a> Lexer<'a> {
                 (skip.offset, skip.newline)
             };
 
-            self.input.bump_bytes(offset);
-            self.state.had_line_break |= newline;
+            self.input.bump_bytes(offset as usize);
+            if newline {
+                self.state.had_line_break = true;
+            }
 
             if LEX_COMMENTS && self.input.is_byte(b'/') {
                 if self.peek() == Some('/') {
                     self.skip_line_comment(2);
                     continue;
                 } else if self.peek() == Some('*') {
-                    self.skip_block_comment()?;
+                    self.skip_block_comment();
                     continue;
                 }
             }
 
             break;
         }
-
-        Ok(())
     }
 
     #[inline(never)]
@@ -256,7 +223,7 @@ impl<'a> Lexer<'a> {
             };
             let cmt = Comment {
                 kind: CommentKind::Line,
-                span: Span::new(start, end, SyntaxContext::empty()),
+                span: Span::new(start, end),
                 text: self.atoms.atom(s),
             };
 
@@ -279,7 +246,7 @@ impl<'a> Lexer<'a> {
 
     /// Expects current char to be '/' and next char to be '*'.
     #[inline(never)]
-    pub(super) fn skip_block_comment(&mut self) -> LexResult<()> {
+    pub(super) fn skip_block_comment(&mut self) {
         let start = self.cur_pos();
 
         debug_assert_eq!(self.cur(), Some('/'));
@@ -305,7 +272,7 @@ impl<'a> Lexer<'a> {
 
                 let end = self.cur_pos();
 
-                self.skip_space::<false>()?;
+                self.skip_space::<false>();
 
                 if self.input.is_byte(b';') {
                     is_for_next = false;
@@ -313,7 +280,7 @@ impl<'a> Lexer<'a> {
 
                 self.store_comment(is_for_next, start, end, slice_start);
 
-                return Ok(());
+                return;
             }
             if c.is_line_terminator() {
                 self.state.had_line_break = true;
@@ -323,7 +290,9 @@ impl<'a> Lexer<'a> {
             self.bump();
         }
 
-        self.error(start, SyntaxError::UnterminatedBlockComment)?
+        let end = self.input.end_pos();
+        let span = Span::new(end, end);
+        self.emit_error_span(span, SyntaxError::UnterminatedBlockComment)
     }
 
     #[inline(never)]
@@ -342,7 +311,7 @@ impl<'a> Lexer<'a> {
             let s = &src[..src.len() - 2];
             let cmt = Comment {
                 kind: CommentKind::Block,
-                span: Span::new(start, end, SyntaxContext::empty()),
+                span: Span::new(start, end),
                 text: self.atoms.atom(s),
             };
 

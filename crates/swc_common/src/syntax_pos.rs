@@ -21,7 +21,9 @@ use crate::{rustc_data_structures::stable_hasher::StableHasher, sync::Lrc};
 mod analyze_source_file;
 pub mod hygiene;
 
-/// Spans represent a region of code, used for error reporting. Positions in
+/// Spans represent a region of code, used for error reporting.
+///
+/// Positions in
 /// spans are *absolute* positions from the beginning of the `source_map`, not
 /// positions relative to `SourceFile`s. Methods on the `SourceMap` can be used
 /// to relate spans back to the original source.
@@ -29,7 +31,7 @@ pub mod hygiene;
 /// able to use many of the functions on spans in `source_map` and you cannot
 /// assume that the length of the `span = hi - lo`; there may be space in the
 /// `BytePos` range between files.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(
     any(feature = "rkyv-impl"),
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
@@ -43,16 +45,18 @@ pub struct Span {
     #[serde(rename = "end")]
     #[cfg_attr(feature = "__rkyv", omit_bounds)]
     pub hi: BytePos,
-    /// Information about where the macro came from, if this piece of
-    /// code was created by a macro expansion.
-    #[cfg_attr(feature = "__rkyv", omit_bounds)]
-    pub ctxt: SyntaxContext,
+}
+
+impl std::fmt::Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..{}", self.lo.0, self.hi.0,)
+    }
 }
 
 impl From<(BytePos, BytePos)> for Span {
     #[inline]
     fn from(sp: (BytePos, BytePos)) -> Self {
-        Span::new(sp.0, sp.1, Default::default())
+        Span::new(sp.0, sp.1)
     }
 }
 
@@ -70,7 +74,7 @@ impl<'a> arbitrary::Arbitrary<'a> for Span {
         let lo = u.arbitrary::<BytePos>()?;
         let hi = u.arbitrary::<BytePos>()?;
 
-        Ok(Self::new(lo, hi, Default::default()))
+        Ok(Self::new(lo, hi))
     }
 }
 
@@ -79,7 +83,11 @@ impl<'a> arbitrary::Arbitrary<'a> for Span {
 pub const DUMMY_SP: Span = Span {
     lo: BytePos::DUMMY,
     hi: BytePos::DUMMY,
-    ctxt: SyntaxContext::empty(),
+};
+
+pub const PURE_SP: Span = Span {
+    lo: BytePos::PURE,
+    hi: BytePos::PURE,
 };
 
 pub struct Globals {
@@ -104,9 +112,6 @@ impl Globals {
             hygiene_data: Mutex::new(hygiene::HygieneData::new()),
             marks: Mutex::new(vec![MarkData {
                 parent: Mark::root(),
-                // If the root is opaque, then loops searching for an opaque mark
-                // will automatically stop after reaching it.
-                is_builtin: true,
             }]),
             dummy_cnt: AtomicU32::new(DUMMY_RESERVE),
         }
@@ -369,17 +374,17 @@ impl Span {
     }
 
     #[inline]
-    pub fn new(mut lo: BytePos, mut hi: BytePos, ctxt: SyntaxContext) -> Self {
+    pub fn new(mut lo: BytePos, mut hi: BytePos) -> Self {
         if lo > hi {
             std::mem::swap(&mut lo, &mut hi);
         }
 
-        Span { lo, hi, ctxt }
+        Span { lo, hi }
     }
 
     #[inline]
     pub fn with_lo(&self, lo: BytePos) -> Span {
-        Span::new(lo, self.hi, self.ctxt)
+        Span::new(lo, self.hi)
     }
 
     #[inline]
@@ -389,23 +394,18 @@ impl Span {
 
     #[inline]
     pub fn with_hi(&self, hi: BytePos) -> Span {
-        Span::new(self.lo, hi, self.ctxt)
-    }
-
-    #[inline]
-    pub fn ctxt(self) -> SyntaxContext {
-        self.ctxt
-    }
-
-    #[inline]
-    pub fn with_ctxt(&self, ctxt: SyntaxContext) -> Span {
-        Span::new(self.lo, self.hi, ctxt)
+        Span::new(self.lo, hi)
     }
 
     /// Returns `true` if this is a dummy span with any hygienic context.
     #[inline]
     pub fn is_dummy(self) -> bool {
         self.lo.0 == 0 && self.hi.0 == 0 || self.lo.0 >= DUMMY_RESERVE
+    }
+
+    #[inline]
+    pub fn is_pure(self) -> bool {
+        self.lo.is_pure()
     }
 
     /// Returns `true` if this is a dummy span with any hygienic context.
@@ -466,53 +466,24 @@ impl Span {
         // #23480) Return the macro span on its own to avoid weird diagnostic
         // output. It is preferable to have an incomplete span than a completely
         // nonsensical one.
-        if span_data.ctxt != end_data.ctxt {
-            if span_data.ctxt == SyntaxContext::empty() {
-                return end;
-            } else if end_data.ctxt == SyntaxContext::empty() {
-                return self;
-            }
-            // both span fall within a macro
-            // FIXME(estebank) check if it is the *same* macro
-        }
+
         Span::new(
             cmp::min(span_data.lo, end_data.lo),
             cmp::max(span_data.hi, end_data.hi),
-            if span_data.ctxt == SyntaxContext::empty() {
-                end_data.ctxt
-            } else {
-                span_data.ctxt
-            },
         )
     }
 
     /// Return a `Span` between the end of `self` to the beginning of `end`.
     pub fn between(self, end: Span) -> Span {
         let span = self;
-        Span::new(
-            span.hi,
-            end.lo,
-            if end.ctxt == SyntaxContext::empty() {
-                end.ctxt
-            } else {
-                span.ctxt
-            },
-        )
+        Span::new(span.hi, end.lo)
     }
 
     /// Return a `Span` between the beginning of `self` to the beginning of
     /// `end`.
     pub fn until(self, end: Span) -> Span {
         let span = self;
-        Span::new(
-            span.lo,
-            end.lo,
-            if end.ctxt == SyntaxContext::empty() {
-                end.ctxt
-            } else {
-                span.ctxt
-            },
-        )
+        Span::new(span.lo, end.lo)
     }
 
     pub fn from_inner_byte_pos(self, start: usize, end: usize) -> Span {
@@ -520,73 +491,7 @@ impl Span {
         Span::new(
             span.lo + BytePos::from_usize(start),
             span.lo + BytePos::from_usize(end),
-            span.ctxt,
         )
-    }
-
-    #[inline]
-    pub fn apply_mark(self, mark: Mark) -> Span {
-        let span = self;
-        span.with_ctxt(span.ctxt.apply_mark(mark))
-    }
-
-    #[inline]
-    pub fn remove_mark(&mut self) -> Mark {
-        let mut span = *self;
-        let mark = span.ctxt.remove_mark();
-        *self = Span::new(span.lo, span.hi, span.ctxt);
-        mark
-    }
-
-    #[inline]
-    pub fn private(self) -> Span {
-        self.apply_mark(Mark::fresh(Mark::root()))
-    }
-
-    #[inline]
-    pub fn adjust(&mut self, expansion: Mark) -> Option<Mark> {
-        let mut span = *self;
-        let mark = span.ctxt.adjust(expansion);
-        *self = Span::new(span.lo, span.hi, span.ctxt);
-        mark
-    }
-
-    #[inline]
-    pub fn glob_adjust(
-        &mut self,
-        expansion: Mark,
-        glob_ctxt: SyntaxContext,
-    ) -> Option<Option<Mark>> {
-        let mut span = *self;
-        let mark = span.ctxt.glob_adjust(expansion, glob_ctxt);
-        *self = Span::new(span.lo, span.hi, span.ctxt);
-        mark
-    }
-
-    #[inline]
-    pub fn reverse_glob_adjust(
-        &mut self,
-        expansion: Mark,
-        glob_ctxt: SyntaxContext,
-    ) -> Option<Option<Mark>> {
-        let mut span = *self;
-        let mark = span.ctxt.reverse_glob_adjust(expansion, glob_ctxt);
-        *self = Span::new(span.lo, span.hi, span.ctxt);
-        mark
-    }
-
-    /// Returns `true` if `self` is marked with `mark`.
-    ///
-    /// Panics if `mark` is not a valid mark.
-    #[inline]
-    pub fn has_mark(self, mark: Mark) -> bool {
-        debug_assert_ne!(
-            mark,
-            Mark::root(),
-            "Cannot check if a span contains a `ROOT` mark"
-        );
-
-        self.ctxt.has_mark(mark)
     }
 
     /// Dummy span, both position are extremely large numbers so they would be
@@ -596,11 +501,7 @@ impl Span {
         {
             let lo = BytePos(unsafe { __span_dummy_with_cmt_proxy() });
 
-            return Span {
-                lo,
-                hi: lo,
-                ctxt: SyntaxContext::empty(),
-            };
+            return Span { lo, hi: lo };
         }
 
         #[cfg(not(all(any(feature = "__plugin_mode"), target_arch = "wasm32")))]
@@ -610,11 +511,7 @@ impl Span {
                     .dummy_cnt
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             );
-            Span {
-                lo,
-                hi: lo,
-                ctxt: SyntaxContext::empty(),
-            }
+            Span { lo, hi: lo }
         });
     }
 }
@@ -647,14 +544,14 @@ impl MultiSpan {
     pub fn from_span(primary_span: Span) -> MultiSpan {
         MultiSpan {
             primary_spans: vec![primary_span],
-            span_labels: vec![],
+            span_labels: Vec::new(),
         }
     }
 
     pub fn from_spans(vec: Vec<Span>) -> MultiSpan {
         MultiSpan {
             primary_spans: vec,
-            span_labels: vec![],
+            span_labels: Vec::new(),
         }
     }
 
@@ -912,13 +809,13 @@ pub struct SourceFile {
     /// The name of the file that the source came from. Source that doesn't
     /// originate from files has names between angle brackets by convention,
     /// e.g. `<anon>`
-    pub name: FileName,
+    pub name: Lrc<FileName>,
     /// True if the `name` field above has been modified by
     /// `--remap-path-prefix`
     pub name_was_remapped: bool,
     /// The unmapped path of the file that the source came from.
     /// Set to `None` if the `SourceFile` was imported from an external crate.
-    pub unmapped_path: Option<FileName>,
+    pub unmapped_path: Option<Lrc<FileName>>,
     /// Indicates which crate this `SourceFile` was imported from.
     pub crate_of_origin: u32,
     /// The complete source code
@@ -948,9 +845,9 @@ impl fmt::Debug for SourceFile {
 
 impl SourceFile {
     pub fn new(
-        name: FileName,
+        name: Lrc<FileName>,
         name_was_remapped: bool,
-        unmapped_path: FileName,
+        unmapped_path: Lrc<FileName>,
         mut src: String,
         start_pos: BytePos,
     ) -> SourceFile {
@@ -967,9 +864,9 @@ impl SourceFile {
 
     /// `src` should not have UTF8 BOM
     pub fn new_from(
-        name: FileName,
+        name: Lrc<FileName>,
         name_was_remapped: bool,
-        unmapped_path: FileName,
+        unmapped_path: Lrc<FileName>,
         src: Lrc<String>,
         start_pos: BytePos,
     ) -> SourceFile {
@@ -1002,7 +899,7 @@ impl SourceFile {
             src,
             src_hash,
             start_pos,
-            end_pos: Pos::from_usize(end_pos),
+            end_pos: SmallPos::from_usize(end_pos),
             lines,
             multibyte_chars,
             non_narrow_chars,
@@ -1099,7 +996,7 @@ pub(super) fn remove_bom(src: &mut String) {
 // Pos, BytePos, CharPos
 //
 
-pub trait Pos {
+pub trait SmallPos {
     fn from_usize(n: usize) -> Self;
     fn to_usize(&self) -> usize;
     fn from_u32(n: u32) -> Self;
@@ -1135,6 +1032,7 @@ impl BytePos {
     /// Dummy position. This is reserved for synthesized spans.
     pub const DUMMY: Self = BytePos(0);
     const MIN_RESERVED: Self = BytePos(DUMMY_RESERVE);
+    pub const PURE: Self = BytePos(u32::MAX - 1);
     /// Synthesized, but should be stored in a source map.
     pub const SYNTHESIZED: Self = BytePos(u32::MAX);
 
@@ -1146,6 +1044,10 @@ impl BytePos {
     /// code.
     pub const fn is_dummy(self) -> bool {
         self.0 == 0
+    }
+
+    pub const fn is_pure(self) -> bool {
+        self.0 == Self::PURE.0
     }
 
     /// Returns `true`` if this is explicitly synthesized or has relevant input
@@ -1170,7 +1072,7 @@ pub struct CharPos(pub usize);
 // FIXME: Lots of boilerplate in these impls, but so far my attempts to fix
 // have been unsuccessful
 
-impl Pos for BytePos {
+impl SmallPos for BytePos {
     #[inline(always)]
     fn from_usize(n: usize) -> BytePos {
         BytePos(n as u32)
@@ -1210,7 +1112,7 @@ impl Sub for BytePos {
     }
 }
 
-impl Pos for CharPos {
+impl SmallPos for CharPos {
     #[inline(always)]
     fn from_usize(n: usize) -> CharPos {
         CharPos(n)
@@ -1254,7 +1156,8 @@ impl Sub for CharPos {
 // Loc, LocWithOpt, SourceFileAndLine, SourceFileAndBytePos
 //
 
-/// A source code location used for error reporting
+/// A source code location used for error reporting.
+///
 /// Note: This struct intentionally does not implement rkyv's archieve
 /// to avoid redundant data copy (https://github.com/swc-project/swc/issues/5471)
 /// source_map_proxy constructs plugin-side Loc instead with shared SourceFile
@@ -1291,7 +1194,7 @@ pub struct PartialLoc {
 // perhaps they should just be removed.
 #[derive(Debug)]
 pub struct LocWithOpt {
-    pub filename: FileName,
+    pub filename: Lrc<FileName>,
     pub line: usize,
     pub col: CharPos,
     pub file: Option<Lrc<SourceFile>>,
@@ -1344,6 +1247,8 @@ pub struct LineCol {
     pub col: u32,
 }
 
+/// A struct to represent lines of a source file.
+///
 /// Note: This struct intentionally does not implement rkyv's archieve
 /// to avoid redundant data copy (https://github.com/swc-project/swc/issues/5471)
 /// source_map_proxy constructs plugin-side Loc instead with shared SourceFile
@@ -1400,6 +1305,22 @@ pub enum SpanSnippetError {
     DistinctSources(DistinctSources),
     MalformedForSourcemap(MalformedSourceMapPositions),
     SourceNotAvailable { filename: FileName },
+    LookupFailed(SourceMapLookupError),
+}
+
+/// An error type for looking up source maps.
+///
+///
+/// This type is small.
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(
+    any(feature = "rkyv-impl"),
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv-impl", archive(check_bytes))]
+#[cfg_attr(feature = "rkyv-impl", archive_attr(repr(u32)))]
+pub enum SourceMapLookupError {
+    NoFileFor(BytePos),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1409,7 +1330,7 @@ pub enum SpanSnippetError {
 )]
 #[cfg_attr(feature = "rkyv-impl", archive(check_bytes))]
 #[cfg_attr(feature = "rkyv-impl", archive_attr(repr(C)))]
-pub struct FilePos(pub FileName, pub BytePos);
+pub struct FilePos(pub Lrc<FileName>, pub BytePos);
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(
@@ -1431,7 +1352,7 @@ pub struct DistinctSources {
 #[cfg_attr(feature = "rkyv-impl", archive(check_bytes))]
 #[cfg_attr(feature = "rkyv-impl", archive_attr(repr(C)))]
 pub struct MalformedSourceMapPositions {
-    pub name: FileName,
+    pub name: Lrc<FileName>,
     pub source_len: usize,
     pub begin_pos: BytePos,
     pub end_pos: BytePos,
@@ -1444,6 +1365,13 @@ fn lookup_line(lines: &[BytePos], pos: BytePos) -> isize {
     match lines.binary_search(&pos) {
         Ok(line) => line as isize,
         Err(line) => line as isize - 1,
+    }
+}
+
+impl From<SourceMapLookupError> for Box<SpanSnippetError> {
+    #[cold]
+    fn from(err: SourceMapLookupError) -> Self {
+        Box::new(SpanSnippetError::LookupFailed(err))
     }
 }
 
@@ -1469,6 +1397,6 @@ mod tests {
 
     #[test]
     fn size_of_span() {
-        assert_eq!(std::mem::size_of::<Span>(), 12);
+        assert_eq!(std::mem::size_of::<Span>(), 8);
     }
 }

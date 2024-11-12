@@ -2,8 +2,8 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 
 use anyhow::Error;
 use swc_common::{collections::AHashMap, Span, SyntaxContext, DUMMY_SP};
-use swc_ecma_ast::{ModuleItem, *};
-use swc_ecma_utils::{quote_ident, undefined, ExprFactory};
+use swc_ecma_ast::*;
+use swc_ecma_utils::{quote_ident, ExprFactory};
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
 use crate::{
@@ -18,7 +18,7 @@ where
     R: Resolve,
 {
     fn make_cjs_load_var(&self, info: &TransformedModule, span: Span) -> Ident {
-        Ident::new("load".into(), span.with_ctxt(info.export_ctxt()))
+        Ident::new("load".into(), span, info.export_ctxt())
     }
 
     pub(super) fn replace_cjs_require_calls(
@@ -65,13 +65,14 @@ where
         });
         module.sort(info.id, &ctx.graph, &ctx.cycles, &self.cm);
 
-        let stmt = ModuleItem::Stmt(wrap_module(
+        let stmt = wrap_module(
             SyntaxContext::empty(),
             SyntaxContext::empty().apply_mark(self.unresolved_mark),
             info.local_ctxt(),
             load_var,
             module.into(),
-        ));
+        )
+        .into();
 
         let wrapped = Modules::from(
             info.id,
@@ -108,7 +109,7 @@ fn wrap_module(
     }
 
     // ... body of foo
-    let module_fn = Expr::Fn(FnExpr {
+    let module_fn: Expr = FnExpr {
         ident: None,
         function: Box::new(Function {
             params: vec![
@@ -116,20 +117,16 @@ fn wrap_module(
                 Param {
                     span: DUMMY_SP,
                     decorators: Default::default(),
-                    pat: Pat::Ident(
-                        Ident::new("module".into(), DUMMY_SP.with_ctxt(local_ctxt)).into(),
-                    ),
+                    pat: Pat::Ident(Ident::new("module".into(), DUMMY_SP, local_ctxt).into()),
                 },
                 // exports
                 Param {
                     span: DUMMY_SP,
                     decorators: Default::default(),
-                    pat: Pat::Ident(
-                        Ident::new("exports".into(), DUMMY_SP.with_ctxt(local_ctxt)).into(),
-                    ),
+                    pat: Pat::Ident(Ident::new("exports".into(), DUMMY_SP, local_ctxt).into()),
                 },
             ],
-            decorators: vec![],
+            decorators: Vec::new(),
             span: DUMMY_SP,
             body: Some(BlockStmt {
                 span: dep.span,
@@ -143,17 +140,18 @@ fn wrap_module(
                         ModuleItem::Stmt(s) => s,
                     })
                     .collect(),
+                ..Default::default()
             }),
             is_generator: false,
             is_async: false,
-            type_params: None,
-            return_type: None,
+            ..Default::default()
         }),
-    });
+    }
+    .into();
 
     // var load = __swcpack_require__.bind(void 0, moduleDecl)
 
-    Stmt::Decl(Decl::Var(Box::new(VarDecl {
+    VarDecl {
         span: DUMMY_SP,
         kind: VarDeclKind::Var,
         declare: false,
@@ -162,18 +160,17 @@ fn wrap_module(
             name: Pat::Ident(load_var.into()),
             init: Some(Box::new(Expr::Call(CallExpr {
                 span: DUMMY_SP,
-                callee: Ident::new(
-                    "__swcpack_require__".into(),
-                    DUMMY_SP.with_ctxt(helper_ctxt),
-                )
-                .make_member(Ident::new("bind".into(), DUMMY_SP))
-                .as_callee(),
-                args: vec![undefined(DUMMY_SP).as_arg(), module_fn.as_arg()],
-                type_args: None,
+                callee: Ident::new("__swcpack_require__".into(), DUMMY_SP, helper_ctxt)
+                    .make_member(quote_ident!("bind"))
+                    .as_callee(),
+                args: vec![Expr::undefined(DUMMY_SP).as_arg(), module_fn.as_arg()],
+                ..Default::default()
             }))),
             definite: false,
         }],
-    })))
+        ..Default::default()
+    }
+    .into()
 }
 
 struct RequireReplacer<'a, 'b, L, R>
@@ -192,7 +189,7 @@ where
     L: Load,
     R: Resolve,
 {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_call_expr(&mut self, node: &mut CallExpr) {
         node.visit_mut_children_with(self);
@@ -207,9 +204,9 @@ where
                         }
                         let load = CallExpr {
                             span: node.span,
-                            callee: Ident::new("load".into(), i.span).as_callee(),
-                            args: vec![],
-                            type_args: None,
+                            callee: Ident::new("load".into(), i.span, i.ctxt).as_callee(),
+                            args: Vec::new(),
+                            ..Default::default()
                         };
                         self.replaced = true;
                         *node = load;
@@ -253,19 +250,19 @@ where
             // Side effect import
             if i.specifiers.is_empty() {
                 self.replaced = true;
-                *node = ModuleItem::Stmt(
-                    CallExpr {
-                        span: DUMMY_SP,
-                        callee: load_var.as_callee(),
-                        args: vec![],
-                        type_args: None,
-                    }
-                    .into_stmt(),
-                );
+                *node = CallExpr {
+                    span: DUMMY_SP,
+                    callee: load_var.as_callee(),
+                    args: Vec::new(),
+
+                    ..Default::default()
+                }
+                .into_stmt()
+                .into();
                 return;
             }
 
-            let mut props = vec![];
+            let mut props = Vec::new();
             // TODO
             for spec in i.specifiers.clone() {
                 match spec {
@@ -289,13 +286,13 @@ where
                     },
                     ImportSpecifier::Default(s) => {
                         props.push(ObjectPatProp::KeyValue(KeyValuePatProp {
-                            key: PropName::Ident(Ident::new("default".into(), DUMMY_SP)),
+                            key: PropName::Ident(IdentName::new("default".into(), DUMMY_SP)),
                             value: Box::new(s.local.into()),
                         }));
                     }
                     ImportSpecifier::Namespace(ns) => {
                         self.replaced = true;
-                        *node = ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                        *node = VarDecl {
                             span: i.span,
                             kind: VarDeclKind::Var,
                             declare: false,
@@ -306,21 +303,24 @@ where
                                     CallExpr {
                                         span: DUMMY_SP,
                                         callee: load_var.as_callee(),
-                                        args: vec![],
-                                        type_args: None,
+                                        args: Vec::new(),
+
+                                        ..Default::default()
                                     }
                                     .into(),
                                 )),
                                 definite: false,
                             }],
-                        }))));
+                            ..Default::default()
+                        }
+                        .into();
                         return;
                     }
                 }
             }
 
             self.replaced = true;
-            *node = ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+            *node = VarDecl {
                 span: i.span,
                 kind: VarDeclKind::Var,
                 declare: false,
@@ -335,12 +335,14 @@ where
                     init: Some(Box::new(Expr::Call(CallExpr {
                         span: DUMMY_SP,
                         callee: load_var.as_callee(),
-                        type_args: None,
-                        args: vec![],
+                        args: Vec::new(),
+                        ..Default::default()
                     }))),
                     definite: false,
                 }],
-            }))));
+                ..Default::default()
+            }
+            .into();
         }
     }
 }
@@ -350,21 +352,19 @@ struct DefaultHandler {
 }
 
 impl VisitMut for DefaultHandler {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_expr(&mut self, e: &mut Expr) {
         e.visit_mut_children_with(self);
 
         if let Expr::Ident(i) = e {
             if i.sym == "default" {
-                *e = Expr::Member(MemberExpr {
+                *e = MemberExpr {
                     span: i.span,
-                    obj: Box::new(Expr::Ident(Ident::new(
-                        "module".into(),
-                        DUMMY_SP.with_ctxt(self.local_ctxt),
-                    ))),
+                    obj: Ident::new("module".into(), DUMMY_SP, self.local_ctxt).into(),
                     prop: MemberProp::Ident(quote_ident!("exports")),
-                });
+                }
+                .into();
             }
         }
     }
@@ -375,11 +375,11 @@ struct Remapper {
 }
 
 impl VisitMut for Remapper {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_ident(&mut self, i: &mut Ident) {
         if let Some(v) = self.vars.get(&i.to_id()).copied() {
-            i.span.ctxt = v;
+            i.ctxt = v;
         }
     }
 }

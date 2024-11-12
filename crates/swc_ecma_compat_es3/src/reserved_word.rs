@@ -1,6 +1,6 @@
 use swc_common::{util::take::Take, DUMMY_SP};
 use swc_ecma_ast::*;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 
 /// babel: `@babel/plugin-transform-reserved-words`
 ///
@@ -19,18 +19,18 @@ use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWit
 /// var _abstract = 1;
 /// var x = _abstract + 1;
 /// ```
-pub fn reserved_words(preserve_import: bool) -> impl VisitMut + Fold {
-    as_folder(ReservedWord { preserve_import })
+pub fn reserved_words(preserve_import: bool) -> impl Pass {
+    visit_mut_pass(ReservedWord { preserve_import })
 }
 struct ReservedWord {
     pub preserve_import: bool,
 }
 
 impl VisitMut for ReservedWord {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_module_items(&mut self, n: &mut Vec<ModuleItem>) {
-        let mut extra_exports = vec![];
+        let mut extra_exports = Vec::new();
 
         n.iter_mut().for_each(|module_item| {
             match module_item {
@@ -50,7 +50,7 @@ impl VisitMut for ReservedWord {
                         return;
                     }
 
-                    *module_item = ModuleItem::Stmt(decl.take().into());
+                    *module_item = decl.take().into();
 
                     let mut orig = ident.clone();
                     orig.visit_mut_with(self);
@@ -72,7 +72,7 @@ impl VisitMut for ReservedWord {
                 })) => {
                     if var.decls.iter().all(|var| {
                         if let Pat::Ident(i) = &var.name {
-                            !i.id.sym.is_reserved_in_es3()
+                            !i.sym.is_reserved_in_es3()
                         } else {
                             true
                         }
@@ -81,7 +81,7 @@ impl VisitMut for ReservedWord {
                     }
 
                     for var in &var.decls {
-                        let ident = var.name.clone().expect_ident().id;
+                        let ident = Ident::from(var.name.clone().expect_ident());
 
                         if !ident.is_reserved_in_es3() {
                             return;
@@ -101,7 +101,7 @@ impl VisitMut for ReservedWord {
                         );
                     }
 
-                    *module_item = ModuleItem::Stmt(Decl::Var(var.take()).into());
+                    *module_item = var.take().into();
                 }
 
                 _ => {}
@@ -111,16 +111,14 @@ impl VisitMut for ReservedWord {
         });
 
         if !extra_exports.is_empty() {
-            let module_item = ModuleItem::ModuleDecl(
-                NamedExport {
-                    span: DUMMY_SP,
-                    specifiers: extra_exports,
-                    src: None,
-                    type_only: false,
-                    with: None,
-                }
-                .into(),
-            );
+            let module_item = NamedExport {
+                span: DUMMY_SP,
+                specifiers: extra_exports,
+                src: None,
+                type_only: false,
+                with: None,
+            }
+            .into();
 
             n.push(module_item);
         }

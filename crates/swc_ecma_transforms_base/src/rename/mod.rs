@@ -1,17 +1,22 @@
-use std::borrow::Cow;
+#![allow(unused_imports)]
 
-use rustc_hash::FxHashSet;
-use swc_atoms::JsWord;
+use std::{borrow::Cow, collections::hash_map::Entry};
+
+use rustc_hash::{FxHashMap, FxHashSet};
+use swc_atoms::Atom;
 use swc_common::collections::AHashMap;
 use swc_ecma_ast::*;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith, VisitWith};
+use swc_ecma_utils::stack_size::maybe_grow_default;
+use swc_ecma_visit::{
+    noop_visit_mut_type, visit_mut_pass, Fold, VisitMut, VisitMutWith, VisitWith,
+};
 
 #[cfg(feature = "concurrent-renamer")]
 use self::renamer_concurrent::{Send, Sync};
 #[cfg(not(feature = "concurrent-renamer"))]
 use self::renamer_single::{Send, Sync};
 use self::{
-    analyzer::{scope::RenameMap, Analyzer},
+    analyzer::Analyzer,
     collector::{collect_decls, CustomBindingCollector, IdCollector},
     eval::contains_eval,
     ops::Operator,
@@ -38,39 +43,49 @@ pub trait Renamer: Send + Sync {
         Default::default()
     }
 
+    fn get_cached(&self) -> Option<Cow<RenameMap>> {
+        None
+    }
+
+    fn store_cache(&mut self, _update: &RenameMap) {}
+
     /// Should increment `n`.
-    fn new_name_for(&self, orig: &Id, n: &mut usize) -> JsWord;
+    fn new_name_for(&self, orig: &Id, n: &mut usize) -> Atom;
 }
 
-pub fn rename(map: &AHashMap<Id, JsWord>) -> impl '_ + Fold + VisitMut {
+pub type RenameMap = FxHashMap<Id, Atom>;
+
+pub fn rename(map: &RenameMap) -> impl '_ + Pass + VisitMut {
     rename_with_config(map, Default::default())
 }
 
-pub fn rename_with_config(map: &AHashMap<Id, JsWord>, config: Config) -> impl '_ + Fold + VisitMut {
-    as_folder(Operator {
+pub fn rename_with_config(map: &RenameMap, config: Config) -> impl '_ + Pass + VisitMut {
+    visit_mut_pass(Operator {
         rename: map,
         config,
         extra: Default::default(),
     })
 }
 
-pub fn remap(map: &AHashMap<Id, Id>, config: Config) -> impl '_ + Fold + VisitMut {
-    as_folder(Operator {
+pub fn remap(map: &FxHashMap<Id, Id>, config: Config) -> impl '_ + Pass + VisitMut {
+    visit_mut_pass(Operator {
         rename: map,
         config,
         extra: Default::default(),
     })
 }
 
-pub fn renamer<R>(config: Config, renamer: R) -> impl Fold + VisitMut
+pub fn renamer<R>(config: Config, renamer: R) -> impl Pass + VisitMut
 where
     R: Renamer,
 {
-    as_folder(RenamePass {
+    visit_mut_pass(RenamePass {
         config,
         renamer,
         preserved: Default::default(),
         unresolved: Default::default(),
+        previous_cache: Default::default(),
+        total_map: None,
     })
 }
 
@@ -83,14 +98,21 @@ where
     renamer: R,
 
     preserved: FxHashSet<Id>,
-    unresolved: FxHashSet<JsWord>,
+    unresolved: FxHashSet<Atom>,
+
+    previous_cache: RenameMap,
+
+    /// Used to store cache.
+    ///
+    /// [Some] if the [`Renamer::get_cached`] returns [Some].
+    total_map: Option<RenameMap>,
 }
 
 impl<R> RenamePass<R>
 where
     R: Renamer,
 {
-    fn get_unresolved<N>(&self, n: &N, has_eval: bool) -> FxHashSet<JsWord>
+    fn get_unresolved<N>(&self, n: &N, has_eval: bool) -> FxHashSet<Atom>
     where
         N: VisitWith<IdCollector> + VisitWith<CustomBindingCollector<Id>>,
     {
@@ -117,20 +139,13 @@ where
             .collect()
     }
 
-    fn get_map<N>(
-        &self,
-        node: &N,
-        skip_one: bool,
-        top_level: bool,
-        has_eval: bool,
-    ) -> AHashMap<Id, JsWord>
+    fn get_map<N>(&mut self, node: &N, skip_one: bool, top_level: bool, has_eval: bool) -> RenameMap
     where
         N: VisitWith<IdCollector> + VisitWith<CustomBindingCollector<Id>>,
         N: VisitWith<Analyzer>,
     {
         let mut scope = {
             let mut v = Analyzer {
-                safari_10: self.config.safari_10,
                 has_eval,
                 top_level_mark: self.config.top_level_mark,
 
@@ -161,12 +176,18 @@ where
                 .extend(self.preserved.iter().map(|v| v.0.clone()));
         }
 
+        if !self.config.preserved_symbols.is_empty() {
+            unresolved
+                .to_mut()
+                .extend(self.config.preserved_symbols.iter().cloned());
+        }
+
         if R::MANGLE {
             let cost = scope.rename_cost();
             scope.rename_in_mangle_mode(
                 &self.renamer,
                 &mut map,
-                &Default::default(),
+                &self.previous_cache,
                 &Default::default(),
                 &self.preserved,
                 &unresolved,
@@ -176,15 +197,41 @@ where
             scope.rename_in_normal_mode(
                 &self.renamer,
                 &mut map,
-                &Default::default(),
+                &self.previous_cache,
                 &mut Default::default(),
+                &self.preserved,
                 &unresolved,
             );
         }
 
-        map.into_iter()
-            .map(|((s, ctxt), v)| ((s.into_inner(), ctxt), v))
-            .collect()
+        if let Some(total_map) = &mut self.total_map {
+            total_map.reserve(map.len());
+
+            for (k, v) in &map {
+                match total_map.entry(k.clone()) {
+                    Entry::Occupied(old) => {
+                        unreachable!(
+                            "{} is already renamed to {}, but it's renamed as {}",
+                            k.0,
+                            old.get(),
+                            v
+                        );
+                    }
+                    Entry::Vacant(e) => {
+                        e.insert(v.clone());
+                    }
+                }
+            }
+        }
+
+        map
+    }
+
+    fn load_cache(&mut self) {
+        if let Some(cache) = self.renamer.get_cached() {
+            self.previous_cache = cache.into_owned();
+            self.total_map = Some(Default::default());
+        }
     }
 }
 
@@ -200,7 +247,9 @@ macro_rules! unit {
             } else {
                 let map = self.get_map(n, false, false, false);
 
-                n.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+                if !map.is_empty() {
+                    n.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+                }
             }
         }
     };
@@ -212,7 +261,9 @@ macro_rules! unit {
             } else {
                 let map = self.get_map(n, true, false, false);
 
-                n.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+                if !map.is_empty() {
+                    n.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+                }
             }
         }
     };
@@ -240,11 +291,63 @@ where
 
     unit!(visit_mut_private_method, PrivateMethod);
 
-    unit!(visit_mut_fn_decl, FnDecl, true);
+    fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
+        if !self.config.ignore_eval && contains_eval(n, true) {
+            n.visit_mut_children_with(self);
+        } else {
+            let id = n.ident.to_id();
+            let inserted = self.preserved.insert(id.clone());
+            let map = self.get_map(n, true, false, false);
 
-    unit!(visit_mut_class_decl, ClassDecl, true);
+            if inserted {
+                self.preserved.remove(&id);
+            }
+
+            if !map.is_empty() {
+                n.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+            }
+        }
+    }
+
+    fn visit_mut_class_decl(&mut self, n: &mut ClassDecl) {
+        if !self.config.ignore_eval && contains_eval(n, true) {
+            n.visit_mut_children_with(self);
+        } else {
+            let id = n.ident.to_id();
+            let inserted = self.preserved.insert(id.clone());
+            let map = self.get_map(n, true, false, false);
+
+            if inserted {
+                self.preserved.remove(&id);
+            }
+
+            if !map.is_empty() {
+                n.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+            }
+        }
+    }
+
+    fn visit_mut_default_decl(&mut self, n: &mut DefaultDecl) {
+        match n {
+            DefaultDecl::Class(n) => {
+                n.visit_mut_children_with(self);
+            }
+            DefaultDecl::Fn(n) => {
+                n.visit_mut_children_with(self);
+            }
+            DefaultDecl::TsInterfaceDecl(n) => {
+                n.visit_mut_children_with(self);
+            }
+        }
+    }
+
+    fn visit_mut_expr(&mut self, n: &mut Expr) {
+        maybe_grow_default(|| n.visit_mut_children_with(self));
+    }
 
     fn visit_mut_module(&mut self, m: &mut Module) {
+        self.load_cache();
+
         self.preserved = self.renamer.preserved_ids_for_module(m);
 
         let has_eval = !self.config.ignore_eval && contains_eval(m, true);
@@ -270,7 +373,7 @@ where
         // 3. Per-unit renaming
         // 4. Top level renaming
         //
-        // This is because the the top level map may contain a mapping which conflicts
+        // This is because the top level map may contain a mapping which conflicts
         // with a map from one of the children.
         //
         // See https://github.com/swc-project/swc/pull/7615
@@ -278,10 +381,18 @@ where
             m.visit_mut_children_with(self);
         }
 
-        m.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+        if !map.is_empty() {
+            m.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+        }
+
+        if let Some(total_map) = &self.total_map {
+            self.renamer.store_cache(total_map);
+        }
     }
 
     fn visit_mut_script(&mut self, m: &mut Script) {
+        self.load_cache();
+
         self.preserved = self.renamer.preserved_ids_for_script(m);
 
         let has_eval = !self.config.ignore_eval && contains_eval(m, true);
@@ -294,7 +405,13 @@ where
             m.visit_mut_children_with(self);
         }
 
-        m.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+        if !map.is_empty() {
+            m.visit_mut_with(&mut rename_with_config(&map, self.config.clone()));
+        }
+
+        if let Some(total_map) = &self.total_map {
+            self.renamer.store_cache(total_map);
+        }
     }
 }
 

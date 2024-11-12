@@ -2,7 +2,7 @@ use swc_common::{util::take::Take, Span, Spanned};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_base::{helper, perf::Parallel};
 use swc_ecma_utils::ExprFactory;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, visit_mut_pass, VisitMut, VisitMutWith};
 use swc_trace_macro::swc_trace;
 
 /// `@babel/plugin-transform-instanceof`
@@ -30,8 +30,8 @@ use swc_trace_macro::swc_trace;
 ///
 /// _instanceof(foo, Bar);
 /// ```
-pub fn instance_of() -> impl Fold + VisitMut {
-    as_folder(InstanceOf)
+pub fn instance_of() -> impl Pass {
+    visit_mut_pass(InstanceOf)
 }
 struct InstanceOf;
 
@@ -45,7 +45,7 @@ impl Parallel for InstanceOf {
 
 #[swc_trace]
 impl VisitMut for InstanceOf {
-    noop_visit_mut_type!();
+    noop_visit_mut_type!(fail);
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
         expr.visit_mut_children_with(self);
@@ -60,15 +60,15 @@ impl VisitMut for InstanceOf {
             let instanceof_span = Span {
                 lo: left.span_hi(),
                 hi: right.span_lo(),
-                ..*span
             };
 
-            *expr = Expr::Call(CallExpr {
+            *expr = CallExpr {
                 span: *span,
                 callee: helper!(instanceof_span, instanceof),
                 args: vec![left.take().as_arg(), right.take().as_arg()],
-                type_args: Default::default(),
-            });
+                ..Default::default()
+            }
+            .into();
         }
     }
 }

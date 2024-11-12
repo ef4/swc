@@ -9,7 +9,7 @@ use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_transforms_base::{fixer::fixer, hygiene::hygiene};
 pub use swc_ecma_transforms_optimization::{debug_assert_valid, AssertValid};
 use swc_ecma_utils::{drop_span, DropSpan};
-use swc_ecma_visit::{noop_visit_mut_type, FoldWith, VisitMut, VisitMutWith};
+use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 use tracing::debug;
 
 pub(crate) struct Debugger {}
@@ -22,12 +22,12 @@ impl VisitMut for Debugger {
             return;
         }
 
-        if n.span.ctxt == SyntaxContext::empty() {
+        if n.ctxt == SyntaxContext::empty() {
             return;
         }
 
-        n.sym = format!("{}{:?}", n.sym, n.span.ctxt).into();
-        n.span.ctxt = SyntaxContext::empty();
+        n.sym = format!("{}{:?}", n.sym, n.ctxt).into();
+        n.ctxt = SyntaxContext::empty();
     }
 }
 
@@ -45,7 +45,7 @@ where
     let mut node = node.clone();
     node.visit_mut_with(&mut Debugger {});
     node = drop_span(node);
-    let mut buf = vec![];
+    let mut buf = Vec::new();
     let cm = Lrc::new(SourceMap::default());
 
     {
@@ -79,13 +79,12 @@ pub(crate) fn invoke_module(module: &Module) {
         return;
     }
 
-    let module = module
-        .clone()
-        .fold_with(&mut hygiene())
-        .fold_with(&mut fixer(None));
+    let module = Program::Module(module.clone())
+        .apply(hygiene())
+        .apply(fixer(None));
     let module = drop_span(module);
 
-    let mut buf = vec![];
+    let mut buf = Vec::new();
     let cm = Lrc::new(SourceMap::default());
 
     {
@@ -96,7 +95,7 @@ pub(crate) fn invoke_module(module: &Module) {
             wr: Box::new(JsWriter::new(cm, "\n", &mut buf, None)),
         };
 
-        emitter.emit_module(&module).unwrap();
+        emitter.emit_program(&module).unwrap();
     }
 
     let code = String::from_utf8(buf).unwrap();
@@ -171,13 +170,12 @@ pub(crate) fn invoke_script(script: &Script) {
         return;
     }
 
-    let script = script
-        .clone()
-        .fold_with(&mut hygiene())
-        .fold_with(&mut fixer(None));
+    let script = Program::Script(script.clone())
+        .apply(hygiene())
+        .apply(fixer(None));
     let script = drop_span(script);
 
-    let mut buf = vec![];
+    let mut buf = Vec::new();
     let cm = Lrc::new(SourceMap::default());
 
     {
@@ -188,7 +186,7 @@ pub(crate) fn invoke_script(script: &Script) {
             wr: Box::new(JsWriter::new(cm, "\n", &mut buf, None)),
         };
 
-        emitter.emit_script(&script).unwrap();
+        emitter.emit_program(&script).unwrap();
     }
 
     let code = String::from_utf8(buf).unwrap();

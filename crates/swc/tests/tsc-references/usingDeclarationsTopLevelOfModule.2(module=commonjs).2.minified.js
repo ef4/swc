@@ -1,13 +1,17 @@
 //// [usingDeclarationsTopLevelOfModule.2.ts]
-const _dispose = require("@swc/helpers/_/_dispose"), _using = require("@swc/helpers/_/_using");
+const _ts_add_disposable_resource = require("@swc/helpers/_/_ts_add_disposable_resource"), _ts_dispose_resources = require("@swc/helpers/_/_ts_dispose_resources"), env = {
+    stack: [],
+    error: void 0,
+    hasError: !1
+};
 try {
-    var _stack = [], z = _using._(_stack, {
+    let z = _ts_add_disposable_resource._(env, {
         [Symbol.dispose] () {}
-    });
+    }, !1);
     console.log(2, z);
-} catch (_) {
-    var _error = _, _hasError = !0;
+} catch (e) {
+    env.error = e, env.hasError = !0;
 } finally{
-    _dispose._(_stack, _error, _hasError);
+    _ts_dispose_resources._(env);
 }
 module.exports = 4;

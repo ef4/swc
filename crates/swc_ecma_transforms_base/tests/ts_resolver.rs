@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::*;
-use swc_ecma_parser::{parse_file_as_module, Syntax, TsConfig};
+use swc_ecma_parser::{parse_file_as_module, Syntax, TsSyntax};
 use swc_ecma_transforms_base::resolver;
-use swc_ecma_visit::{FoldWith, Visit, VisitWith};
+use swc_ecma_visit::{Visit, VisitWith};
 use testing::fixture;
 
 #[fixture("../swc_ecma_parser/tests/**/*.ts")]
@@ -19,7 +19,7 @@ fn no_empty(input: PathBuf) {
 
         let module = match parse_file_as_module(
             &fm,
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 tsx: input.ends_with("tsx"),
                 decorators: true,
                 no_early_errors: true,
@@ -27,14 +27,14 @@ fn no_empty(input: PathBuf) {
             }),
             EsVersion::latest(),
             None,
-            &mut vec![],
+            &mut Vec::new(),
         ) {
             Ok(v) => v,
             // We are not testing parser
             Err(..) => return Ok(()),
         };
 
-        let module = module.fold_with(&mut resolver(Mark::new(), Mark::new(), true));
+        let module = Program::Module(module).apply(resolver(Mark::new(), Mark::new(), true));
 
         module.visit_with(&mut AssertNoEmptyCtxt);
 
@@ -50,7 +50,7 @@ impl Visit for AssertNoEmptyCtxt {
         n.visit_children_with(self);
 
         if let Expr::Ident(i) = n {
-            if i.span.ctxt == SyntaxContext::empty() {
+            if i.ctxt == SyntaxContext::empty() {
                 unreachable!("ts_resolver has a bug")
             }
         }
@@ -60,7 +60,7 @@ impl Visit for AssertNoEmptyCtxt {
         n.visit_children_with(self);
 
         if let Pat::Ident(i) = n {
-            if i.id.span.ctxt == SyntaxContext::empty() {
+            if i.ctxt == SyntaxContext::empty() {
                 unreachable!("ts_resolver has a bug")
             }
         }
@@ -89,10 +89,7 @@ impl Visit for AssertNoEmptyCtxt {
             n.key.visit_with(self);
         }
 
-        n.init.visit_with(self);
-        n.params.visit_with(self);
         n.type_ann.visit_with(self);
-        n.type_params.visit_with(self);
     }
 
     fn visit_ts_setter_signature(&mut self, n: &TsSetterSignature) {
@@ -105,5 +102,13 @@ impl Visit for AssertNoEmptyCtxt {
 
     fn visit_ts_tuple_element(&mut self, n: &TsTupleElement) {
         n.ty.visit_with(self);
+    }
+
+    fn visit_var_decl(&mut self, node: &VarDecl) {
+        if node.declare {
+            return;
+        }
+
+        node.visit_children_with(self);
     }
 }

@@ -15,12 +15,6 @@ mod computed_key;
 mod merge;
 mod plan;
 
-#[derive(Debug)]
-struct InternalEntry {}
-
-#[derive(Debug, Default)]
-struct State {}
-
 impl<L, R> Bundler<'_, L, R>
 where
     L: Load,

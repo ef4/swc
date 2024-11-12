@@ -69,7 +69,7 @@ impl Pure<'_> {
             match stmt.try_into_stmt() {
                 Ok(stmt) => {
                     if is_directive(&stmt) {
-                        return new.push(T::from_stmt(stmt));
+                        return new.push(T::from(stmt));
                     }
 
                     match stmt {
@@ -78,8 +78,8 @@ impl Pure<'_> {
                                 v.decls.extend(var.decls);
                             }
                             _ => {
-                                if let Some(s) = cur.take().map(|c| Stmt::Decl(Decl::Var(c))) {
-                                    new.push(T::from_stmt(s));
+                                if let Some(s) = cur.take().map(|c| c.into()) {
+                                    new.push(T::from(s));
                                 }
                                 cur = Some(var);
                             }
@@ -100,13 +100,13 @@ impl Pure<'_> {
                                         cur.decls.append(&mut var.decls);
                                         var.decls = cur.decls.take();
 
-                                        new.push(T::from_stmt(Stmt::For(stmt)));
+                                        new.push(T::from(stmt.into()));
                                     }
                                     _ => {
                                         if let Some(s) = cur.take() {
-                                            new.push(T::from_stmt(Stmt::Decl(Decl::Var(s))));
+                                            new.push(T::from(s.into()));
                                         }
-                                        new.push(T::from_stmt(Stmt::For(stmt)));
+                                        new.push(T::from(stmt.into()));
                                     }
                                 }
                             }
@@ -120,26 +120,26 @@ impl Pure<'_> {
                                     .and_then(|v| if v.decls.is_empty() { None } else { Some(v) })
                                     .map(VarDeclOrExpr::VarDecl);
 
-                                new.push(T::from_stmt(Stmt::For(stmt)));
+                                new.push(T::from(stmt.into()));
                             }
                             _ => {
                                 if let Some(s) = cur.take() {
-                                    new.push(T::from_stmt(Stmt::Decl(Decl::Var(s))));
+                                    new.push(T::from(s.into()));
                                 }
-                                new.push(T::from_stmt(Stmt::For(stmt)));
+                                new.push(T::from(stmt.into()));
                             }
                         },
                         _ => {
                             if let Some(s) = cur.take() {
-                                new.push(T::from_stmt(Stmt::Decl(Decl::Var(s))));
+                                new.push(T::from(s.into()));
                             }
-                            new.push(T::from_stmt(stmt));
+                            new.push(T::from(stmt));
                         }
                     }
                 }
                 Err(item) => {
                     if let Some(s) = cur.take() {
-                        new.push(T::from_stmt(Stmt::Decl(Decl::Var(s))));
+                        new.push(T::from(s.into()));
                     }
                     new.push(item);
                 }
@@ -147,7 +147,7 @@ impl Pure<'_> {
         });
 
         if let Some(s) = cur.take() {
-            new.push(T::from_stmt(Stmt::Decl(Decl::Var(s))));
+            new.push(T::from(s.into()));
         }
 
         drop_invalid_stmts(&mut new);
@@ -273,12 +273,13 @@ impl Pure<'_> {
                 _ => {
                     prepend_stmt(
                         stmts,
-                        T::from_stmt(
+                        T::from(
                             VarDecl {
                                 span: DUMMY_SP,
                                 kind: target,
                                 declare: Default::default(),
                                 decls: prepender.vars,
+                                ..Default::default()
                             }
                             .into(),
                         ),
@@ -430,7 +431,7 @@ impl VisitMut for VarMover {
     fn visit_mut_var_declarators(&mut self, d: &mut Vec<VarDeclarator>) {
         d.visit_mut_children_with(self);
 
-        if self.var_decl_kind.unwrap() != self.target {
+        if self.var_decl_kind != Some(self.target) {
             return;
         }
 
@@ -458,7 +459,7 @@ impl VisitMut for VarMover {
             *d = new;
         }
 
-        let mut new = vec![];
+        let mut new = Vec::new();
 
         if has_init {
             new.append(&mut self.vars);

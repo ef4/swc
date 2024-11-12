@@ -1,15 +1,14 @@
-use swc_common::{chain, Mark};
 use swc_ecma_transforms_base::resolver;
-use swc_ecma_transforms_module::common_js::common_js;
 use swc_ecma_transforms_testing::{test, Tester};
 
 use super::*;
+use crate::jsx;
 
-fn tr(t: &mut Tester) -> impl Fold {
+fn tr(t: &mut Tester) -> impl Pass {
     let unresolved_mark = Mark::new();
     let top_level_mark = Mark::new();
 
-    chain!(
+    (
         resolver(unresolved_mark, top_level_mark, false),
         refresh(
             true,
@@ -19,13 +18,14 @@ fn tr(t: &mut Tester) -> impl Fold {
             }),
             t.cm.clone(),
             Some(t.comments.clone()),
-            top_level_mark
-        )
+            top_level_mark,
+        ),
     )
 }
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -43,7 +43,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -68,7 +69,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -89,7 +91,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -105,7 +108,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -119,7 +123,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -140,7 +145,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -160,7 +166,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -186,7 +193,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -209,7 +217,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -219,7 +228,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -239,7 +249,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -253,7 +264,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -267,7 +279,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -283,7 +296,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -301,7 +315,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -336,7 +351,8 @@ test!(
 // A doesn't get registered because it's not declared locally.
 // Alias doesn't get registered because its definition is just an identifier.
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -377,7 +393,7 @@ test!(
 
 test!(
     ignore,
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -393,7 +409,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -410,7 +427,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -426,7 +444,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -451,7 +470,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -480,7 +500,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -496,7 +517,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -513,7 +535,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -536,7 +559,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Typescript(::swc_ecma_parser::TsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Typescript(::swc_ecma_parser::TsSyntax {
         tsx: true,
         ..Default::default()
     }),
@@ -544,7 +568,7 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             refresh(
                 true,
@@ -554,14 +578,15 @@ test!(
                 }),
                 t.cm.clone(),
                 Some(t.comments.clone()),
-                top_level_mark
+                top_level_mark,
             ),
-            common_js(
+            jsx(
+                t.cm.clone(),
+                Some(t.comments.clone()),
+                Default::default(),
+                top_level_mark,
                 unresolved_mark,
-                Default::default(),
-                Default::default(),
-                Some(t.comments.clone())
-            )
+            ),
         )
     },
     include_hook_signature_in_commonjs,
@@ -577,7 +602,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -601,7 +627,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Typescript(::swc_ecma_parser::TsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Typescript(::swc_ecma_parser::TsSyntax {
         tsx: true,
         ..Default::default()
     }),
@@ -628,7 +655,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -651,7 +679,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -667,7 +696,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -675,7 +705,7 @@ test!(
         let unresolved_mark = Mark::new();
         let top_level_mark = Mark::new();
 
-        chain!(
+        (
             resolver(unresolved_mark, top_level_mark, false),
             refresh(
                 true,
@@ -686,8 +716,8 @@ test!(
                 }),
                 t.cm.clone(),
                 Some(t.comments.clone()),
-                top_level_mark
-            )
+                top_level_mark,
+            ),
         )
     },
     custom_identifier,
@@ -700,7 +730,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Typescript(::swc_ecma_parser::TsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Typescript(::swc_ecma_parser::TsSyntax {
         tsx: true,
         ..Default::default()
     }),
@@ -716,6 +747,7 @@ test!(
 );
 
 test!(
+    module,
     Default::default(),
     tr,
     next_001,
@@ -727,6 +759,7 @@ test!(
 );
 
 test!(
+    module,
     Default::default(),
     tr,
     issue_2261,
@@ -740,7 +773,8 @@ test!(
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),
@@ -758,7 +792,8 @@ const a = (a) => {
 );
 
 test!(
-    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsConfig {
+    module,
+    ::swc_ecma_parser::Syntax::Es(::swc_ecma_parser::EsSyntax {
         jsx: true,
         ..Default::default()
     }),

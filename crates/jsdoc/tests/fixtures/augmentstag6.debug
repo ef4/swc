@@ -1,60 +1,20 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                16,
-            ),
-            hi: BytePos(
-                16,
-            ),
-            ctxt: #0,
-        },
+        span: 16..16,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    16,
-                ),
-                hi: BytePos(
-                    16,
-                ),
-                ctxt: #0,
-            },
+            span: 16..16,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        16,
-                    ),
-                    hi: BytePos(
-                        25,
-                    ),
-                    ctxt: #0,
-                },
+                span: 16..25,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            16,
-                        ),
-                        hi: BytePos(
-                            25,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 16..25,
                     value: "interface",
                 },
                 tag: Interface(
                     InterfaceTag {
-                        span: Span {
-                            lo: BytePos(
-                                16,
-                            ),
-                            hi: BytePos(
-                                25,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 16..25,
                         name: None,
                     },
                 ),
@@ -62,96 +22,32 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                61,
-            ),
-            hi: BytePos(
-                61,
-            ),
-            ctxt: #0,
-        },
+        span: 61..61,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    61,
-                ),
-                hi: BytePos(
-                    81,
-                ),
-                ctxt: #0,
-            },
+            span: 61..81,
             value: "Open the connection.",
         },
         tags: [],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                134,
-            ),
-            hi: BytePos(
-                134,
-            ),
-            ctxt: #0,
-        },
+        span: 134..134,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    134,
-                ),
-                hi: BytePos(
-                    134,
-                ),
-                ctxt: #0,
-            },
+            span: 134..134,
             value: "",
         },
         tags: [
             TagItem {
-                span: Span {
-                    lo: BytePos(
-                        134,
-                    ),
-                    hi: BytePos(
-                        143,
-                    ),
-                    ctxt: #0,
-                },
+                span: 134..143,
                 tag_name: Text {
-                    span: Span {
-                        lo: BytePos(
-                            134,
-                        ),
-                        hi: BytePos(
-                            143,
-                        ),
-                        ctxt: #0,
-                    },
+                    span: 134..143,
                     value: "interface",
                 },
                 tag: Interface(
                     InterfaceTag {
-                        span: Span {
-                            lo: BytePos(
-                                134,
-                            ),
-                            hi: BytePos(
-                                143,
-                            ),
-                            ctxt: #0,
-                        },
+                        span: 134..143,
                         name: Some(
                             Text {
-                                span: Span {
-                                    lo: BytePos(
-                                        134,
-                                    ),
-                                    hi: BytePos(
-                                        158,
-                                    ),
-                                    ctxt: #0,
-                                },
+                                span: 134..158,
                                 value: "* @extends {IConnection}",
                             },
                         ),
@@ -161,25 +57,9 @@
         ],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                217,
-            ),
-            hi: BytePos(
-                217,
-            ),
-            ctxt: #0,
-        },
+        span: 217..217,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    217,
-                ),
-                hi: BytePos(
-                    238,
-                ),
-                ctxt: #0,
-            },
+            span: 217..238,
             value: "Close the connection.",
         },
         tags: [],

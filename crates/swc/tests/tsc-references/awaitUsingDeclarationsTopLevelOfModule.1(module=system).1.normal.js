@@ -1,36 +1,42 @@
 //// [awaitUsingDeclarationsTopLevelOfModule.1.ts]
 System.register([
-    "@swc/helpers/_/_dispose",
-    "@swc/helpers/_/_using"
+    "@swc/helpers/_/_ts_add_disposable_resource",
+    "@swc/helpers/_/_ts_dispose_resources"
 ], function(_export, _context) {
     "use strict";
-    var _dispose, _using, x, w;
+    var _ts_add_disposable_resource, _ts_dispose_resources, env, x, w;
     return {
         setters: [
-            function(_dispose1) {
-                _dispose = _dispose1._;
+            function(_ts_add_disposable_resource1) {
+                _ts_add_disposable_resource = _ts_add_disposable_resource1._;
             },
-            function(_using1) {
-                _using = _using1._;
+            function(_ts_dispose_resources1) {
+                _ts_dispose_resources = _ts_dispose_resources1._;
             }
         ],
         execute: async function() {
-            _export("x", x = 1);
-            _export("w", w = 3);
+            env = {
+                stack: [],
+                error: void 0,
+                hasError: false
+            };
             try {
-                var _stack = [];
-                var z = _using(_stack, {
+                const z = _ts_add_disposable_resource(env, {
                     async [Symbol.asyncDispose] () {}
                 }, true);
-                var y = 2;
-                var _default = 4;
+                ;
+                const y = 2;
                 console.log(w, x, y, z);
-            } catch (_) {
-                var _error = _;
-                var _hasError = true;
+            } catch (e) {
+                env.error = e;
+                env.hasError = true;
             } finally{
-                await _dispose(_stack, _error, _hasError);
+                const result = _ts_dispose_resources(env);
+                if (result) await result;
             }
+            _export("x", x = 1);
+            _export("w", w = 3);
+            _export("default", 4);
         }
     };
 });

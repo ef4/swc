@@ -1,5 +1,6 @@
 use std::mem::take;
 
+use smallvec::{smallvec, SmallVec};
 use swc_common::{BytePos, Span};
 use tracing::trace;
 
@@ -32,6 +33,7 @@ pub(super) struct State {
     pub cur_line: usize,
     pub line_start: BytePos,
     pub prev_hi: BytePos,
+    pub tpl_start: BytePos,
 
     context: TokenContexts,
     syntax: Syntax,
@@ -198,9 +200,162 @@ impl Tokens for Lexer<'_> {
     fn take_errors(&mut self) -> Vec<Error> {
         take(&mut self.errors.borrow_mut())
     }
+
+    fn take_script_module_errors(&mut self) -> Vec<Error> {
+        take(&mut self.module_errors.borrow_mut())
+    }
+
+    fn end_pos(&self) -> BytePos {
+        self.input.end_pos()
+    }
 }
 
-impl<'a> Iterator for Lexer<'a> {
+impl Lexer<'_> {
+    /// Consume pending comments.
+    ///
+    /// This is called when the input is exhausted.
+    #[cold]
+    #[inline(never)]
+    fn consume_pending_comments(&mut self) {
+        if let Some(comments) = self.comments.as_mut() {
+            let comments_buffer = self.comments_buffer.as_mut().unwrap();
+            let last = self.state.prev_hi;
+
+            // move the pending to the leading or trailing
+            for c in comments_buffer.take_pending_leading() {
+                // if the file had no tokens and no shebang, then treat any
+                // comments in the leading comments buffer as leading.
+                // Otherwise treat them as trailing.
+                if last == self.start_pos {
+                    comments_buffer.push(BufferedComment {
+                        kind: BufferedCommentKind::Leading,
+                        pos: last,
+                        comment: c,
+                    });
+                } else {
+                    comments_buffer.push(BufferedComment {
+                        kind: BufferedCommentKind::Trailing,
+                        pos: last,
+                        comment: c,
+                    });
+                }
+            }
+
+            // now fill the user's passed in comments
+            for comment in comments_buffer.take_comments() {
+                match comment.kind {
+                    BufferedCommentKind::Leading => {
+                        comments.add_leading(comment.pos, comment.comment);
+                    }
+                    BufferedCommentKind::Trailing => {
+                        comments.add_trailing(comment.pos, comment.comment);
+                    }
+                }
+            }
+        }
+    }
+
+    fn next_token(&mut self, start: &mut BytePos) -> Result<Option<Token>, Error> {
+        if let Some(start) = self.state.next_regexp {
+            return Ok(Some(self.read_regexp(start)?));
+        }
+
+        if self.state.is_first {
+            if let Some(shebang) = self.read_shebang()? {
+                return Ok(Some(Token::Shebang(shebang)));
+            }
+        }
+
+        self.state.had_line_break = self.state.is_first;
+        self.state.is_first = false;
+
+        // skip spaces before getting next character, if we are allowed to.
+        if self.state.can_skip_space() {
+            self.skip_space::<true>();
+            *start = self.input.cur_pos();
+        };
+
+        match self.input.cur() {
+            Some(..) => {}
+            // End of input.
+            None => {
+                self.consume_pending_comments();
+
+                return Ok(None);
+            }
+        };
+
+        // println!(
+        //     "\tContext: ({:?}) {:?}",
+        //     self.input.cur().unwrap(),
+        //     self.state.context.0
+        // );
+
+        self.state.start = *start;
+
+        if self.syntax.jsx() && !self.ctx.in_property_name && !self.ctx.in_type {
+            //jsx
+            if self.state.context.current() == Some(TokenContext::JSXExpr) {
+                return self.read_jsx_token();
+            }
+
+            let c = self.cur();
+            if let Some(c) = c {
+                if self.state.context.current() == Some(TokenContext::JSXOpeningTag)
+                    || self.state.context.current() == Some(TokenContext::JSXClosingTag)
+                {
+                    if c.is_ident_start() {
+                        return self.read_jsx_word().map(Some);
+                    }
+
+                    if c == '>' {
+                        unsafe {
+                            // Safety: cur() is Some('>')
+                            self.input.bump();
+                        }
+                        return Ok(Some(Token::JSXTagEnd));
+                    }
+
+                    if (c == '\'' || c == '"')
+                        && self.state.context.current() == Some(TokenContext::JSXOpeningTag)
+                    {
+                        return self.read_jsx_str(c).map(Some);
+                    }
+                }
+
+                if c == '<' && self.state.is_expr_allowed && self.input.peek() != Some('!') {
+                    let had_line_break_before_last = self.had_line_break_before_last();
+                    let cur_pos = self.input.cur_pos();
+
+                    unsafe {
+                        // Safety: cur() is Some('<')
+                        self.input.bump();
+                    }
+
+                    if had_line_break_before_last && self.is_str("<<<<<< ") {
+                        let span = Span::new(cur_pos, cur_pos + BytePos(7));
+
+                        self.emit_error_span(span, SyntaxError::TS1185);
+                        self.skip_line_comment(6);
+                        self.skip_space::<true>();
+                        return self.read_token();
+                    }
+
+                    return Ok(Some(Token::JSXTagStart));
+                }
+            }
+        }
+
+        if let Some(TokenContext::Tpl {}) = self.state.context.current() {
+            let start = self.state.tpl_start;
+            return self.read_tmpl_token(start).map(Some);
+        }
+
+        self.read_token()
+    }
+}
+
+impl Iterator for Lexer<'_> {
     type Item = TokenAndSpan;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -349,6 +504,7 @@ impl<'a> Iterator for Lexer<'a> {
 
             self.read_token()
         })();
+        let res = self.next_token(&mut start);
 
         let token = match res.map_err(Token::Error).map_err(Some) {
             Ok(t) => t,
@@ -385,22 +541,23 @@ impl<'a> Iterator for Lexer<'a> {
 
 impl State {
     pub fn new(syntax: Syntax, start_pos: BytePos) -> Self {
-        let context = TokenContexts(vec![TokenContext::BraceStmt]);
+        let context = TokenContexts(smallvec![TokenContext::BraceStmt]);
 
         State {
             is_expr_allowed: true,
             next_regexp: None,
-            is_first: true,
             had_line_break: false,
             had_line_break_before_last: false,
-            prev_hi: start_pos,
-            context,
-            token_type: None,
+            is_first: true,
             start: BytePos(0),
-            line_start: BytePos(0),
             cur_line: 1,
+            line_start: BytePos(0),
+            prev_hi: start_pos,
+            tpl_start: BytePos::DUMMY,
+            context,
             syntax,
             content_tag_template: ContentTagState::None,
+            token_type: None,
         }
     }
 }
@@ -449,30 +606,26 @@ impl State {
         let prev = self.token_type.take();
         self.token_type = Some(TokenType::from(next));
 
-        self.is_expr_allowed = Self::is_expr_allowed_on_next(
-            &mut self.context,
-            self.syntax,
-            prev,
-            start,
-            next,
-            self.had_line_break,
-            self.had_line_break_before_last,
-            self.is_expr_allowed,
-        );
+        self.is_expr_allowed = self.is_expr_allowed_on_next(prev, start, next);
     }
 
     /// `is_expr_allowed`: previous value.
     /// `start`: start of newly produced token.
     fn is_expr_allowed_on_next(
-        context: &mut TokenContexts,
-        syntax: Syntax,
+        &mut self,
         prev: Option<TokenType>,
         start: BytePos,
         next: TokenKind,
-        had_line_break: bool,
-        had_line_break_before_last: bool,
-        is_expr_allowed: bool,
     ) -> bool {
+        let State {
+            ref mut context,
+            had_line_break,
+            had_line_break_before_last,
+            is_expr_allowed,
+            syntax,
+            ..
+        } = *self;
+
         let is_next_keyword = matches!(next, TokenKind::Word(WordKind::Keyword(..)));
 
         if is_next_keyword && prev == Some(TokenType::Dot) {
@@ -630,7 +783,8 @@ impl State {
                     if let Some(TokenContext::Tpl { .. }) = context.current() {
                         context.pop();
                     } else {
-                        context.push(TokenContext::Tpl { start });
+                        self.tpl_start = start;
+                        context.push(TokenContext::Tpl);
                     }
                     false
                 }
@@ -663,7 +817,7 @@ impl State {
 }
 
 #[derive(Clone, Default)]
-pub struct TokenContexts(pub(crate) Vec<TokenContext>);
+pub struct TokenContexts(pub(crate) SmallVec<[TokenContext; 128]>);
 
 impl TokenContexts {
     /// Returns true if following `LBrace` token is `block statement` according
@@ -779,7 +933,6 @@ impl TokenContexts {
 /// The algorithm used to determine whether a regexp can appear at a
 /// given point in the program is loosely based on sweet.js' approach.
 /// See https://github.com/mozilla/sweet.js/wiki/design
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenContext {
     BraceStmt,
@@ -790,10 +943,7 @@ pub enum TokenContext {
         is_for_loop: bool,
     },
     ParenExpr,
-    Tpl {
-        /// Start of a template literal.
-        start: BytePos,
-    },
+    Tpl,
     FnExpr,
     ClassExpr,
     JSXOpeningTag,
@@ -808,7 +958,7 @@ impl TokenContext {
             Self::BraceExpr
                 | Self::TplQuasi
                 | Self::ParenExpr
-                | Self::Tpl { .. }
+                | Self::Tpl
                 | Self::FnExpr
                 | Self::ClassExpr
                 | Self::JSXExpr
@@ -817,7 +967,7 @@ impl TokenContext {
 
     pub(crate) const fn preserve_space(&self) -> bool {
         match self {
-            Self::Tpl { .. } | Self::JSXExpr => true,
+            Self::Tpl | Self::JSXExpr => true,
             _ => false,
         }
     }
@@ -838,9 +988,9 @@ where
         let res = f(&mut l);
 
         #[cfg(debug_assertions)]
-        let c = vec![TokenContext::BraceStmt];
+        let c = TokenContexts(smallvec![TokenContext::BraceStmt]);
         #[cfg(debug_assertions)]
-        debug_assert_eq!(l.state.context.0, c);
+        debug_assert_eq!(l.state.context.0, c.0);
 
         res
     })

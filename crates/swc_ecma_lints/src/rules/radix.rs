@@ -10,7 +10,7 @@ use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
 use crate::{
     config::{LintRuleReaction, RuleConfig},
     rule::{visitor_rule, Rule},
-    rules::utils::{extract_arg_val, unwrap_seqs_and_parens, ArgValue},
+    rules::utils::{extract_arg_val, ArgValue},
 };
 
 const OBJ_NAMES: &[&str] = &["Number", "globalThis"];
@@ -131,7 +131,7 @@ impl Radix {
             return;
         }
 
-        if call_expr.args.first().is_none() {
+        if call_expr.args.is_empty() {
             self.emit_report(call_expr.span, MISSING_PARAMS_MESSAGE, None);
 
             return;
@@ -140,7 +140,7 @@ impl Radix {
         match call_expr.args.get(1) {
             Some(ExprOrSpread { expr, .. }) => {
                 let expr = if self.unwrap_parens_and_seqs {
-                    unwrap_seqs_and_parens(expr.as_ref())
+                    expr.unwrap_seqs_and_parens()
                 } else {
                     expr.as_ref()
                 };
@@ -178,7 +178,7 @@ impl Radix {
     }
 
     fn is_satisfying_indent(&self, ident: &Ident) -> bool {
-        if ident.span.ctxt != self.unresolved_ctxt {
+        if ident.ctxt != self.unresolved_ctxt {
             return false;
         }
 
@@ -187,7 +187,7 @@ impl Radix {
 
     fn extract_prop_value(&mut self, prop: &MemberProp) -> Option<JsWord> {
         match prop {
-            MemberProp::Ident(Ident { sym, .. }) => Some(sym.clone()),
+            MemberProp::Ident(IdentName { sym, .. }) => Some(sym.clone()),
             MemberProp::Computed(ComputedPropName { expr, .. }) => {
                 if let Expr::Lit(Lit::Str(Str { value, .. })) = expr.as_ref() {
                     return Some(value.clone());

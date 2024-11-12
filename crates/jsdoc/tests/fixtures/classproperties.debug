@@ -1,96 +1,32 @@
 [
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                1,
-            ),
-            hi: BytePos(
-                1,
-            ),
-            ctxt: #0,
-        },
+        span: 1..1,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    1,
-                ),
-                hi: BytePos(
-                    14,
-                ),
-                ctxt: #0,
-            },
+            span: 1..14,
             value: "Sample class.",
         },
         tags: [],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                36,
-            ),
-            hi: BytePos(
-                36,
-            ),
-            ctxt: #0,
-        },
+        span: 36..36,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    36,
-                ),
-                hi: BytePos(
-                    52,
-                ),
-                ctxt: #0,
-            },
+            span: 36..52,
             value: "Public property.",
         },
         tags: [],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                76,
-            ),
-            hi: BytePos(
-                76,
-            ),
-            ctxt: #0,
-        },
+        span: 76..76,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    76,
-                ),
-                hi: BytePos(
-                    93,
-                ),
-                ctxt: #0,
-            },
+            span: 76..93,
             value: "Private property.",
         },
         tags: [],
     },
     JsDoc {
-        span: Span {
-            lo: BytePos(
-                118,
-            ),
-            hi: BytePos(
-                118,
-            ),
-            ctxt: #0,
-        },
+        span: 118..118,
         description: Text {
-            span: Span {
-                lo: BytePos(
-                    118,
-                ),
-                hi: BytePos(
-                    156,
-                ),
-                ctxt: #0,
-            },
+            span: 118..156,
             value: "Property with no value assigned to it.",
         },
         tags: [],

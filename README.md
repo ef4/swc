@@ -12,8 +12,8 @@
   <a href="https://www.npmjs.com/package/@swc/core">
     <img alt="downloads (@swc/core)" src="https://img.shields.io/npm/dm/@swc/core?label=downloads%20%28%40swc%2Fcore%29">
   </a>
-  <a href="https://www.npmjs.com/package/@swc/helpers">
-    <img alt="downloads (3rd party)" src="https://img.shields.io/npm/dm/@swc/helpers?label=downloads%20%283rd%20party%29">
+  <a href="https://www.npmjs.com/package/@swc/counter?activeTab=dependents">
+    <img alt="downloads (3rd party)" src="https://img.shields.io/npm/dm/@swc/counter?label=downloads%20%283rd%20party%29">
   </a>
 </p>
 <p align="center">
@@ -46,7 +46,15 @@ Also, SWC tries to ensure that
 
 for rust users.
 
-MSRV of crates is currently nightly, but we will support stable rustc again in the future.
+MSRV of crates is currently `1.73`.
+
+To update all SWC crates you use, you can run `curl https://raw.githubusercontent.com/swc-project/swc/main/scripts/update-all-swc-crates.sh | bash -s`. This script will update all dependencies to the latest version and run `cargo build` to ensure that everything works.
+Note that you need
+
+-   `jq`
+-   `cargo upgrade`
+
+command to run the script.
 
 ---
 

@@ -1,7 +1,7 @@
 //// [ifDoWhileStatements.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var C = function C() {
     "use strict";
     _class_call_check(this, C);
@@ -9,10 +9,9 @@ var C = function C() {
 var C2 = /*#__PURE__*/ function(C) {
     "use strict";
     _inherits(C2, C);
-    var _super = _create_super(C2);
     function C2() {
         _class_call_check(this, C2);
-        return _super.apply(this, arguments);
+        return _call_super(this, C2, arguments);
     }
     return C2;
 }(C);
@@ -26,7 +25,6 @@ function F(x) {
 function F2(x) {
     return x < 42;
 }
-var M;
 (function(M) {
     var A = function A() {
         "use strict";
@@ -38,7 +36,6 @@ var M;
     }
     M.F2 = F2;
 })(M || (M = {}));
-var N;
 (function(N) {
     var A = function A() {
         "use strict";
@@ -63,12 +60,12 @@ do {}while (undefined);
 if (0.0) {}
 while(0.0){}
 do {}while (0.0);
-if ("a string") {}
-while("a string"){}
-do {}while ("a string");
-if ("") {}
-while(""){}
-do {}while ("");
+if ('a string') {}
+while('a string'){}
+do {}while ('a string');
+if ('') {}
+while(''){}
+do {}while ('');
 if (/[a-z]/) {}
 while(/[a-z]/){}
 do {}while (/[a-z]/);
@@ -92,15 +89,15 @@ while({}){}
 do {}while ({});
 if ({
     x: 1,
-    y: "a"
+    y: 'a'
 }) {}
 while({
     x: 1,
-    y: "a"
+    y: 'a'
 }){}
 do {}while ({
     x: 1,
-    y: "a"
+    y: 'a'
 });
 if (function() {
     return 43;
@@ -134,11 +131,11 @@ var d = 0.0;
 if (d) {}
 while(d){}
 do {}while (d);
-var e = "a string";
+var e = 'a string';
 if (e) {}
 while(e){}
 do {}while (e);
-var f = "";
+var f = '';
 if (f) {}
 while(f){}
 do {}while (f);
@@ -163,7 +160,7 @@ while(j){}
 do {}while (j);
 var k = {
     x: 1,
-    y: "a"
+    y: 'a'
 };
 if (k) {}
 while(k){}
@@ -177,3 +174,4 @@ do {}while (fn());
 if (fn) {}
 while(fn){}
 do {}while (fn);
+var M, N;

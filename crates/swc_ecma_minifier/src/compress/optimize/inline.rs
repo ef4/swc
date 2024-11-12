@@ -1,5 +1,5 @@
 use rustc_hash::FxHashMap;
-use swc_common::{collections::AHashSet, util::take::Take, EqIgnoreSpan, Mark, Spanned};
+use swc_common::{collections::AHashSet, util::take::Take, EqIgnoreSpan, Mark};
 use swc_ecma_ast::*;
 use swc_ecma_transforms_optimization::simplify::expr_simplifier;
 use swc_ecma_usage_analyzer::alias::{collect_infects_from, AliasConfig};
@@ -77,7 +77,7 @@ impl Optimizer<'_> {
             if ref_count == 0 {
                 self.mode.store(ident.to_id(), &*init);
 
-                if init.may_have_side_effects(&self.expr_ctx) {
+                if init.may_have_side_effects(&self.ctx.expr_ctx) {
                     // TODO: Inline partially
                     return;
                 }
@@ -104,6 +104,7 @@ impl Optimizer<'_> {
                 && usage.accessed_props.is_empty()
                 && !usage.is_infected()
                 && is_inline_enabled
+                && !usage.used_as_ref
             {
                 if let Expr::Array(arr) = init {
                     if arr.elems.len() < 32
@@ -118,7 +119,7 @@ impl Optimizer<'_> {
                         report_change!(
                             "inline: Decided to store '{}{:?}' for array access",
                             ident.sym,
-                            ident.span.ctxt
+                            ident.ctxt
                         );
                         self.vars
                             .lits_for_array_access
@@ -155,7 +156,7 @@ impl Optimizer<'_> {
 
             if !usage.reassigned {
                 match init {
-                    Expr::Fn(..) | Expr::Arrow(..) => {
+                    Expr::Fn(..) | Expr::Arrow(..) | Expr::Class(..) => {
                         self.typeofs.insert(ident.to_id(), "function".into());
                     }
                     Expr::Array(..) | Expr::Object(..) => {
@@ -305,7 +306,7 @@ impl Optimizer<'_> {
                     report_change!(
                         "inline: Decided to inline '{}{:?}' because it's simple",
                         ident.sym,
-                        ident.span.ctxt
+                        ident.ctxt
                     );
 
                     inc_usage();
@@ -317,7 +318,7 @@ impl Optimizer<'_> {
                     trace_op!(
                         "inline: Decided to copy '{}{:?}' because it's simple",
                         ident.sym,
-                        ident.span.ctxt
+                        ident.ctxt
                     );
 
                     self.mode.store(id.clone(), &*init);
@@ -336,6 +337,7 @@ impl Optimizer<'_> {
                 && usage.declared
                 && may_remove
                 && !usage.reassigned
+                && !usage.declared_as_for_init
                 && usage.assign_count == 1
                 && ref_count == 1
             {
@@ -451,6 +453,7 @@ impl Optimizer<'_> {
                                 if v_usage.reassigned
                                     || v_usage.property_mutation_count
                                         > usage.property_mutation_count
+                                    || v_usage.has_property_access
                                 {
                                     return;
                                 }
@@ -491,7 +494,7 @@ impl Optimizer<'_> {
                     }
                 }
 
-                if init.may_have_side_effects(&self.expr_ctx) {
+                if init.may_have_side_effects(&self.ctx.expr_ctx) {
                     return;
                 }
 
@@ -528,13 +531,13 @@ impl Optimizer<'_> {
         if body.stmts.len() == 1 {
             match &body.stmts[0] {
                 Stmt::Expr(ExprStmt { expr, .. })
-                    if expr.size(self.expr_ctx.unresolved_ctxt) < cost_limit =>
+                    if expr.size(self.ctx.expr_ctx.unresolved_ctxt) < cost_limit =>
                 {
                     return true
                 }
 
                 Stmt::Return(ReturnStmt { arg: Some(arg), .. })
-                    if arg.size(self.expr_ctx.unresolved_ctxt) < cost_limit =>
+                    if arg.size(self.ctx.expr_ctx.unresolved_ctxt) < cost_limit =>
                 {
                     return true
                 }
@@ -564,13 +567,10 @@ impl Optimizer<'_> {
 
         if let Some(usage) = self.data.vars.get(&i.to_id()) {
             if !usage.reassigned {
-                trace_op!("typeofs: Storing typeof `{}{:?}`", i.sym, i.span.ctxt);
+                trace_op!("typeofs: Storing typeof `{}{:?}`", i.sym, i.ctxt);
                 match &*decl {
-                    Decl::Fn(..) => {
+                    Decl::Fn(..) | Decl::Class(..) => {
                         self.typeofs.insert(i.to_id(), "function".into());
-                    }
-                    Decl::Class(..) => {
-                        self.typeofs.insert(i.to_id(), "object".into());
                     }
                     _ => {}
                 }
@@ -593,7 +593,7 @@ impl Optimizer<'_> {
             _ => return,
         };
 
-        trace_op!("inline: Trying to inline decl ({}{:?})", i.sym, i.span.ctxt);
+        trace_op!("inline: Trying to inline decl ({}{:?})", i.sym, i.ctxt);
 
         if self.options.inline == 0 && !self.options.reduce_vars {
             log_abort!("inline: [x] Inline disabled");
@@ -605,9 +605,11 @@ impl Optimizer<'_> {
             return;
         }
 
-        if self.has_noinline(decl.span()) {
-            log_abort!("inline: [x] Has noinline");
-            return;
+        if let Decl::Fn(f) = decl {
+            if self.has_noinline(f.function.ctxt) {
+                log_abort!("inline: [x] Has noinline");
+                return;
+            }
         }
 
         if self.ctx.is_exported {
@@ -644,56 +646,55 @@ impl Optimizer<'_> {
                 Decl::Fn(f) if self.options.inline >= 2 && f.ident.sym != *"arguments" => {
                     self.vars.inline_with_multi_replacer(&mut f.function.body);
 
-                    match &f.function.body {
-                        Some(body) => {
-                            if !usage.used_recursively
-                                // only callees can be inlined multiple times
-                                && usage.callee_count > 0
-                                // prefer single inline
-                                && usage.ref_count > 1
-                                && self.is_fn_body_simple_enough_to_inline(
-                                    body,
-                                    f.function.params.len(),
-                                    usage,
-                                )
+                    if let Some(body) = &f.function.body {
+                        if !usage.used_recursively
+                            // only callees can be inlined multiple times
+                            && usage.callee_count > 0
+                            // prefer single inline
+                            && usage.ref_count > 1
+                            && self.is_fn_body_simple_enough_to_inline(
+                                body,
+                                f.function.params.len(),
+                                usage,
+                            )
+                        {
+                            if f.function
+                                .params
+                                .iter()
+                                .any(|param| matches!(param.pat, Pat::Rest(..) | Pat::Assign(..)))
                             {
-                                if f.function.params.iter().any(|param| {
-                                    matches!(param.pat, Pat::Rest(..) | Pat::Assign(..))
-                                }) {
-                                    return;
-                                }
-                                trace_op!(
-                                    "inline: Decided to inline function '{}{:?}' as it's very \
-                                     simple",
-                                    f.ident.sym,
-                                    f.ident.span.ctxt
-                                );
-
-                                for i in collect_infects_from(
-                                    &f.function,
-                                    AliasConfig {
-                                        marks: Some(self.marks),
-                                        ignore_nested: false,
-                                        need_all: true,
-                                    },
-                                ) {
-                                    if let Some(usage) = self.data.vars.get_mut(&i.0) {
-                                        usage.ref_count += 1;
-                                    }
-                                }
-
-                                self.vars.simple_functions.insert(
-                                    i.to_id(),
-                                    Box::new(Expr::Fn(FnExpr {
-                                        ident: None,
-                                        function: f.function.clone(),
-                                    })),
-                                );
-
                                 return;
                             }
+                            trace_op!(
+                                "inline: Decided to inline function '{}{:?}' as it's very simple",
+                                f.ident.sym,
+                                f.ident.ctxt
+                            );
+
+                            for i in collect_infects_from(
+                                &f.function,
+                                AliasConfig {
+                                    marks: Some(self.marks),
+                                    ignore_nested: false,
+                                    need_all: true,
+                                },
+                            ) {
+                                if let Some(usage) = self.data.vars.get_mut(&i.0) {
+                                    usage.ref_count += 1;
+                                }
+                            }
+
+                            self.vars.simple_functions.insert(
+                                i.to_id(),
+                                FnExpr {
+                                    ident: None,
+                                    function: f.function.clone(),
+                                }
+                                .into(),
+                            );
+
+                            return;
                         }
-                        None => {}
                     }
                 }
                 _ => {}
@@ -718,7 +719,7 @@ impl Optimizer<'_> {
                 })
             {
                 if let Decl::Class(ClassDecl { class, .. }) = decl {
-                    if class_has_side_effect(&self.expr_ctx, class) {
+                    if class_has_side_effect(&self.ctx.expr_ctx, class) {
                         return;
                     }
                 }
@@ -738,7 +739,7 @@ impl Optimizer<'_> {
                         report_change!(
                             "inline: Decided to inline class `{}{:?}` as it's used only once",
                             c.ident.sym,
-                            c.ident.span.ctxt
+                            c.ident.ctxt
                         );
                     }
                     Decl::Fn(f) => {
@@ -753,25 +754,27 @@ impl Optimizer<'_> {
                         report_change!(
                             "inline: Decided to inline function `{}{:?}` as it's used only once",
                             f.ident.sym,
-                            f.ident.span.ctxt
+                            f.ident.ctxt
                         );
                     }
                     _ => {}
                 }
 
                 let e = match decl.take() {
-                    Decl::Class(c) => Box::new(Expr::Class(ClassExpr {
+                    Decl::Class(c) => ClassExpr {
                         ident: Some(c.ident),
                         class: c.class,
-                    })),
-                    Decl::Fn(f) => Box::new(Expr::Fn(FnExpr {
+                    }
+                    .into(),
+                    Decl::Fn(f) => FnExpr {
                         ident: if usage.used_recursively {
                             Some(f.ident)
                         } else {
                             None
                         },
                         function: f.function,
-                    })),
+                    }
+                    .into(),
                     _ => {
                         unreachable!()
                     }
@@ -797,7 +800,7 @@ impl Optimizer<'_> {
                                 report_change!("inline: Inlined array access");
                                 self.changed = true;
 
-                                me.obj = new.clone();
+                                me.obj.clone_from(new);
                                 // TODO(kdy1): Optimize performance by skipping visiting of children
                                 // nodes.
                                 e.visit_mut_with(&mut expr_simplifier(

@@ -1,38 +1,39 @@
-use swc_common::{chain, Mark, SyntaxContext};
+use swc_common::{Mark, SyntaxContext};
 use swc_ecma_transforms_base::{fixer::paren_remover, resolver};
 use swc_ecma_transforms_testing::test_transform;
 use swc_ecma_utils::ExprCtx;
-use swc_ecma_visit::as_folder;
+use swc_ecma_visit::visit_mut_pass;
 
 use super::SimplifyExpr;
 
 fn fold(src: &str, expected: &str) {
     test_transform(
         ::swc_ecma_parser::Syntax::default(),
+        None,
         |_| {
             let unresolved_mark = Mark::new();
             let top_level_mark = Mark::new();
 
-            chain!(
+            (
                 resolver(unresolved_mark, top_level_mark, false),
                 paren_remover(None),
-                as_folder(SimplifyExpr {
+                visit_mut_pass(SimplifyExpr {
                     expr_ctx: ExprCtx {
                         unresolved_ctxt: SyntaxContext::empty().apply_mark(unresolved_mark),
                         // This is hack
                         is_unresolved_ref_safe: true,
+                        in_strict: false,
                     },
                     config: super::Config {},
                     changed: false,
                     is_arg_of_update: false,
                     is_modifying: false,
                     in_callee: false,
-                })
+                }),
             )
         },
         src,
         expected,
-        true,
     )
 }
 
@@ -489,6 +490,27 @@ fn test_unary_ops_4() {
 }
 
 #[test]
+fn test_unary_ops_5() {
+    // Empty arrays
+    fold("+[]", "0");
+    fold("+[[]]", "0");
+    fold("+[[[]]]", "0");
+
+    // Arrays with one element
+    fold("+[1]", "1");
+    fold("+[[1]]", "1");
+    fold("+[undefined]", "0");
+    fold("+[null]", "0");
+    fold("+[,]", "0");
+
+    // Arrays with more than one element
+    fold("+[1, 2]", "NaN");
+    fold("+[[1], 2]", "NaN");
+    fold("+[,1]", "NaN");
+    fold("+[,,]", "NaN");
+}
+
+#[test]
 fn test_unary_ops_string_compare() {
     fold_same("a = -1");
     fold("a = ~0", "a = -1");
@@ -639,6 +661,27 @@ fn test_fold_bitwise_op2() {
 }
 
 #[test]
+fn test_issue_9256() {
+    // Returns -2 prior to fix (Number.MAX_VALUE)
+    fold("1.7976931348623157e+308 << 1", "0");
+
+    // Isn't changed prior to fix
+    fold("1.7976931348623157e+308 << 1.7976931348623157e+308", "0");
+    fold("1.7976931348623157e+308 >> 1.7976931348623157e+308", "0");
+
+    // Panics prior to fix (Number.MIN_VALUE)
+    fold("5e-324 >> 5e-324", "0");
+    fold("5e-324 << 5e-324", "0");
+    fold("5e-324 << 0", "0");
+    fold("0 << 5e-324", "0");
+
+    // Wasn't broken prior, used to ensure overflows are handled correctly
+    fold("1 << 31", "-2147483648");
+    fold("-8 >> 2", "-2");
+    fold("-8 >>> 2", "1073741822");
+}
+
+#[test]
 #[ignore]
 fn test_folding_mix_types_early() {
     fold_same("x = x + '2'");
@@ -661,10 +704,6 @@ fn test_folding_mix_types_early() {
 fn test_folding_add1() {
     fold("x = null + true", "x=1");
     fold_same("x = a + true");
-    fold("x = '' + {}", "x = \"[object Object]\"");
-    fold("x = [] + {}", "x = \"[object Object]\"");
-    fold("x = {} + []", "x = \"[object Object]\"");
-    fold("x = {} + ''", "x = \"[object Object]\"");
 }
 
 #[test]
@@ -709,9 +748,9 @@ fn test_fold_bit_shifts() {
 
     fold("x = 0xffffffff << 0", "x = -1");
     fold("x = 0xffffffff << 4", "x = -16");
-    fold_same("1 << 32");
-    fold_same("1 << -1");
-    fold_same("1 >> 32");
+    fold("1 << 32", "1");
+    fold("1 << -1", "-2147483648");
+    fold("1 >> 32", "1");
 }
 
 #[test]
@@ -978,15 +1017,15 @@ fn test_fold_comparison4() {
 
 #[test]
 fn test_fold_get_elem1() {
-    fold("x = [,10][0]", "x = (0, void 0)");
-    fold("x = [10, 20][0]", "x = (0, 10)");
-    fold("x = [10, 20][1]", "x = (0, 20)");
+    fold("x = [,10][0]", "x = (0, void 0);");
+    fold("x = [10, 20][0]", "x = (0, 10);");
+    fold("x = [10, 20][1]", "x = (0, 20);");
 
     // fold("x = [10, 20][-1]", "x = void 0;");
     // fold("x = [10, 20][2]", "x = void 0;");
 
     fold("x = [foo(), 0][1]", "x = (foo(), 0);");
-    fold("x = [0, foo()][1]", "x = (0, foo())");
+    fold("x = [0, foo()][1]", "x = (0, foo());");
     // fold("x = [0, foo()][0]", "x = (foo(), 0)");
     fold_same("for([1][0] in {});");
 }
@@ -1012,8 +1051,8 @@ fn test_fold_array_lit_spread_get_elem() {
     fold("x = [...[0    ]][0]", "x = (0, 0);");
     fold("x = [0, 1, ...[2, 3, 4]][3]", "x = (0, 3);");
     fold("x = [...[0, 1], 2, ...[3, 4]][3]", "x = (0, 3);");
-    fold("x = [...[...[0, 1], 2, 3], 4][0]", "x = (0, 0)");
-    fold("x = [...[...[0, 1], 2, 3], 4][3]", "x = (0, 3)");
+    fold("x = [...[...[0, 1], 2, 3], 4][0]", "x = (0, 0);");
+    fold("x = [...[...[0, 1], 2, 3], 4][3]", "x = (0, 3);");
     // fold("x = [...[]][100]", "x = void 0;");
     // fold("x = [...[0]][100]", "x = void 0;");
 }
@@ -1315,6 +1354,33 @@ fn test_fold_literals_as_numbers() {
 }
 
 #[test]
+fn test_fold_arithmetic_with_strings() {
+    // Left side of expression is a string
+    fold("'10' - 5", "5");
+    fold("'4' / 2", "2");
+    fold("'11' % 2", "1");
+    fold("'10' ** 2", "100");
+    fold("'Infinity' * 2", "Infinity");
+    fold("'NaN' * 2", "NaN");
+
+    // Right side of expression is a string
+    fold("10 - '5'", "5");
+    fold("4 / '2'", "2");
+    fold("11 % '2'", "1");
+    fold("10 ** '2'", "100");
+    fold("2 * 'Infinity'", "Infinity");
+    fold("2 * 'NaN'", "NaN");
+
+    // Both sides are strings
+    fold("'10' - '5'", "5");
+    fold("'4' / '2'", "2");
+    fold("'11' % '2'", "1");
+    fold("'10' ** '2'", "100");
+    fold("'Infinity' * '2'", "Infinity");
+    fold("'NaN' * '2'", "NaN");
+}
+
+#[test]
 fn test_not_fold_back_to_true_false() {
     fold("!0", "!0");
     fold("!1", "!1");
@@ -1551,4 +1617,54 @@ fn test_export_default_paren_expr() {
     fold_same("import fn from './b'; export default (class fn1 {});");
     fold_same("import fn from './b'; export default (function fn1 () {});");
     fold("export default ((foo));", "export default foo;");
+}
+
+#[test]
+fn test_issue_8747() {
+    // Index with a valid index.
+    fold("'a'[0]", "\"a\";");
+    fold("'a'['0']", "\"a\";");
+
+    // Index with an invalid index.
+    // An invalid index is an out-of-bound index. These are not replaced as
+    // prototype changes could cause undefined behaviour. Refer to
+    // pristine_globals in compress.
+    fold_same("'a'[0.5]");
+    fold_same("'a'[-1]");
+
+    fold_same("[1][0.5]");
+    fold_same("[1][-1]");
+
+    // Index with an expression.
+    fold("'a'[0 + []]", "\"a\";");
+    fold("[1][0 + []]", "0, 1;");
+
+    // Don't replace if side effects exist.
+    fold_same("[f(), f()][0]");
+    fold("[x(), 'x', 5][2]", "x(), 5;");
+    fold_same("({foo: f()}).foo");
+
+    // Index with length, resulting in replacement.
+    // Prototype changes don't affect .length in String and Array,
+    // but it is affected in Object.
+    fold("[].length", "0");
+    fold("[]['length']", "0");
+
+    fold("''.length", "0");
+    fold("''['length']", "0");
+
+    fold_same("({}).length");
+    fold_same("({})['length']");
+    fold("({length: 'foo'}).length", "'foo'");
+    fold("({length: 'foo'})['length']", "'foo'");
+
+    // Indexing objects has a few special cases that were broken that we test here.
+    fold("({0.5: 'a'})[0.5]", "'a';");
+    fold("({'0.5': 'a'})[0.5]", "'a';");
+    fold("({0.5: 'a'})['0.5']", "'a';");
+    // Indexing objects that have a spread operator in `__proto__` can still be
+    // optimized if the key comes before the `__proto__` object.
+    fold("({1: 'bar', __proto__: {...[1]}})[1]", "({...[1]}), 'bar';");
+    // Spread operator comes first, can't be evaluated.
+    fold_same("({...[1], 1: 'bar'})[1]");
 }

@@ -2,9 +2,9 @@ extern crate swc_malloc;
 
 use std::{collections::hash_map::DefaultHasher, hash::Hash};
 
-use criterion::black_box;
-use swc_common::{self, sync::Lrc, SourceMap};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use codspeed_criterion_compat::black_box;
+use swc_common::{sync::Lrc, SourceMap};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
 
 fn main() {
     let mut cnt = 0;
@@ -23,7 +23,7 @@ fn main() {
         let fm = cm.load_file(entry.path()).unwrap();
 
         let lexer = Lexer::new(
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 no_early_errors: true,
                 tsx: entry.path().to_string_lossy().ends_with(".tsx"),
                 ..Default::default()

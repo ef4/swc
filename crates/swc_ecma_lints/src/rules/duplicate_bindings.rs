@@ -4,7 +4,7 @@ use swc_atoms::JsWord;
 use swc_common::{
     collections::{AHashMap, AHashSet},
     errors::HANDLER,
-    Span,
+    Span, SyntaxContext,
 };
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_visit_type, Visit, VisitWith};
@@ -18,6 +18,7 @@ pub fn duplicate_bindings() -> Box<dyn Rule> {
 #[derive(Debug, Default, Clone, Copy)]
 struct BindingInfo {
     span: Span,
+    ctxt: SyntaxContext,
     unique: bool,
     is_function: bool,
 }
@@ -38,7 +39,7 @@ struct DuplicateBindings {
 impl DuplicateBindings {
     /// Add a binding.
     fn add(&mut self, id: JsWord, info: BindingInfo) {
-        match self.bindings.entry((id.clone(), info.span.ctxt())) {
+        match self.bindings.entry((id.clone(), info.ctxt)) {
             Entry::Occupied(mut prev) => {
                 if !(info.is_function && prev.get().is_function)
                     && (info.unique || prev.get().unique)
@@ -129,6 +130,7 @@ impl Visit for DuplicateBindings {
                 p.key.sym.clone(),
                 BindingInfo {
                     span: p.key.span,
+                    ctxt: p.key.ctxt,
                     unique: self.is_unique_var_kind(),
                     is_function: false,
                 },
@@ -142,11 +144,7 @@ impl Visit for DuplicateBindings {
             body,
             params,
             decorators,
-            span: _,
-            is_generator: _,
-            is_async: _,
-            type_params: _,
-            return_type: _,
+            ..
         } = f;
         params.visit_with(self);
         decorators.visit_with(self);
@@ -156,15 +154,7 @@ impl Visit for DuplicateBindings {
     }
 
     fn visit_arrow_expr(&mut self, a: &ArrowExpr) {
-        let ArrowExpr {
-            params,
-            body,
-            span: _,
-            is_async: _,
-            is_generator: _,
-            type_params: _,
-            return_type: _,
-        } = a;
+        let ArrowExpr { params, body, .. } = a;
         params.visit_with(self);
         if let BlockStmtOrExpr::BlockStmt(b) = &**body {
             self.visit_with_stmts(&b.stmts, false)
@@ -193,6 +183,7 @@ impl Visit for DuplicateBindings {
             d.ident.sym.clone(),
             BindingInfo {
                 span: d.ident.span,
+                ctxt: d.ident.ctxt,
                 unique: true,
                 is_function: false,
             },
@@ -223,6 +214,7 @@ impl Visit for DuplicateBindings {
             d.ident.sym.clone(),
             BindingInfo {
                 span: d.ident.span,
+                ctxt: d.ident.ctxt,
                 unique: self.lexical_function,
                 is_function: true,
             },
@@ -239,6 +231,39 @@ impl Visit for DuplicateBindings {
         s.visit_children_with(self);
     }
 
+    fn visit_export_default_decl(&mut self, e: &ExportDefaultDecl) {
+        // export default function foo() {} should be treated as hoisted
+        match &e.decl {
+            DefaultDecl::Class(ClassExpr {
+                ident: Some(ident), ..
+            }) => self.add(
+                ident.sym.clone(),
+                BindingInfo {
+                    span: ident.span,
+                    ctxt: ident.ctxt,
+                    unique: true,
+                    is_function: false,
+                },
+            ),
+            DefaultDecl::Fn(FnExpr {
+                ident: Some(ident),
+                function: f,
+                ..
+            }) if f.body.is_some() => self.add(
+                ident.sym.clone(),
+                BindingInfo {
+                    span: ident.span,
+                    ctxt: ident.ctxt,
+                    unique: self.lexical_function,
+                    is_function: true,
+                },
+            ),
+            _ => {}
+        }
+
+        e.visit_children_with(self);
+    }
+
     fn visit_import_default_specifier(&mut self, s: &ImportDefaultSpecifier) {
         s.visit_children_with(self);
 
@@ -247,6 +272,7 @@ impl Visit for DuplicateBindings {
                 s.local.sym.clone(),
                 BindingInfo {
                     span: s.local.span,
+                    ctxt: s.local.ctxt,
                     unique: true,
                     is_function: false,
                 },
@@ -262,6 +288,7 @@ impl Visit for DuplicateBindings {
                 s.local.sym.clone(),
                 BindingInfo {
                     span: s.local.span,
+                    ctxt: s.local.ctxt,
                     unique: true,
                     is_function: false,
                 },
@@ -277,6 +304,7 @@ impl Visit for DuplicateBindings {
                 s.local.sym.clone(),
                 BindingInfo {
                     span: s.local.span,
+                    ctxt: s.local.ctxt,
                     unique: true,
                     is_function: false,
                 },
@@ -292,6 +320,7 @@ impl Visit for DuplicateBindings {
                 s.id.sym.clone(),
                 BindingInfo {
                     span: s.id.span,
+                    ctxt: s.id.ctxt,
                     unique: true,
                     is_function: false,
                 },
@@ -337,9 +366,10 @@ impl Visit for DuplicateBindings {
         if let Pat::Ident(p) = p {
             if self.is_pat_decl {
                 self.add(
-                    p.id.sym.clone(),
+                    p.sym.clone(),
                     BindingInfo {
-                        span: p.id.span,
+                        span: p.span,
+                        ctxt: p.ctxt,
                         unique: self.is_unique_var_kind(),
                         is_function: false,
                     },
@@ -390,11 +420,8 @@ fn emit_error(name: &str, span: Span, prev_span: Span) {
                 span,
                 &format!("the name `{}` is defined multiple times", name),
             )
-            .span_label(
-                prev_span,
-                &format!("previous definition of `{}` here", name),
-            )
-            .span_label(span, &format!("`{}` redefined here", name))
+            .span_label(prev_span, format!("previous definition of `{}` here", name))
+            .span_label(span, format!("`{}` redefined here", name))
             .emit();
     });
 }

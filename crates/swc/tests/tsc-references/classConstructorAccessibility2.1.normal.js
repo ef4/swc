@@ -1,7 +1,7 @@
 //// [classConstructorAccessibility2.ts]
+import { _ as _call_super } from "@swc/helpers/_/_call_super";
 import { _ as _class_call_check } from "@swc/helpers/_/_class_call_check";
 import { _ as _inherits } from "@swc/helpers/_/_inherits";
-import { _ as _create_super } from "@swc/helpers/_/_create_super";
 var BaseA = /*#__PURE__*/ function() {
     "use strict";
     function BaseA(x) {
@@ -44,12 +44,12 @@ var BaseC = /*#__PURE__*/ function() {
 var DerivedA = /*#__PURE__*/ function(BaseA1) {
     "use strict";
     _inherits(DerivedA, BaseA1);
-    var _super = _create_super(DerivedA);
     function DerivedA(x) {
         _class_call_check(this, DerivedA);
         var _this;
-        _this = _super.call(this, x);
-        _this.x = x;
+        _this = _call_super(this, DerivedA, [
+            x
+        ]), _this.x = x;
         return _this;
     }
     var _proto = DerivedA.prototype;
@@ -67,12 +67,12 @@ var DerivedA = /*#__PURE__*/ function(BaseA1) {
 var DerivedB = /*#__PURE__*/ function(BaseB1) {
     "use strict";
     _inherits(DerivedB, BaseB1);
-    var _super = _create_super(DerivedB);
     function DerivedB(x) {
         _class_call_check(this, DerivedB);
         var _this;
-        _this = _super.call(this, x);
-        _this.x = x;
+        _this = _call_super(this, DerivedB, [
+            x
+        ]), _this.x = x;
         return _this;
     }
     var _proto = DerivedB.prototype;
@@ -92,12 +92,12 @@ var DerivedB = /*#__PURE__*/ function(BaseB1) {
 var DerivedC = /*#__PURE__*/ function(BaseC1) {
     "use strict";
     _inherits(DerivedC, BaseC1);
-    var _super = _create_super(DerivedC);
     function DerivedC(x) {
         _class_call_check(this, DerivedC);
         var _this;
-        _this = _super.call(this, x);
-        _this.x = x;
+        _this = _call_super(this, DerivedC, [
+            x
+        ]), _this.x = x;
         return _this;
     }
     var _proto = DerivedC.prototype;

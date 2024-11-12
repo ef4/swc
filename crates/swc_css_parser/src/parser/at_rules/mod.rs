@@ -225,7 +225,7 @@ where
                 self.input.skip_ws();
 
                 if is!(self, Ident) {
-                    let mut name_list: Vec<LayerName> = vec![];
+                    let mut name_list: Vec<LayerName> = Vec::new();
 
                     name_list.push(self.parse()?);
 
@@ -252,7 +252,7 @@ where
                         Some(AtRulePrelude::LayerPrelude(LayerPrelude::NameList(
                             LayerNameList {
                                 name_list,
-                                span: Span::new(first.lo, last.hi, Default::default()),
+                                span: Span::new(first.lo, last.hi),
                             },
                         )))
                     };
@@ -976,7 +976,7 @@ where
     fn parse(&mut self) -> PResult<SupportsCondition> {
         let start_pos = self.input.cur_span().lo;
         let mut last_pos;
-        let mut conditions = vec![];
+        let mut conditions = Vec::new();
 
         if is_case_insensitive_ident!(self, "not") {
             let not = self.parse()?;
@@ -1017,7 +1017,7 @@ where
         };
 
         Ok(SupportsCondition {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             conditions,
         })
     }
@@ -1354,7 +1354,7 @@ where
         };
 
         Ok(MediaQueryList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             queries,
         })
     }
@@ -1406,7 +1406,7 @@ where
             };
 
             return Ok(MediaQuery {
-                span: Span::new(start_pos, end_pos, Default::default()),
+                span: Span::new(start_pos, end_pos),
                 modifier,
                 media_type,
                 keyword,
@@ -1421,7 +1421,7 @@ where
         let condition: MediaCondition = self.parse()?;
 
         Ok(MediaQuery {
-            span: Span::new(start_pos, condition.span.hi, Default::default()),
+            span: Span::new(start_pos, condition.span.hi),
             modifier: None,
             media_type: None,
             keyword: None,
@@ -1462,7 +1462,7 @@ where
     fn parse(&mut self) -> PResult<MediaCondition> {
         let start_pos = self.input.cur_span().lo;
         let mut last_pos;
-        let mut conditions = vec![];
+        let mut conditions = Vec::new();
 
         if is_case_insensitive_ident!(self, "not") {
             let not = self.parse()?;
@@ -1503,7 +1503,7 @@ where
         };
 
         Ok(MediaCondition {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             conditions,
         })
     }
@@ -1516,7 +1516,7 @@ where
     fn parse(&mut self) -> PResult<MediaConditionWithoutOr> {
         let start_pos = self.input.cur_span().lo;
         let mut last_pos;
-        let mut conditions = vec![];
+        let mut conditions = Vec::new();
 
         if is_case_insensitive_ident!(self, "not") {
             let not = self.parse()?;
@@ -1547,7 +1547,7 @@ where
         };
 
         Ok(MediaConditionWithoutOr {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             conditions,
         })
     }
@@ -1958,7 +1958,7 @@ where
         };
 
         Ok(PageSelectorList {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             selectors,
         })
     }
@@ -1978,7 +1978,7 @@ where
         };
 
         let pseudos = if is!(self, ":") {
-            let mut pseudos = vec![];
+            let mut pseudos = Vec::new();
 
             loop {
                 if !is!(self, ":") {
@@ -2058,7 +2058,7 @@ where
 {
     fn parse(&mut self) -> PResult<LayerName> {
         let start = self.input.cur_span().lo;
-        let mut name = vec![];
+        let mut name = Vec::new();
 
         while is!(self, Ident) {
             name.push(self.parse()?);
@@ -2093,7 +2093,7 @@ where
         let query: ContainerQuery = self.parse()?;
 
         Ok(ContainerCondition {
-            span: Span::new(start_pos, query.span.hi, Default::default()),
+            span: Span::new(start_pos, query.span.hi),
             name,
             query,
         })
@@ -2128,7 +2128,7 @@ where
         let start_pos = self.input.cur_span().lo;
         let mut last_pos;
 
-        let mut queries = vec![];
+        let mut queries = Vec::new();
 
         if is_case_insensitive_ident!(self, "not") {
             let not = self.parse()?;
@@ -2171,7 +2171,7 @@ where
         }
 
         Ok(ContainerQuery {
-            span: Span::new(start_pos, last_pos, Default::default()),
+            span: Span::new(start_pos, last_pos),
             queries,
         })
     }

@@ -9,13 +9,13 @@ pub type SourceFileInput<'a> = StringInput<'a>;
 /// Implementation of [Input].
 #[derive(Clone)]
 pub struct StringInput<'a> {
-    start_pos_of_iter: BytePos,
     last_pos: BytePos,
     /// Current cursor
-    iter: str::CharIndices<'a>,
+    iter: str::Chars<'a>,
     orig: &'a str,
     /// Original start position.
     orig_start: BytePos,
+    orig_end: BytePos,
 }
 
 impl<'a> StringInput<'a> {
@@ -31,11 +31,11 @@ impl<'a> StringInput<'a> {
         assert!(start <= end);
 
         StringInput {
-            start_pos_of_iter: start,
             last_pos: start,
             orig: src,
-            iter: src.char_indices(),
+            iter: src.chars(),
             orig_start: start,
+            orig_end: end,
         }
     }
 
@@ -51,6 +51,14 @@ impl<'a> StringInput<'a> {
             self.reset_to(self.last_pos + BytePos(n as u32));
         }
     }
+
+    pub fn start_pos(&self) -> BytePos {
+        self.orig_start
+    }
+
+    pub fn end_pos(&self) -> BytePos {
+        self.orig_end
+    }
 }
 
 /// Creates an [Input] from [SourceFile]. This is an alias for
@@ -64,26 +72,26 @@ impl<'a> From<&'a SourceFile> for StringInput<'a> {
     }
 }
 
-impl<'a> Input for StringInput<'a> {
+impl Input for StringInput<'_> {
     #[inline]
     fn cur(&mut self) -> Option<char> {
-        self.iter.clone().next().map(|i| i.1)
+        self.iter.clone().next()
     }
 
     #[inline]
     fn peek(&mut self) -> Option<char> {
-        self.iter.clone().nth(1).map(|i| i.1)
+        self.iter.clone().nth(1)
     }
 
     #[inline]
     fn peek_ahead(&mut self) -> Option<char> {
-        self.iter.clone().nth(2).map(|i| i.1)
+        self.iter.clone().nth(2)
     }
 
     #[inline]
     unsafe fn bump(&mut self) {
-        if let Some((i, c)) = self.iter.next() {
-            self.last_pos = self.start_pos_of_iter + BytePos((i + c.len_utf8()) as u32);
+        if let Some(c) = self.iter.next() {
+            self.last_pos = self.last_pos + BytePos((c.len_utf8()) as u32);
         } else {
             unsafe {
                 debug_unreachable!("bump should not be called when cur() == None");
@@ -129,9 +137,8 @@ impl<'a> Input for StringInput<'a> {
 
         let ret = unsafe { s.get_unchecked(start_idx..end_idx) };
 
-        self.iter = unsafe { s.get_unchecked(end_idx..) }.char_indices();
+        self.iter = unsafe { s.get_unchecked(end_idx..) }.chars();
         self.last_pos = end;
-        self.start_pos_of_iter = end;
 
         ret
     }
@@ -155,8 +162,7 @@ impl<'a> Input for StringInput<'a> {
         let ret = unsafe { s.get_unchecked(..last) };
 
         self.last_pos = self.last_pos + BytePos(last as _);
-        self.start_pos_of_iter = self.last_pos;
-        self.iter = unsafe { s.get_unchecked(last..) }.char_indices();
+        self.iter = unsafe { s.get_unchecked(last..) }.chars();
 
         ret
     }
@@ -181,8 +187,7 @@ impl<'a> Input for StringInput<'a> {
         debug_assert!(last <= s.len());
 
         self.last_pos = self.last_pos + BytePos(last as _);
-        self.start_pos_of_iter = self.last_pos;
-        self.iter = unsafe { s.get_unchecked(last..) }.char_indices();
+        self.iter = unsafe { s.get_unchecked(last..) }.chars();
 
         Some(self.last_pos)
     }
@@ -194,8 +199,7 @@ impl<'a> Input for StringInput<'a> {
 
         debug_assert!(idx <= orig.len());
         let s = unsafe { orig.get_unchecked(idx..) };
-        self.iter = s.char_indices();
-        self.start_pos_of_iter = to;
+        self.iter = s.chars();
         self.last_pos = to;
     }
 
@@ -217,15 +221,8 @@ impl<'a> Input for StringInput<'a> {
     #[inline]
     fn eat_byte(&mut self, c: u8) -> bool {
         if self.is_byte(c) {
-            if let Some((i, _)) = self.iter.next() {
-                self.last_pos = self.start_pos_of_iter + BytePos((i + 1) as u32);
-            } else {
-                unsafe {
-                    debug_unreachable!(
-                        "We can't enter here as we already checked the state using `is_byte`"
-                    )
-                }
-            }
+            self.iter.next();
+            self.last_pos = self.last_pos + BytePos(1_u32);
             true
         } else {
             false
@@ -330,7 +327,7 @@ mod tests {
         F: FnOnce(StringInput<'_>),
     {
         let cm = Arc::new(SourceMap::new(FilePathMapping::empty()));
-        let fm = cm.new_source_file(FileName::Real("testing".into()), src.into());
+        let fm = cm.new_source_file(FileName::Real("testing".into()).into(), src.into());
 
         f((&*fm).into())
     }
@@ -340,13 +337,11 @@ mod tests {
         with_test_sess("foo/d", |mut i| {
             assert_eq!(unsafe { i.slice(BytePos(1), BytePos(2)) }, "f");
             assert_eq!(i.last_pos, BytePos(2));
-            assert_eq!(i.start_pos_of_iter, BytePos(2));
             assert_eq!(i.cur(), Some('o'));
 
             assert_eq!(unsafe { i.slice(BytePos(2), BytePos(4)) }, "oo");
             assert_eq!(unsafe { i.slice(BytePos(1), BytePos(4)) }, "foo");
             assert_eq!(i.last_pos, BytePos(4));
-            assert_eq!(i.start_pos_of_iter, BytePos(4));
             assert_eq!(i.cur(), Some('/'));
         });
     }
@@ -356,13 +351,11 @@ mod tests {
         with_test_sess("load", |mut i| {
             assert_eq!(unsafe { i.slice(BytePos(1), BytePos(3)) }, "lo");
             assert_eq!(i.last_pos, BytePos(3));
-            assert_eq!(i.start_pos_of_iter, BytePos(3));
             assert_eq!(i.cur(), Some('a'));
             unsafe { i.reset_to(BytePos(1)) };
 
             assert_eq!(i.cur(), Some('l'));
             assert_eq!(i.last_pos, BytePos(1));
-            assert_eq!(i.start_pos_of_iter, BytePos(1));
         });
     }
 
@@ -371,12 +364,10 @@ mod tests {
         with_test_sess("foo/d", |mut i| {
             assert_eq!(i.cur_pos(), BytePos(1));
             assert_eq!(i.last_pos, BytePos(1));
-            assert_eq!(i.start_pos_of_iter, BytePos(1));
             assert_eq!(i.uncons_while(|c| c.is_alphabetic()), "foo");
 
             // assert_eq!(i.cur_pos(), BytePos(4));
             assert_eq!(i.last_pos, BytePos(4));
-            assert_eq!(i.start_pos_of_iter, BytePos(4));
             assert_eq!(i.cur(), Some('/'));
 
             unsafe {
@@ -398,10 +389,8 @@ mod tests {
         with_test_sess("foo/d", |mut i| {
             assert_eq!(i.cur_pos(), BytePos(1));
             assert_eq!(i.last_pos, BytePos(1));
-            assert_eq!(i.start_pos_of_iter, BytePos(1));
 
             assert_eq!(i.find(|c| c == '/'), Some(BytePos(5)));
-            assert_eq!(i.start_pos_of_iter, BytePos(5));
             assert_eq!(i.last_pos, BytePos(5));
             assert_eq!(i.cur(), Some('d'));
         });

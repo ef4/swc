@@ -18,7 +18,7 @@
   CLASS = 10; // only used in assertValidReturnValue
 */
 
-export function _apply_decs_2203_r(targetClass, memberDecs, classDecs, parentClass) {
+function _apply_decs_2203_r(targetClass, memberDecs, classDecs, parentClass) {
     function createAddInitializerMethod(initializers, decoratorFinishedRef) {
         return function addInitializer(initializer) {
             assertNotFinished(decoratorFinishedRef, "addInitializer");
@@ -47,7 +47,7 @@ export function _apply_decs_2203_r(targetClass, memberDecs, classDecs, parentCla
                 kindStr = "field";
         }
 
-        var ctx = { kind: kindStr, name: isPrivate ? "#" + name : name, static: isStatic, private: isPrivate };
+        var ctx = { kind: kindStr, name: isPrivate ? "#" + name : name, static: isStatic, private: isPrivate, metadata: metadata };
 
         var decoratorFinishedRef = { v: false };
 
