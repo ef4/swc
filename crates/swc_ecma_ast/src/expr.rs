@@ -362,6 +362,7 @@ impl Expr {
             Expr::JSXEmpty(e) => e.span = span,
             Expr::JSXElement(e) => e.span = span,
             Expr::JSXFragment(e) => e.span = span,
+            Expr::ContentTagExpression(e) => e.span = span,
             Expr::PrivateName(e) => e.span = span,
             Expr::OptChain(e) => e.span = span,
             Expr::Lit(e) => e.set_span(span),

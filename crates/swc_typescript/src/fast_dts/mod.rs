@@ -451,6 +451,7 @@ impl FastDts {
             | Expr::JSXEmpty(_)
             | Expr::JSXElement(_)
             | Expr::JSXFragment(_)
+            | Expr::ContentTagExpression(_)
             | Expr::TsTypeAssertion(_)
             | Expr::TsNonNull(_)
             | Expr::TsInstantiation(_)
@@ -656,6 +657,7 @@ impl FastDts {
             | Expr::SuperProp(_)
             | Expr::Fn(_)
             | Expr::This(_)
+            | Expr::ContentTagExpression(_)
             | Expr::Invalid(_) => false,
         }
     }
@@ -744,6 +746,7 @@ impl FastDts {
                 | ClassMember::Empty(_)
                 | ClassMember::StaticBlock(_)
                 | ClassMember::AutoAccessor(_)
+                | ClassMember::ContentTagMember(_)
                 | ClassMember::PrivateMethod(_) => {
                     prev_is_overload = false;
                     true
@@ -799,6 +802,7 @@ impl FastDts {
                 | ClassMember::PrivateProp(_)
                 | ClassMember::Empty(_)
                 | ClassMember::StaticBlock(_)
+                | ClassMember::ContentTagMember(_)
                 | ClassMember::AutoAccessor(_) => None,
             })
             .collect();
@@ -1071,6 +1075,7 @@ fn valid_prop_name(prop_name: &PropName) -> Option<PropName> {
             | Expr::JSXEmpty(_)
             | Expr::JSXElement(_)
             | Expr::JSXFragment(_)
+            | Expr::ContentTagExpression(_)
             | Expr::TsInstantiation(_)
             | Expr::PrivateName(_)
             | Expr::OptChain(_)

@@ -256,6 +256,14 @@ impl Lexer<'_> {
     }
 
     fn next_token(&mut self, start: &mut BytePos) -> Result<Option<Token>, Error> {
+        if self.state.content_tag_template == ContentTagState::Reading {
+            return Ok(Some(self.read_content_tag_template()?));
+        }
+
+        if self.state.content_tag_template == ContentTagState::Ending {
+            return Ok(Some(self.end_content_tag_template()?));
+        }
+
         if let Some(start) = self.state.next_regexp {
             return Ok(Some(self.read_regexp(start)?));
         }
@@ -361,149 +369,6 @@ impl Iterator for Lexer<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut start = self.cur_pos();
 
-        let res = (|| -> Result<Option<_>, _> {
-            if self.state.content_tag_template == ContentTagState::Reading {
-                return Ok(Some(self.read_content_tag_template()?));
-            }
-
-            if self.state.content_tag_template == ContentTagState::Ending {
-                return Ok(Some(self.end_content_tag_template()?));
-            }
-
-            if let Some(start) = self.state.next_regexp {
-                return Ok(Some(self.read_regexp(start)?));
-            }
-
-            if self.state.is_first {
-                if let Some(shebang) = self.read_shebang()? {
-                    return Ok(Some(Token::Shebang(shebang)));
-                }
-            }
-
-            self.state.had_line_break = self.state.is_first;
-            self.state.is_first = false;
-
-            // skip spaces before getting next character, if we are allowed to.
-            if self.state.can_skip_space() {
-                self.skip_space::<true>()?;
-                start = self.input.cur_pos();
-            };
-
-            match self.input.cur() {
-                Some(..) => {}
-                // End of input.
-                None => {
-                    if let Some(comments) = self.comments.as_mut() {
-                        let comments_buffer = self.comments_buffer.as_mut().unwrap();
-                        let last = self.state.prev_hi;
-
-                        // move the pending to the leading or trailing
-                        for c in comments_buffer.take_pending_leading() {
-                            // if the file had no tokens and no shebang, then treat any
-                            // comments in the leading comments buffer as leading.
-                            // Otherwise treat them as trailing.
-                            if last == self.start_pos {
-                                comments_buffer.push(BufferedComment {
-                                    kind: BufferedCommentKind::Leading,
-                                    pos: last,
-                                    comment: c,
-                                });
-                            } else {
-                                comments_buffer.push(BufferedComment {
-                                    kind: BufferedCommentKind::Trailing,
-                                    pos: last,
-                                    comment: c,
-                                });
-                            }
-                        }
-
-                        // now fill the user's passed in comments
-                        for comment in comments_buffer.take_comments() {
-                            match comment.kind {
-                                BufferedCommentKind::Leading => {
-                                    comments.add_leading(comment.pos, comment.comment);
-                                }
-                                BufferedCommentKind::Trailing => {
-                                    comments.add_trailing(comment.pos, comment.comment);
-                                }
-                            }
-                        }
-                    }
-
-                    return Ok(None);
-                }
-            };
-
-            // println!(
-            //     "\tContext: ({:?}) {:?}",
-            //     self.input.cur().unwrap(),
-            //     self.state.context.0
-            // );
-
-            self.state.start = start;
-
-            if self.syntax.jsx() && !self.ctx.in_property_name && !self.ctx.in_type {
-                //jsx
-                if self.state.context.current() == Some(TokenContext::JSXExpr) {
-                    return self.read_jsx_token();
-                }
-
-                let c = self.cur();
-                if let Some(c) = c {
-                    if self.state.context.current() == Some(TokenContext::JSXOpeningTag)
-                        || self.state.context.current() == Some(TokenContext::JSXClosingTag)
-                    {
-                        if c.is_ident_start() {
-                            return self.read_jsx_word().map(Some);
-                        }
-
-                        if c == '>' {
-                            unsafe {
-                                // Safety: cur() is Some('>')
-                                self.input.bump();
-                            }
-                            return Ok(Some(Token::JSXTagEnd));
-                        }
-
-                        if (c == '\'' || c == '"')
-                            && self.state.context.current() == Some(TokenContext::JSXOpeningTag)
-                        {
-                            return self.read_jsx_str(c).map(Some);
-                        }
-                    }
-
-                    if c == '<' && self.state.is_expr_allowed && self.input.peek() != Some('!') {
-                        let had_line_break_before_last = self.had_line_break_before_last();
-                        let cur_pos = self.input.cur_pos();
-
-                        unsafe {
-                            // Safety: cur() is Some('<')
-                            self.input.bump();
-                        }
-
-                        if had_line_break_before_last && self.is_str("<<<<<< ") {
-                            let span = Span::new(cur_pos, cur_pos + BytePos(7), Default::default());
-
-                            self.emit_error_span(span, SyntaxError::TS1185);
-                            self.skip_line_comment(6);
-                            self.skip_space::<true>()?;
-                            return self.read_token();
-                        }
-
-                        return Ok(Some(Token::JSXTagStart));
-                    }
-                }
-            }
-
-            if let Some(TokenContext::Tpl {
-                start: start_pos_of_tpl,
-            }) = self.state.context.current()
-            {
-                return self.read_tmpl_token(start_pos_of_tpl).map(Some);
-            }
-
-            self.read_token()
-        })();
         let res = self.next_token(&mut start);
 
         let token = match res.map_err(Token::Error).map_err(Some) {
@@ -556,8 +421,8 @@ impl State {
             tpl_start: BytePos::DUMMY,
             context,
             syntax,
-            content_tag_template: ContentTagState::None,
             token_type: None,
+            content_tag_template: ContentTagState::None,
         }
     }
 }

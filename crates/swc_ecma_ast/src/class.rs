@@ -12,8 +12,7 @@ use crate::{
         TsTypeParamInstantiation,
     },
     BigInt, ComputedPropName, ContentTagContent, ContentTagEnd, ContentTagStart, EmptyStmt, Id,
-    Ident, Number,
-    BigInt, ComputedPropName, EmptyStmt, Id, Ident, IdentName, Number,
+    Ident, IdentName, Number,
 };
 
 #[ast_node]
